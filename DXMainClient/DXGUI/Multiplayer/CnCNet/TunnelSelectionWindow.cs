@@ -80,10 +80,10 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         {
             Disable();
 
-            if (!lbTunnelList.IsValidIndexSelected())
+            CnCNetTunnel tunnel = lbTunnelList.GetSelectedTunnel();
+            if (tunnel == null)
                 return;
 
-            CnCNetTunnel tunnel = tunnelHandler.Tunnels[lbTunnelList.SelectedIndex];
             TunnelSelected?.Invoke(this, new TunnelEventArgs(tunnel));
         }
 

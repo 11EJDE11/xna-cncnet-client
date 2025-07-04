@@ -216,7 +216,6 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         {
             Cancelled?.Invoke(this, EventArgs.Empty);
         }
-
         private void BtnLoadMPGame_LeftClick(object sender, EventArgs e)
         {
             string gameName = tbGameName.Text.Replace(";", string.Empty);
@@ -232,8 +231,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             GameCreationEventArgs ea = new GameCreationEventArgs(gameName,
                 spawnSGIni.GetIntValue("Settings", "PlayerCount", 2), password,
-                tunnelHandler.Tunnels[lbTunnelList.SelectedIndex], ddSkillLevel.SelectedIndex);
-
+                lbTunnelList.GetSelectedTunnel(), ddSkillLevel.SelectedIndex);
             LoadedGameCreated?.Invoke(this, ea);
         }
 
@@ -258,9 +256,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return;
             }
 
-            GameCreated?.Invoke(this, 
-                new GameCreationEventArgs(gameName,int.Parse(ddMaxPlayers.SelectedItem.Text), 
-                tbPassword.Text,tunnelHandler.Tunnels[lbTunnelList.SelectedIndex],
+            GameCreated?.Invoke(this,
+                new GameCreationEventArgs(gameName, int.Parse(ddMaxPlayers.SelectedItem.Text),
+                tbPassword.Text, lbTunnelList.GetSelectedTunnel(),
                 ddSkillLevel.SelectedIndex)
             );
         }

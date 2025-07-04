@@ -37,6 +37,8 @@ namespace DTAConfig.OptionPanels
 
         XNAClientDropDown ddAllowPrivateMessagesFrom;
 
+        XNAClientCheckBox chkUseLegacyTunnels;
+
         GameCollection gameCollection;
 
         List<XNAClientCheckBox> followedGameChks = new List<XNAClientCheckBox>();
@@ -171,6 +173,15 @@ namespace DTAConfig.OptionPanels
             chkSteamIntegration.Text = "Show the game being played in Steam".L10N("Client:DTAConfig:SteamStatus");
 
             AddChild(chkSteamIntegration);
+
+            chkUseLegacyTunnels = new XNAClientCheckBox(WindowManager);
+            chkUseLegacyTunnels.Name = nameof(chkUseLegacyTunnels);
+            chkUseLegacyTunnels.ClientRectangle = new Rectangle(
+                chkSteamIntegration.X,
+                chkSteamIntegration.Bottom + 12, 0, 0);
+            chkUseLegacyTunnels.Text = "Use legacy tunnels when hosting".L10N("Client:DTAConfig:LegacyTunnels");
+
+            AddChild(chkUseLegacyTunnels);
         }
 
         private void InitAllowPrivateMessagesFromDropdown()
@@ -328,6 +339,7 @@ namespace DTAConfig.OptionPanels
             chkSkipLoginWindow.Checked = IniSettings.SkipConnectDialog;
             chkPersistentMode.Checked = IniSettings.PersistentMode;
             chkSteamIntegration.Checked = IniSettings.SteamIntegration;
+            chkUseLegacyTunnels.Checked = IniSettings.UseLegacyTunnels;
 
             chkDiscordIntegration.Checked = !ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled
                 && IniSettings.DiscordIntegration;
@@ -364,6 +376,12 @@ namespace DTAConfig.OptionPanels
             IniSettings.SkipConnectDialog.Value = chkSkipLoginWindow.Checked;
             IniSettings.PersistentMode.Value = chkPersistentMode.Checked;
             IniSettings.SteamIntegration.Value = chkSteamIntegration.Checked;
+            
+            if (IniSettings.UseLegacyTunnels.Value != chkUseLegacyTunnels.Checked)
+            {
+                IniSettings.UseLegacyTunnels.Value = chkUseLegacyTunnels.Checked;
+                restartRequired = true;
+            }
 
             if (!ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled)
             {

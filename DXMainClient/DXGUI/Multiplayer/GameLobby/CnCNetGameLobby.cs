@@ -71,7 +71,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler("PO", ApplyPlayerOptions),
                 new StringCommandHandler(PlayerExtraOptions.CNCNET_MESSAGE_KEY, ApplyPlayerExtraOptions),
                 new StringCommandHandler("GO", ApplyGameOptions),
-                new StringCommandHandler("START", NonHostLaunchGame),
+                new StringCommandHandler("STARTV2", NonHostLaunchGameV2),
+                new StringCommandHandler("STARTV3", NonHostLaunchGameV3),
                 new NotificationHandler("AISPECS", HandleNotification, AISpectatorsNotification),
                 new NotificationHandler("GETREADY", HandleNotification, GetReadyNotification),
                 new NotificationHandler("INSFSPLRS", HandleNotification, InsufficientPlayersNotification),
@@ -151,6 +152,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private MapSharingConfirmationPanel mapSharingConfirmationPanel;
 
         private Random random;
+
+        private readonly List<V3PlayerInfo> v3PlayerInfos = new();
+        private V3TunnelBridge v3Bridge;
 
         /// <summary>
         /// The SHA1 of the latest selected map.
@@ -385,6 +389,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public override void Clear()
         {
             base.Clear();
+            v3Bridge?.Stop();
 
             if (channel != null)
             {
@@ -427,6 +432,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public void LeaveGameLobby()
         {
+            v3Bridge?.Stop();
+
             if (IsHost)
             {
                 StopInactiveCheck();
@@ -668,31 +675,29 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             if (Players.Count > 1)
             {
-                AddNotice("Contacting tunnel server...".L10N("Client:Main:ConnectingTunnel"));
-
-                List<int> playerPorts = tunnelHandler.CurrentTunnel.GetPlayerPortInfo(Players.Count);
-
-                if (playerPorts.Count < Players.Count)
+                // with V2 tunnels we get our ids from the tunnel server
+                // V3 tunnels register on the fly
+                if (tunnelHandler.CurrentTunnel.Version == 2)
                 {
-                    ShowTunnelSelectionWindow(("An error occured while contacting " +
-                        "the CnCNet tunnel server.\nTry picking a different tunnel server:").L10N("Client:Main:ConnectTunnelError1"));
-                    AddNotice(("An error occured while contacting the specified CnCNet " +
-                        "tunnel server. Please try using a different tunnel server").L10N("Client:Main:ConnectTunnelError2") + " ", ERROR_MESSAGE_COLOR);
-                    return;
-                }
+                    AddNotice("Contacting V2 tunnel server...".L10N("Client:Main:ConnectingTunnelV2"));
 
-                StringBuilder sb = new StringBuilder("START ");
-                sb.Append(UniqueGameID);
-                for (int pId = 0; pId < Players.Count; pId++)
-                {
-                    Players[pId].Port = playerPorts[pId];
-                    sb.Append(";");
-                    sb.Append(Players[pId].Name);
-                    sb.Append(";");
-                    sb.Append("0.0.0.0:");
-                    sb.Append(playerPorts[pId]);
+                    List<int> playerPorts = tunnelHandler.CurrentTunnel.GetPlayerPortInfo(Players.Count);
+
+                    if (playerPorts.Count < Players.Count)
+                    {
+                        ShowTunnelSelectionWindow(("An error occured while contacting " +
+                            "the CnCNet tunnel server.\nTry picking a different tunnel server:").L10N("Client:Main:ConnectTunnelError1"));
+                        AddNotice(("An error occured while contacting the specified CnCNet " +
+                            "tunnel server. Please try using a different tunnel server").L10N("Client:Main:ConnectTunnelError2") + " ", ERROR_MESSAGE_COLOR);
+                        return;
+                    }
+
+                    SendStartV2ToPlayers(playerPorts);
                 }
-                channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.SYSTEM_MESSAGE, 10);
+                else if (tunnelHandler.CurrentTunnel.Version == 3)
+                {
+                    SendStartV3ToPlayers();
+                }
             }
             else
             {
@@ -702,6 +707,68 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             cncnetUserData.AddRecentPlayers(Players.Select(p => p.Name), channel.UIName);
 
             StartGame();
+        }
+
+        private void SendStartV2ToPlayers(List<int> playerPorts)
+        {
+
+            StringBuilder sb = new StringBuilder("STARTV2 ");
+            sb.Append(UniqueGameID);
+            for (int pId = 0; pId < Players.Count; pId++)
+            {
+                Players[pId].Port = playerPorts[pId];
+                sb.Append(";");
+                sb.Append(Players[pId].Name);
+                sb.Append(";");
+                sb.Append("0.0.0.0:");
+                sb.Append(playerPorts[pId]);
+            }
+            channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.SYSTEM_MESSAGE, 10);
+        }
+
+        private void SendStartV3ToPlayers()
+        {
+            string playerIDs = GeneratePlayerIDs();
+
+            //STARTV3 345353;1234567891;Player1;0.0.0.0:48000;9876543210;Player2;0.0.0.0:47999
+            channel.SendCTCPMessage($"STARTV3 {UniqueGameID};{playerIDs}", QueuedMessageType.SYSTEM_MESSAGE, 10);
+        }
+
+        private string GeneratePlayerIDs()
+        {
+            var random = new Random();
+            uint randomNumber = (uint)random.Next(1, int.MaxValue - 1 - (MAX_PLAYER_COUNT / 2)) * (uint)random.Next(1, 3);
+            var usedPorts = new HashSet<int>();
+            var sb = new StringBuilder();
+
+            v3PlayerInfos.Clear();
+
+            for (int i = 0; i < Players.Count; i++)
+            {
+                uint id = randomNumber + (uint)i;
+                int port = 48000 - i;
+                Players[i].Port = port;
+
+                var v3PlayerInfo = new V3PlayerInfo(
+                    id,
+                    Players[i].Name,
+                    "0.0.0.0",
+                    port,
+                    i
+                );
+
+                v3PlayerInfos.Add(v3PlayerInfo);
+
+                sb.Append(id)
+                  .Append(';')
+                  .Append(Players[i].Name)
+                  .Append(';')
+                  .Append("0.0.0.0:")
+                  .Append(port)
+                  .Append(';');
+            }
+
+            return sb.ToString().TrimEnd(';');
         }
 
         protected override void RequestPlayerOptions(int side, int color, int start, int team)
@@ -1298,9 +1365,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         /// <summary>
-        /// Handles the "START" (game start) command sent by the game host.
+        /// Handles the "STARTV2" (game start) command sent by the game host.
         /// </summary>
-        private void NonHostLaunchGame(string sender, string message)
+        private void NonHostLaunchGameV2(string sender, string message)
         {
             if (sender != hostName)
                 return;
@@ -1352,6 +1419,59 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             StartGame();
         }
 
+        /// <summary>
+        /// Handles the "STARTV3" (game start) command sent by the game host.
+        /// </summary>
+        private void NonHostLaunchGameV3(string sender, string message)
+        {
+            if (sender != hostName)
+                return;
+
+            if (Map == null)
+            {
+                GameStartAborted();
+                return;
+            }
+
+            string[] parts = message.Split(';');
+
+            if (parts.Length != (Players.Count * 3) + 1)
+                return;
+
+            UniqueGameID = Conversions.IntFromString(parts[0], -1);
+            if (UniqueGameID < 0)
+                return;
+
+            var recentPlayers = new List<string>();
+            v3PlayerInfos.Clear();
+
+            for (int i = 1; i < parts.Length; i += 3)
+            {
+                if (!uint.TryParse(parts[i], out uint id))
+                    return;
+
+                string pName = parts[i + 1];
+                string[] ipAndPort = parts[i + 2].Split(':');
+
+                if (ipAndPort.Length != 2 || !int.TryParse(ipAndPort[1], out int port))
+                    return;
+
+                PlayerInfo pInfo = Players.Find(p => p.Name == pName);
+                if (pInfo == null)
+                    return;
+
+                pInfo.Port = port;
+                recentPlayers.Add(pName);
+
+                int playerIndex = Players.IndexOf(pInfo);
+                var v3PlayerInfo = new V3PlayerInfo(id, pName, ipAndPort[0], port, playerIndex);
+                v3PlayerInfos.Add(v3PlayerInfo);
+            }
+
+            cncnetUserData.AddRecentPlayers(recentPlayers, channel.UIName);
+            StartGame();
+        }
+
         protected override void StartGame()
         {
             AddNotice("Starting game...".L10N("Client:Main:StartingGame"));
@@ -1369,6 +1489,36 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             StopInactiveCheck();
             channel.SendCTCPMessage("STRTD", QueuedMessageType.SYSTEM_MESSAGE, 20);
 
+            // if it's version 3, we need to start the bridge between game+tunnel
+            if (tunnelHandler.CurrentTunnel.Version == 3)
+            {
+                PlayerInfo localPlayer = FindLocalPlayer();
+                if (localPlayer == null)
+                {
+                    Logger.Log("Could not find local player.");
+                    return;
+                }
+
+                V3PlayerInfo localV3Player = v3PlayerInfos.FirstOrDefault(p => p.Name == ProgramConstants.PLAYERNAME);
+                if (localV3Player == null)
+                {
+                    Logger.Log("Could not find local V3 player info.");
+                    return;
+                }
+
+                Logger.Log($"Starting V3 tunnel bridge for player {localV3Player.Name} (ID: {localV3Player.Id} Port: {localV3Player.Port})");
+
+                v3Bridge = new V3TunnelBridge(
+                    localId: localV3Player.Id,
+                    localPort: localV3Player.Port,
+                    allPlayers: v3PlayerInfos,
+                    tunnelHandler: tunnelHandler);
+
+                v3Bridge.Start();
+
+                Logger.Log("V3 tunnel bridge started successfully");
+            }
+
             base.StartGame();
         }
 
@@ -1376,20 +1526,26 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             base.WriteSpawnIniAdditions(iniFile);
 
-            iniFile.SetStringValue("Tunnel", "Ip", tunnelHandler.CurrentTunnel.Address);
-            iniFile.SetIntValue("Tunnel", "Port", tunnelHandler.CurrentTunnel.Port);
-
-            iniFile.SetIntValue("Settings", "GameID", UniqueGameID);
-            iniFile.SetBooleanValue("Settings", "Host", IsHost);
-
             PlayerInfo localPlayer = FindLocalPlayer();
-
             if (localPlayer == null)
                 return;
 
+            if (tunnelHandler.CurrentTunnel.Version == 3)
+            {
+                // tell the game to connect to our local bridge
+                iniFile.SetStringValue("Tunnel", "Ip", System.Net.IPAddress.Loopback.ToString());
+                iniFile.SetIntValue("Tunnel", "Port", localPlayer.Port);
+            }
+            else if (tunnelHandler.CurrentTunnel.Version == 2)
+            {
+                iniFile.SetStringValue("Tunnel", "Ip", tunnelHandler.CurrentTunnel.Address);
+                iniFile.SetIntValue("Tunnel", "Port", tunnelHandler.CurrentTunnel.Port);
+            }
+
+            iniFile.SetIntValue("Settings", "GameID", UniqueGameID);
+            iniFile.SetBooleanValue("Settings", "Host", IsHost);
             iniFile.SetIntValue("Settings", "Port", localPlayer.Port);
         }
-
         protected override void SendChatMessage(string message) => channel.SendChatMessage(message, chatColor);
 
         #region Notifications
@@ -1504,6 +1660,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (pInfo != null)
                 pInfo.IsInGame = false;
+
+            if (pInfo.Name == ProgramConstants.PLAYERNAME)
+                v3Bridge.Stop();
 
             sndReturnSound.Play();
             CopyPlayerDataToUI();
