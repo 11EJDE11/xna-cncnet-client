@@ -1124,6 +1124,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             iniFile.SetIntValue("Settings", "GameID", UniqueGameID);
             iniFile.SetBooleanValue("Settings", "Host", IsHost);
         }
+
+        protected override void HandleDynamicTunnelsCommand(string value)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     public class LobbyNotificationEventArgs : EventArgs

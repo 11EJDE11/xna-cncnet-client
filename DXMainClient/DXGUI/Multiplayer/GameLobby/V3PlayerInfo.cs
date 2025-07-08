@@ -12,15 +12,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public string Name { get; set; }
         public string IpAddress { get; set; }
         public int Port { get; set; }
-        public int Index { get; set; }
-
-        public V3PlayerInfo(uint id, string name, string ipAddress, int port, int index)
+        public int PlayerIndex { get; set; }
+        public V3PlayerInfo(uint id, string name, string ipAddress, int port, int playerIndex)
         {
             Id = id;
             Name = name;
             IpAddress = ipAddress;
             Port = port;
-            Index = index;
+            PlayerIndex = playerIndex;
         }
     }
 }

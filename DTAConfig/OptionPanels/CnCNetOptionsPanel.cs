@@ -38,6 +38,7 @@ namespace DTAConfig.OptionPanels
         XNAClientDropDown ddAllowPrivateMessagesFrom;
 
         XNAClientCheckBox chkUseLegacyTunnels;
+        XNAClientCheckBox chkUseDynamicTunnels;
 
         GameCollection gameCollection;
 
@@ -180,8 +181,18 @@ namespace DTAConfig.OptionPanels
                 chkSteamIntegration.X,
                 chkSteamIntegration.Bottom + 12, 0, 0);
             chkUseLegacyTunnels.Text = "Use legacy tunnels when hosting".L10N("Client:DTAConfig:LegacyTunnels");
+            chkUseLegacyTunnels.CheckedChanged += ChkUseLegacyTunnels_CheckedChanged;
 
             AddChild(chkUseLegacyTunnels);
+
+            chkUseDynamicTunnels = new XNAClientCheckBox(WindowManager);
+            chkUseDynamicTunnels.Name = nameof(chkUseDynamicTunnels);
+            chkUseDynamicTunnels.ClientRectangle = new Rectangle(
+                chkUseLegacyTunnels.X,
+                chkUseLegacyTunnels.Bottom + 12, 0, 0);
+            chkUseDynamicTunnels.Text = "Use dynamic tunnels when hosting".L10N("Client:DTAConfig:DynamicTunnels");
+
+            AddChild(chkUseDynamicTunnels);
         }
 
         private void InitAllowPrivateMessagesFromDropdown()
@@ -303,6 +314,11 @@ namespace DTAConfig.OptionPanels
             }
         }
 
+        private void ChkUseLegacyTunnels_CheckedChanged(object sender, EventArgs e)
+        {
+            chkUseDynamicTunnels.AllowChecking = !chkUseLegacyTunnels.Checked;
+        }
+
         private void ChkSkipLoginWindow_CheckedChanged(object sender, EventArgs e)
         {
             CheckConnectOnStartupAllowance();
@@ -340,6 +356,7 @@ namespace DTAConfig.OptionPanels
             chkPersistentMode.Checked = IniSettings.PersistentMode;
             chkSteamIntegration.Checked = IniSettings.SteamIntegration;
             chkUseLegacyTunnels.Checked = IniSettings.UseLegacyTunnels;
+            chkUseDynamicTunnels.Checked = IniSettings.UseDynamicTunnels;
 
             chkDiscordIntegration.Checked = !ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled
                 && IniSettings.DiscordIntegration;
@@ -360,6 +377,8 @@ namespace DTAConfig.OptionPanels
 
                 chkBox.Checked = IniSettings.IsGameFollowed(chkBox.Name);
             }
+
+            ChkUseLegacyTunnels_CheckedChanged(null, EventArgs.Empty);
         }
 
         public override bool Save()
@@ -376,11 +395,16 @@ namespace DTAConfig.OptionPanels
             IniSettings.SkipConnectDialog.Value = chkSkipLoginWindow.Checked;
             IniSettings.PersistentMode.Value = chkPersistentMode.Checked;
             IniSettings.SteamIntegration.Value = chkSteamIntegration.Checked;
-            
+
             if (IniSettings.UseLegacyTunnels.Value != chkUseLegacyTunnels.Checked)
             {
                 IniSettings.UseLegacyTunnels.Value = chkUseLegacyTunnels.Checked;
                 restartRequired = true;
+            }
+
+            if (IniSettings.UseDynamicTunnels.Value != chkUseDynamicTunnels.Checked)
+            {
+                IniSettings.UseDynamicTunnels.Value = chkUseDynamicTunnels.Checked;
             }
 
             if (!ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled)

@@ -6,35 +6,17 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
-
-using ClientCore;
-using ClientCore.CnCNet5;
-using ClientGUI;
-using DTAClient.Domain.Multiplayer;
-using DTAClient.Domain;
-using DTAClient.DXGUI.Generic;
-using DTAClient.DXGUI.Multiplayer.CnCNet;
-using DTAClient.DXGUI.Multiplayer.GameLobby.CommandHandlers;
-using DTAClient.Online;
-using DTAClient.Online.EventArguments;
-using Microsoft.Xna.Framework;
-using Rampastring.Tools;
-using Rampastring.XNAUI;
-using Rampastring.XNAUI.XNAControls;
 using DTAClient.Domain.Multiplayer.CnCNet;
-using ClientCore.Extensions;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
     public class V3TunnelBridge
     {
         private readonly UdpClient _localServer;  // fake tunnel for the game
-        private readonly UdpClient _tunnelClient; // communicates with real tunnel
+        private readonly Dictionary<uint, (UdpClient client, string ip, int port)> _tunnelClients; // connections to players' tunnels
         private readonly List<V3PlayerInfo> _otherPlayers;
         private readonly uint _localId;
         private readonly int _localPort;
-        private readonly string _tunnelIp;
-        private readonly int _tunnelPort;
         private readonly CancellationTokenSource _cts = new();
 
         private IPEndPoint _gameEndpoint;
@@ -47,38 +29,89 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             _localId = localId;
             _localPort = localPort;
-            _tunnelIp = tunnelHandler.CurrentTunnel.Address;
-            _tunnelPort = tunnelHandler.CurrentTunnel.Port;
 
             // act as a server on the local port - the game will connect to us
             _localServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, _localPort));
+            Debug.Print($"V3TunnelBridge: Local server created on {((IPEndPoint)_localServer.Client.LocalEndPoint).Address}:{((IPEndPoint)_localServer.Client.LocalEndPoint).Port}");
 
-            // create tunnel client for communication with real tunnel
-            _tunnelClient = new UdpClient(0);
+            _tunnelClients = new Dictionary<uint, (UdpClient client, string ip, int port)>();
 
-            _otherPlayers = allPlayers
-                .Where(p => p.Id != _localId)
-                .ToList();
+            //create tunnel clients for all players
+            foreach (var player in allPlayers)
+            {
+                var client = new UdpClient(0);
+
+                client.Connect(player.IpAddress, player.Port); // probably not needed anymore
+
+                var localEndPoint = (IPEndPoint)client.Client.LocalEndPoint;
+                _tunnelClients[player.Id] = (client, player.IpAddress, player.Port);
+                Debug.Print($"V3TunnelBridge: Player {player.Name} (ID={player.Id}) - Local: {localEndPoint.Address}:{localEndPoint.Port} -> Remote: {player.IpAddress}:{player.Port}");
+            }
+
+            // send registration packets for each tunnelClient
+            foreach (var item in _tunnelClients)
+            {
+                var client = item.Value.client;
+
+                byte[] registrationPacket = new byte[9];
+                Array.Copy(BitConverter.GetBytes(_localId), 0, registrationPacket, 0, 4); // senderId = _localId
+                Array.Copy(BitConverter.GetBytes(0u), 0, registrationPacket, 4, 4); // receiverId = 0
+                registrationPacket[8] = 0xFF; //junk
+
+                try
+                {
+                    client.Send(registrationPacket, registrationPacket.Length);
+                    Debug.Print($"V3TunnelBridge: Sent registration packet to {item.Value.ip}:{item.Value.port} from {_localId}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.Print($"V3TunnelBridge: Failed to send registration packet to {item.Value.ip}:{item.Value.port} - {ex.Message}");
+                }
+            }
+
+            _otherPlayers = allPlayers.Where(p => p.Id != _localId).ToList();
 
             Debug.Print($"V3TunnelBridge: Local ID={_localId}, Local Server Port={_localPort}");
-            Debug.Print($"V3TunnelBridge: Tunnel Client Port={((IPEndPoint)_tunnelClient.Client.LocalEndPoint).Port}");
-            Debug.Print($"V3TunnelBridge: Will forward to {_otherPlayers.Count} other players via tunnel {_tunnelIp}:{_tunnelPort}");
+            Debug.Print($"V3TunnelBridge: Will forward to {_otherPlayers.Count} other players");
         }
 
         public void Start()
         {
+            Debug.Print("=== V3TunnelBridge Connections ===");
+            Debug.Print($"Local Server: 127.0.0.1:{_localPort}");
+            Debug.Print("Tunnel Connections:");
+            foreach (var item in _tunnelClients)
+            {
+                var localEndPoint = (IPEndPoint)item.Value.client.Client.LocalEndPoint;
+                Debug.Print($"  Player {item.Key}: {localEndPoint.Address}:{localEndPoint.Port} -> {item.Value.ip}:{item.Value.port}");
+            }
+            Debug.Print("==========================================");
+
             Task.Run(() => LocalServerLoopAsync());
-            Task.Run(() => TunnelReceiveLoopAsync());
+
+            //start a receive loop for each tunnelClient
+            foreach (var item in _tunnelClients)
+            {
+                Task.Run(() => TunnelReceiveLoopAsync(item.Key, item.Value.client));
+            }
         }
 
         public void Stop()
         {
             _cts.Cancel();
             _localServer?.Close();
-            _tunnelClient?.Close();
+
+            if (_tunnelClients != null)
+            {
+                foreach (var kvp in _tunnelClients)
+                {
+                    kvp.Value.client?.Close();
+                }
+                _tunnelClients.Clear();
+            }
         }
 
-        //receives from game, forwards to tunnel
+        //receives from game, forwards to tunnel(s)
         private async Task LocalServerLoopAsync()
         {
             try
@@ -94,14 +127,18 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     //remember where the game is sending from
                     _gameEndpoint = result.RemoteEndPoint;
 
-                    Debug.Print($"Received {gameData.Length} bytes from game at {_gameEndpoint}");
+                    Debug.Print($"Received {gameData.Length} bytes from game at {_gameEndpoint} -> forwarding to {_otherPlayers.Count} players");
 
-                    //send to each other player through the real tunnel
+                    //send to each other player through their respective tunnel
                     foreach (var recipient in _otherPlayers)
                     {
                         await SendWrappedPacketAsync(gameData, recipient);
                     }
                 }
+            }
+            catch (ObjectDisposedException)
+            {
+                Debug.Print("V3TunnelBridge: Local server shutdown");
             }
             catch (Exception ex)
             {
@@ -110,62 +147,64 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         //receives from tunnel, forwards to game
-        private async Task TunnelReceiveLoopAsync()
+        private async Task TunnelReceiveLoopAsync(uint playerId, UdpClient client)
         {
             try
             {
-                Debug.Print($"V3TunnelBridge: Listening for tunnel data");
+                Debug.Print($"V3TunnelBridge: Listening for tunnel data from player {playerId}'s tunnel");
 
                 while (!_cts.IsCancellationRequested)
                 {
                     //receive data from tunnel
-                    UdpReceiveResult result = await _tunnelClient.ReceiveAsync();
-                    byte[] data = result.Buffer;
-
-                    Debug.Print($"Received {data.Length} bytes from tunnel {result.RemoteEndPoint}");
-
-                    if (data.Length <= 8)
-                    {
-                        Debug.Print("Ignoring too small packet.");
-                        continue;
-                    }
-
-                    //extract V3 header
-                    uint senderId = BitConverter.ToUInt32(data, 0);
-                    uint receiverId = BitConverter.ToUInt32(data, 4);
-
-                    Debug.Print($"V3 packet: sender={senderId}, receiver={receiverId}");
-
-                    //check if this packet is for us
-                    if (receiverId != _localId)
-                    {
-                        Debug.Print($"Packet not for us (our ID: {_localId}), but was for: {receiverId} - ignoring");
-                        continue;
-                    }
-
-                    //skip the 8-byte V3 header
-                    byte[] payload = new byte[data.Length - 8];
-                    Array.Copy(data, 8, payload, 0, payload.Length);
-
-                    //forward data to game
-                    if (_gameEndpoint != null)
-                    {
-                        await _localServer.SendAsync(payload, payload.Length, _gameEndpoint);
-                        Debug.Print($"Forwarded {payload.Length} bytes to game at {_gameEndpoint}");
-                    }
-                    else
-                    {
-                        Debug.Print("Warning: No game endpoint captured yet");
-                    }
+                    UdpReceiveResult result = await client.ReceiveAsync();
+                    await ProcessReceivedPacket(result.Buffer, result.RemoteEndPoint);
                 }
             }
             catch (ObjectDisposedException)
             {
-                Debug.Print("V3TunnelBridge: Tunnel client shutdown");
+                Debug.Print($"V3TunnelBridge: Tunnel client for player {playerId} shutdown");
             }
             catch (Exception ex)
             {
-                Debug.Print($"V3TunnelBridge tunnel client error: {ex}");
+                Debug.Print($"V3TunnelBridge: Tunnel client error for player {playerId}: {ex}");
+            }
+        }
+
+        // Process received packets from tunnels
+        private async Task ProcessReceivedPacket(byte[] data, IPEndPoint remoteEndPoint)
+        {
+            if (data.Length <= 8)
+            {
+                Debug.Print("Ignoring too small packet.");
+                return;
+            }
+
+            //extract V3 header
+            uint senderId = BitConverter.ToUInt32(data, 0);
+            uint receiverId = BitConverter.ToUInt32(data, 4);
+            Debug.Print($"Received {data.Length} bytes from tunnel {remoteEndPoint} (V3 packet: sender={senderId}, receiver={receiverId})");
+
+            //check if this packet is for us
+            if (receiverId != _localId)
+            {
+                Debug.Print($"Packet not for us (our ID: {_localId}), but was for: {receiverId} - ignoring");
+                return;
+            }
+
+            //skip the 8-byte V3 header
+            byte[] payload = new byte[data.Length - 8];
+            Array.Copy(data, 8, payload, 0, payload.Length);
+
+            //forward data to game
+            if (_gameEndpoint != null)
+            {
+                await _localServer.SendAsync(payload, payload.Length, _gameEndpoint);
+                var localServerEndPoint = (IPEndPoint)_localServer.Client.LocalEndPoint;
+                Debug.Print($"Forwarded {payload.Length} bytes from {localServerEndPoint.Address}:{localServerEndPoint.Port} to game at {_gameEndpoint}");
+            }
+            else
+            {
+                Debug.Print("Warning: No game endpoint captured yet");
             }
         }
 
@@ -185,14 +224,20 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             try
             {
-                //send to tunnel server
-                await _tunnelClient.SendAsync(wrapped, wrapped.Length, _tunnelIp, _tunnelPort);
-
-                Debug.Print($"Sent V3 packet to tunnel: sender={_localId}, receiver={recipient.Id}, size={wrapped.Length}");
+                if (_tunnelClients.TryGetValue(recipient.Id, out var tunnelInfo))
+                {
+                    await tunnelInfo.client.SendAsync(wrapped, wrapped.Length);
+                    var localEndPoint = (IPEndPoint)tunnelInfo.client.Client.LocalEndPoint;
+                    Debug.Print($"Sent V3 packet to player {recipient.Id}'s tunnel from {localEndPoint.Address}:{localEndPoint.Port} to {tunnelInfo.ip}:{tunnelInfo.port}, size={wrapped.Length}");
+                }
+                else
+                {
+                    Debug.Print($"ERROR: No tunnel client available for recipient {recipient.Id}");
+                }
             }
             catch (Exception ex)
             {
-                Debug.Print($"Send error to tunnel {_tunnelIp}:{_tunnelPort} for recipient {recipient.Id} - {ex.Message}");
+                Debug.Print($"Send error for recipient {recipient.Id} - {ex.Message}");
             }
         }
     }

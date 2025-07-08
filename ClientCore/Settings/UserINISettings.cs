@@ -107,6 +107,7 @@ namespace ClientCore
             MapSortState = new IntSetting(iniFile, MULTIPLAYER, "MapSortState", (int)SortDirection.None);
 
             UseLegacyTunnels = new BoolSetting(iniFile, MULTIPLAYER, "UseLegacyTunnels", false);
+            UseDynamicTunnels = new BoolSetting(iniFile, MULTIPLAYER, "UseDynamicTunnels", true);
 
             CheckForUpdates = new BoolSetting(iniFile, OPTIONS, "CheckforUpdates", true);
 
@@ -206,6 +207,7 @@ namespace ClientCore
         public BoolSetting AllowGameInvitesFromFriendsOnly { get; private set; }
 
         public BoolSetting UseLegacyTunnels { get; private set; }
+        public BoolSetting UseDynamicTunnels { get; private set; }
 
         public BoolSetting NotifyOnUserListChange { get; private set; }
 
