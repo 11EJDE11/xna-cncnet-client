@@ -127,12 +127,21 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     //remember where the game is sending from
                     _gameEndpoint = result.RemoteEndPoint;
 
-                    Debug.Print($"Received {gameData.Length} bytes from game at {_gameEndpoint} -> forwarding to {_otherPlayers.Count} players");
+                    Debug.Print($"Received {gameData.Length} bytes from game at {_gameEndpoint}");
 
-                    //send to each other player through their respective tunnel
-                    foreach (var recipient in _otherPlayers)
+                    //send to the recipient through their respective tunnel
+                    if (gameData.Length >= 8)
                     {
-                        await SendWrappedPacketAsync(gameData, recipient);
+                        ushort receiverId = SwapBytes(BitConverter.ToUInt16(gameData, 2)); //[senderId][receiverId][payload]
+                        var recipient = _otherPlayers.FirstOrDefault(p => p.PlayerGameId == receiverId);
+                        if (recipient != null)
+                            await SendWrappedPacketAsync(gameData, recipient);
+                        else
+                            Debug.Print($"V3TunnelBridge: No matching recipient found for receiverId={receiverId}");
+                    }
+                    else
+                    {
+                        Debug.Print("V3TunnelBridge: Received too-short packet from game");
                     }
                 }
             }
@@ -144,6 +153,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 Debug.Print($"V3TunnelBridge local server error: {ex}");
             }
+        }
+        private static ushort SwapBytes(ushort val)
+        {
+            return (ushort)((val << 8) | (val >> 8));
         }
 
         //receives from tunnel, forwards to game
@@ -227,8 +240,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 if (_tunnelClients.TryGetValue(recipient.Id, out var tunnelInfo))
                 {
                     await tunnelInfo.client.SendAsync(wrapped, wrapped.Length);
-                    var localEndPoint = (IPEndPoint)tunnelInfo.client.Client.LocalEndPoint;
-                    Debug.Print($"Sent V3 packet to player {recipient.Id}'s tunnel from {localEndPoint.Address}:{localEndPoint.Port} to {tunnelInfo.ip}:{tunnelInfo.port}, size={wrapped.Length}");
+                    var localEndPoint = (IPEndPoint)tunnelInfo.client?.Client?.LocalEndPoint;
+                    if(localEndPoint != null)
+                        Debug.Print($"Sent V3 packet to player {recipient.Id}'s tunnel from {localEndPoint.Address}:{localEndPoint.Port} to {tunnelInfo.ip}:{tunnelInfo.port}, size={wrapped.Length}");
                 }
                 else
                 {

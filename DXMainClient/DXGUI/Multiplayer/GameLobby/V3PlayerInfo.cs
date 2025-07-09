@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace DTAClient.DXGUI.Multiplayer.GameLobby
+﻿namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
     public class V3PlayerInfo
     {
@@ -13,13 +7,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public string IpAddress { get; set; }
         public int Port { get; set; }
         public int PlayerIndex { get; set; }
-        public V3PlayerInfo(uint id, string name, string ipAddress, int port, int playerIndex)
+        public ushort PlayerGameId { get; set; }
+        public V3PlayerInfo(uint id, string name, string ipAddress, int port, int playerIndex, ushort playerGameID)
         {
             Id = id;
             Name = name;
             IpAddress = ipAddress;
             Port = port;
             PlayerIndex = playerIndex;
+            PlayerGameId = playerGameID;
         }
     }
 }

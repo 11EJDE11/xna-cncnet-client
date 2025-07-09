@@ -611,7 +611,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 e.User.IRCUser.Name,
                 IPAddress.Any.ToString(),
                 0,
-                Players.Count - 1
+                Players.Count - 1,
+                0
             );
             v3PlayerInfos.Add(v3PlayerInfo);
 
@@ -778,7 +779,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             string playerIDs = GeneratePlayerIDs();
 
-            //STARTV3 345353;1234567891;Player1;0.0.0.0:48000;9876543210;Player2;0.0.0.0:47999
+            //STARTV3 345353;1234567891;Player1;[tunnelIP]:[tunnelPort];9876543210;Player2;0.0.0.0:[tunnelIP]:[tunnelPort]
             channel.SendCTCPMessage($"STARTV3 {UniqueGameID};{playerIDs}", QueuedMessageType.SYSTEM_MESSAGE, 10);
         }
 
@@ -802,22 +803,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     v3PlayerInfo.PlayerIndex = i;
                     if (string.IsNullOrEmpty(v3PlayerInfo.IpAddress) || v3PlayerInfo.IpAddress == IPAddress.Any.ToString())
                     {
-                        if (useDynamicTunnels)
-                        {
-                            // for dynamic mode, set the host's tunnel - probably not needed anymore (set in tunnelchanged)
-                            if (Players[i].Name == ProgramConstants.PLAYERNAME && tunnelHandler.CurrentTunnel != null)
-                            {
-                                v3PlayerInfo.IpAddress = tunnelHandler.CurrentTunnel.Address;
-                                v3PlayerInfo.Port = tunnelHandler.CurrentTunnel.Port;
-                            }
-                        }
-                        else
+                        if (!useDynamicTunnels)
                         {
                             // for non-dynamic mode, all players use the host's tunnel
                             v3PlayerInfo.IpAddress = tunnelHandler.CurrentTunnel?.Address ?? IPAddress.Any.ToString();
                             v3PlayerInfo.Port = tunnelHandler.CurrentTunnel?.Port ?? 0;
                         }
                     }
+                    v3PlayerInfo.PlayerGameId = (ushort)port;
                 }
 
                 sb.Append(id)
@@ -1587,7 +1580,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     pName,
                     ipAndPort[0],
                     port,
-                    pInfo.Index
+                    pInfo.Index,
+                    (ushort)pInfo.Port
                 );
 
                 v3PlayerInfos.Add(v3PlayerInfo);
@@ -1635,7 +1629,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                 v3Bridge = new V3TunnelBridge(
                     localId: localV3Player.Id,
-                    localPort: 48000 - localV3Player.PlayerIndex,
+                    localPort: localV3Player.PlayerGameId,
                     allPlayers: v3PlayerInfos,
                     tunnelHandler: tunnelHandler);
 
