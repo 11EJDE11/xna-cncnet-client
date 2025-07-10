@@ -6,10 +6,17 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Timers;
 using DTAClient.Domain.Multiplayer.CnCNet;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
+    public enum CustomPacketType : byte
+    {
+        PingRequest = 0x01,
+        PingResponse = 0x02
+    }
+
     public class V3TunnelBridge
     {
         private readonly UdpClient _localServer;  // fake tunnel for the game
@@ -18,8 +25,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private readonly uint _localId;
         private readonly int _localPort;
         private readonly CancellationTokenSource _cts = new();
+        private readonly System.Timers.Timer _keepAliveTimer;
 
         private IPEndPoint _gameEndpoint;
+
+        private static readonly byte[] CUSTOM_PACKET_MAGIC = { 0x45, 0x4A, 0x45, 0x4A, 0x45, 0x4A };
+        private const int KEEP_ALIVE_INTERVAL = 30000; // 30 secs
 
         public V3TunnelBridge(
             uint localId,
@@ -40,7 +51,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             foreach (var player in allPlayers)
             {
                 var client = new UdpClient(0);
-
                 client.Connect(player.IpAddress, player.Port); // probably not needed anymore
 
                 var localEndPoint = (IPEndPoint)client.Client.LocalEndPoint;
@@ -51,25 +61,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             // send registration packets for each tunnelClient
             foreach (var item in _tunnelClients)
             {
-                var client = item.Value.client;
-
-                byte[] registrationPacket = new byte[9];
-                Array.Copy(BitConverter.GetBytes(_localId), 0, registrationPacket, 0, 4); // senderId = _localId
-                Array.Copy(BitConverter.GetBytes(0u), 0, registrationPacket, 4, 4); // receiverId = 0
-                registrationPacket[8] = 0xFF; //junk
-
-                try
-                {
-                    client.Send(registrationPacket, registrationPacket.Length);
-                    Debug.Print($"V3TunnelBridge: Sent registration packet to {item.Value.ip}:{item.Value.port} from {_localId}");
-                }
-                catch (Exception ex)
-                {
-                    Debug.Print($"V3TunnelBridge: Failed to send registration packet to {item.Value.ip}:{item.Value.port} - {ex.Message}");
-                }
+                SendRegistrationPacket(item.Value.client, item.Value.ip, item.Value.port);
             }
 
             _otherPlayers = allPlayers.Where(p => p.Id != _localId).ToList();
+
+            _keepAliveTimer = new System.Timers.Timer(KEEP_ALIVE_INTERVAL);
+            _keepAliveTimer.Elapsed += OnKeepAliveTimer;
+            _keepAliveTimer.AutoReset = true;
 
             Debug.Print($"V3TunnelBridge: Local ID={_localId}, Local Server Port={_localPort}");
             Debug.Print($"V3TunnelBridge: Will forward to {_otherPlayers.Count} other players");
@@ -94,11 +93,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 Task.Run(() => TunnelReceiveLoopAsync(item.Key, item.Value.client));
             }
+
+            _keepAliveTimer.Start();
         }
 
         public void Stop()
         {
             _cts.Cancel();
+            _keepAliveTimer?.Stop();
+            _keepAliveTimer?.Dispose();
             _localServer?.Close();
 
             if (_tunnelClients != null)
@@ -108,6 +111,147 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     kvp.Value.client?.Close();
                 }
                 _tunnelClients.Clear();
+            }
+        }
+
+        // Send reg packets to every tunnel every 30 sec
+        private void OnKeepAliveTimer(object sender, ElapsedEventArgs e)
+        {
+            foreach (var item in _tunnelClients)
+            {
+                SendRegistrationPacket(item.Value.client, item.Value.ip, item.Value.port);
+            }
+            Debug.Print($"V3TunnelBridge: Sent keep-alive packets to {_tunnelClients.Count} tunnel servers");
+        }
+
+        private void SendRegistrationPacket(UdpClient client, string ip, int port)
+        {
+            byte[] registrationPacket = new byte[9];
+            Array.Copy(BitConverter.GetBytes(_localId), 0, registrationPacket, 0, 4); // senderId = _localId
+            Array.Copy(BitConverter.GetBytes(0u), 0, registrationPacket, 4, 4); // receiverId = 0
+            registrationPacket[8] = 0xFF;   // junk byte
+
+            try
+            {
+                client.Send(registrationPacket, registrationPacket.Length);
+                Debug.Print($"V3TunnelBridge: Sent registration packet to {ip}:{port} from {_localId}");
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"V3TunnelBridge: Failed to send registration packet to {ip}:{port} - {ex.Message}");
+            }
+        }
+
+        // Send a custom packet to a specific player
+        public async Task SendCustomPacketAsync(uint targetPlayerId, CustomPacketType packetType, byte[] data = null)
+        {
+            if (!_tunnelClients.TryGetValue(targetPlayerId, out var tunnelInfo))
+            {
+                Debug.Print($"ERROR: No tunnel client available for player {targetPlayerId}");
+                return;
+            }
+
+            data = data ?? new byte[0];
+
+            //Create custom packet: [SenderID(4)][ReceiverID(4)][Magic(4)][PacketType(1)][Data(n)]
+            byte[] packet = new byte[4 + 4 + CUSTOM_PACKET_MAGIC.Length + 1 + data.Length];
+            int offset = 0;
+
+            //sender ID
+            Array.Copy(BitConverter.GetBytes(_localId), 0, packet, offset, 4);
+            offset += 4;
+
+            //receiver ID
+            Array.Copy(BitConverter.GetBytes(targetPlayerId), 0, packet, offset, 4);
+            offset += 4;
+
+            //magic bytes
+            Array.Copy(CUSTOM_PACKET_MAGIC, 0, packet, offset, CUSTOM_PACKET_MAGIC.Length);
+            offset += CUSTOM_PACKET_MAGIC.Length;
+
+            //packet type
+            packet[offset] = (byte)packetType;
+            offset += 1;
+
+            //data
+            if (data.Length > 0)
+                Array.Copy(data, 0, packet, offset, data.Length);
+
+            try
+            {
+                await tunnelInfo.client.SendAsync(packet, packet.Length);
+                Debug.Print($"Sent custom packet type {packetType} to player {targetPlayerId}, size={packet.Length}");
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"Error sending custom packet to player {targetPlayerId}: {ex.Message}");
+            }
+        }
+
+        // Check if packet is a custom packet based on magic bytes
+        private bool IsCustomPacket(byte[] data)
+        {
+            if (data.Length < 8 + CUSTOM_PACKET_MAGIC.Length)
+                return false;
+
+            // Check magic bytes at offset 8 (after senderID and receiverID)
+            for (int i = 0; i < CUSTOM_PACKET_MAGIC.Length; i++)
+            {
+                if (data[8 + i] != CUSTOM_PACKET_MAGIC[i])
+                    return false;
+            }
+
+            return true;
+        }
+
+        private async Task ProcessCustomPacket(byte[] data, IPEndPoint remoteEndPoint)
+        {
+            if (data.Length < 8 + CUSTOM_PACKET_MAGIC.Length + 1)
+            {
+                Debug.Print("Custom packet too small");
+                return;
+            }
+
+            uint senderId = BitConverter.ToUInt32(data, 0);
+            uint receiverId = BitConverter.ToUInt32(data, 4);
+
+            // Check if this packet is for us
+            if (receiverId != _localId)
+            {
+                Debug.Print($"Custom packet not for us (our ID: {_localId}), but was for: {receiverId} - ignoring");
+                return;
+            }
+
+            // Skip senderID(4) + receiverID(4) + magic(4) to get to packet type
+            int offset = 8 + CUSTOM_PACKET_MAGIC.Length;
+
+            CustomPacketType packetType = (CustomPacketType)data[offset];
+            offset += 1;
+
+            byte[] payload = new byte[data.Length - offset];
+            Array.Copy(data, offset, payload, 0, payload.Length);
+
+            Debug.Print($"Received custom packet type {packetType} from player {senderId}");
+
+            switch (packetType)
+            {
+                case CustomPacketType.PingRequest:
+                    if (payload.Length >= 4)
+                    {
+
+                    }
+                    break;
+
+                case CustomPacketType.PingResponse:
+                    if (payload.Length >= 4)
+                    {
+
+                    }
+                    break;
+
+                default:
+                    Debug.Print($"Unknown custom packet type {packetType} from player {senderId}");
+                    break;
             }
         }
 
@@ -154,6 +298,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 Debug.Print($"V3TunnelBridge local server error: {ex}");
             }
         }
+
         private static ushort SwapBytes(ushort val)
         {
             return (ushort)((val << 8) | (val >> 8));
@@ -186,6 +331,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         // Process received packets from tunnels
         private async Task ProcessReceivedPacket(byte[] data, IPEndPoint remoteEndPoint)
         {
+            if (IsCustomPacket(data))
+            {
+                await ProcessCustomPacket(data, remoteEndPoint);
+                return;
+            }
+
             if (data.Length <= 8)
             {
                 Debug.Print("Ignoring too small packet.");
