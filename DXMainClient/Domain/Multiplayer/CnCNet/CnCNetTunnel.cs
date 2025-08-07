@@ -69,19 +69,19 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
         }
 
-        public string Address { get; private set; }
-        public int Port { get; private set; }
-        public string Country { get; private set; }
-        public string CountryCode { get; private set; }
-        public string Name { get; private set; }
+        public string Address { get; protected set; }
+        public int Port { get; protected set; }
+        public string Country { get; protected set; }
+        public string CountryCode { get; protected set; }
+        public string Name { get; protected set; }
         public bool RequiresPassword { get; private set; }
-        public int Clients { get; private set; }
-        public int MaxClients { get; private set; }
-        public bool Official { get; private set; }
-        public bool Recommended { get; private set; }
+        public int Clients { get; protected set; }
+        public int MaxClients { get; protected set; }
+        public bool Official { get; protected set; }
+        public bool Recommended { get; protected set; }
         public double Latitude { get; private set; }
         public double Longitude { get; private set; }
-        public int Version { get; private set; }
+        public int Version { get; protected set; }
         public double Distance { get; private set; }
         public int PingInMs { get; set; } = -1;
 

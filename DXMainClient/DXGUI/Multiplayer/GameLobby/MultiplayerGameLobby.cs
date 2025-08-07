@@ -52,7 +52,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new ChatBoxCommand("ROLL", "Roll dice, for example /roll 3d6".L10N("Client:Main:ChatboxCommandRollHelp"), false, RollDiceCommand),
                 new ChatBoxCommand("SAVEOPTIONS", "Save game option preset so it can be loaded later".L10N("Client:Main:ChatboxCommandSaveOptionsHelp"), false, HandleGameOptionPresetSaveCommand),
                 new ChatBoxCommand("LOADOPTIONS", "Load game option preset".L10N("Client:Main:ChatboxCommandLoadOptionsHelp"), true, HandleGameOptionPresetLoadCommand),
-                new ChatBoxCommand("DYNAMICTUNNELS", "Enables/disables dynamic tunnels for this game.".L10N("Client:Main:DynamicTunnelsHelp"), true, HandleDynamicTunnelsCommand)
             };
         }
 
@@ -533,8 +532,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             BroadcastDiceRoll(dieSides, results);
         }
-
-        protected abstract void HandleDynamicTunnelsCommand(string value);
 
         /// <summary>
         /// Handles custom map load command.

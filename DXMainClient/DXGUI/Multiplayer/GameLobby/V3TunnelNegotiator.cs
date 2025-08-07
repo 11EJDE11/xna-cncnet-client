@@ -1,0 +1,708 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using DTAClient.Domain.Multiplayer.CnCNet;
+using ClientCore;
+
+namespace DTAClient.DXGUI.Multiplayer.GameLobby
+{
+
+    public class TunnelChosenEventArgs : EventArgs
+    {
+        public uint PlayerId { get; set; }
+        public string PlayerName { get; set; }
+        public CnCNetTunnel ChosenTunnel { get; set; }
+        public bool IsLocalDecision { get; set; }
+    }
+
+    /// <summary>
+    /// Handles negotiating best tunnel with a single other player.
+    /// </summary>
+    public class V3PlayerNegotiator : IDisposable
+    {
+        private readonly uint _localId; //our V3PlayerInfo ID
+        private readonly V3PlayerInfo _remotePlayer;
+        private readonly List<CnCNetTunnel> _tunnels; //list of tunnels to test with
+        private readonly TunnelHandler _tunnelHandler;
+
+        // If true, you send ping requests and measure latency.
+        // If false, you reply to ping requests
+        // This is set based on the ID (player1ID < player2ID)
+        // As a negotiator runs for each other player, you may be a decider for
+        // some, and a non-decider for others.
+        private readonly bool _isDecider;
+
+        // Used to cancel SendConnectedPacketsAsync and PerformPingsAsync.
+        private readonly CancellationTokenSource _negotiationCts = new CancellationTokenSource();
+
+        // Signals negotiation complete. Deciders = set when tunnel choice is made.
+        // Non-deciders = set when tunnel choice is received from decider.
+        private TaskCompletionSource<bool> _negotiationCompletionSource = new TaskCompletionSource<bool>();
+
+        // Something to differentiate game data from client data.
+        private static readonly byte[] MAGIC_DATA = { 0x45, 0x4A, 0x45, 0x4A, 0x45, 0x4A }; //EJEJEJ
+
+        // How long the non-decider will keep sending Connected packets to a single tunnel
+        // while waiting for a Ping Request from the decider. After this, the tunnel is skipped.
+        // Note that the existing players in the lobby will begin negotiating when
+        // Channel_UserAdded is called, while the joining player will begin negotiation
+        // when ApplyPlayerOptions is sent by the host. The timeout should be long enough for
+        // the joining player to receive that IRC message + attempt connections to each tunnel.
+        private const int NON_DECIDER_CONNECTED_TIMEOUT_MS = 10000;
+
+        // How long the non-decider will keep sending Connected packets overall.
+        private const int NON_DECIDER_TOTAL_TIMEOUT_MS = 20000;
+
+        // How long the decider will wait to receive a Ping Request from the non-decider.
+        // If none are received in time, the tunnel is skipped.
+        private static readonly TimeSpan DECIDER_CONNECTED_PHASE_TIMEOUT = TimeSpan.FromSeconds(10);
+
+        // How long the decider will wait for pings to complete. If it takes this long, 
+        // pick the best one from the results that have come in.
+        private static readonly TimeSpan DECIDER_PING_PHASE_TIMEOUT = TimeSpan.FromSeconds(15);
+        private const int PINGS_PER_TUNNEL = 5;
+        private const int PING_TIMEOUT_MS = 2000; //consider it dropped, move on to the next ping
+
+        private const int NON_DECIDER_CONNECTED_INTERVAL_MS = 500; //delay Connected packets a bit to avoid overloading
+
+        // When the decider has picked a tunnel, they need to inform the non-decider.
+        // As it's UDP and not garaunteed to make ti, we need an acknowledgement.
+        private const int TUNNEL_CHOICE_RETRY_INTERVAL_MS = 1000;
+        private const int TUNNEL_CHOICE_MAX_RETRIES = 10;
+        private TaskCompletionSource<bool> _tunnelAckReceived = new TaskCompletionSource<bool>(); //true when tunnel choice ack'd
+
+        public V3PlayerInfo RemotePlayer => _remotePlayer;
+
+        public event EventHandler<CnCNetTunnel> TunnelChosen;
+        public event EventHandler NegotiationComplete;
+        public event EventHandler<string> NegotiationFailed; //todo: merge with TunnelChosen
+
+        public V3PlayerNegotiator(uint localId, V3PlayerInfo remotePlayer, List<CnCNetTunnel> tunnels,
+            TunnelHandler tunnelHandler)
+        {
+            _localId = localId;
+            _remotePlayer = remotePlayer;
+            _tunnels = tunnels;
+            _tunnelHandler = tunnelHandler;
+            _isDecider = localId < remotePlayer.Id;
+
+            _remotePlayer.InitializeTunnelResults(tunnels);
+
+            _tunnelHandler.RegisterNegotiationHandler(_localId, _remotePlayer.Id, OnPacketReceived);
+        }
+
+        public async Task<bool> NegotiateAsync()
+        {
+            try
+            {
+                Debug.Print($"Starting negotiation with player {_remotePlayer.Name} (ID: {_remotePlayer.Id}, Decider: {_isDecider})");
+
+                _negotiationCompletionSource = new TaskCompletionSource<bool>();
+                _tunnelAckReceived = new TaskCompletionSource<bool>();
+
+                await _tunnelHandler.SendRegistrationAsync(_localId, _tunnels);
+
+                if (_isDecider)
+                    await PerformDeciderNegotiationAsync();
+                else
+                    await PerformNonDeciderNegotiationAsync();
+
+                PrintNegotiationResults();
+                _negotiationCompletionSource.TrySetResult(true);
+                NegotiationComplete?.Invoke(this, EventArgs.Empty);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"Negotiation failed with {_remotePlayer.Name}: {ex.Message}");
+                PrintNegotiationResults();
+                await NotifyNegotiationFailure();
+                _negotiationCompletionSource.TrySetResult(false);
+                NegotiationFailed?.Invoke(this, ex.Message);
+                NegotiationComplete?.Invoke(this, EventArgs.Empty);
+                return false;
+            }
+        }
+
+        //todo: should really be ctcp, not communicated over tunnels
+        private async Task NotifyNegotiationFailure()
+        {
+            try
+            {
+                // Send a failure packet to all tunnels to ensure the other side gets it
+                var failurePacket = CreateNegotiationPacket(NegotiationPacketType.NegotiationFailed, Array.Empty<byte>());
+
+                var tasks = _tunnels.Select(tunnel =>
+                    _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, failurePacket)
+                ).ToArray();
+
+                await Task.WhenAll(tasks);
+                Debug.Print($"Sent negotiation failure notification to {_remotePlayer.Name}");
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"Failed to send negotiation failure notification: {ex.Message}");
+            }
+        }
+
+        // Deciders wait for a Connected packet to be received. When received, they begin 
+        // sending Ping Requests. When all tunnels are pinged/timed out, pick the best tunnel
+        // and inform the other player.
+        private async Task PerformDeciderNegotiationAsync()
+        {
+            var totalTunnels = _remotePlayer.TunnelResults.Count;
+            var completedTunnels = 0;
+            var earlySelectionTriggered = false;
+            var earlySelectionLock = new object();
+            var earlySelectionTcs = new TaskCompletionSource<bool>();
+
+            var allTunnelTasks = _remotePlayer.TunnelResults.Select(async kvp =>
+            {
+                var tunnel = kvp.Key;
+                var result = kvp.Value;
+
+                try
+                {
+                    await result.ConnectedTcs.Task.WaitAsync(DECIDER_CONNECTED_PHASE_TIMEOUT);
+                    Debug.Print($"[CONNECTED OK] {tunnel}");
+
+                    await result.PingsCompletedTcs.Task.WaitAsync(DECIDER_PING_PHASE_TIMEOUT);
+                    Debug.Print($"[PING DONE] {tunnel} finished");
+
+                    // Check for early selection after this tunnel completes
+                    lock (earlySelectionLock)
+                    {
+                        completedTunnels++;
+                        var completionPercentage = (double)completedTunnels / totalTunnels;
+
+                        if (!earlySelectionTriggered && completionPercentage >= 0.8)
+                        {
+                            earlySelectionTriggered = true;
+                            Debug.Print($"[EARLY SELECTION] {completedTunnels}/{totalTunnels} tunnels completed ({completionPercentage:P0}), selecting best tunnel");
+                            earlySelectionTcs.TrySetResult(true);
+                        }
+                    }
+                }
+                catch (TimeoutException)
+                {
+                    if (!result.ConnectedReceived)
+                        Debug.Print($"[SKIP] {tunnel} - no CONNECTED received in time");
+                    else
+                        Debug.Print($"[PING TIMEOUT] {tunnel} didn't finish pinging");
+
+                    lock (earlySelectionLock)
+                    {
+                        completedTunnels++;
+                        var completionPercentage = (double)completedTunnels / totalTunnels;
+
+                        if (!earlySelectionTriggered && completionPercentage >= 0.8)
+                        {
+                            earlySelectionTriggered = true;
+                            Debug.Print($"[EARLY SELECTION] {completedTunnels}/{totalTunnels} tunnels completed ({completionPercentage:P0}), selecting best tunnel");
+                            earlySelectionTcs.TrySetResult(true);
+                        }
+                    }
+                }
+            }).ToList();
+
+            // Wait for either all tunnels to complete OR 80% completion
+            var allTunnelsTask = Task.WhenAll(allTunnelTasks);
+            var completedTask = await Task.WhenAny(allTunnelsTask, earlySelectionTcs.Task);
+
+            if (completedTask == earlySelectionTcs.Task)
+                Debug.Print($"[EARLY SELECTION] Triggered - proceeding with tunnel selection");
+            else
+                Debug.Print($"[FULL COMPLETION] All tunnel tasks completed normally");
+
+            var bestTunnel = _remotePlayer.SelectBestTunnel(_tunnels);
+            if (bestTunnel != null)
+            {
+                await SendTunnelChoiceAsync(bestTunnel);
+                _remotePlayer.IpAddress = bestTunnel.Address;
+                _remotePlayer.Port = bestTunnel.Port;
+                TunnelChosen?.Invoke(this, bestTunnel);
+            }
+            else
+            {
+                Debug.Print("[FAILURE] No tunnels had any ping responses");
+                await NotifyNegotiationFailure();
+                throw new Exception("No viable tunnel");
+            }
+        }
+
+        // Non-deciders continuously send "Connected" packets to the other player
+        // until they receive a Ping Request. Then they reply with Ping Responses
+        // and await the tunnel choice from the Decider.
+        private async Task PerformNonDeciderNegotiationAsync()
+        {
+            using (var cts = CancellationTokenSource.CreateLinkedTokenSource(_negotiationCts.Token))
+            {
+                _ = SendConnectedPacketsAsync(cts.Token);
+
+                try
+                {
+                    //wait for tuennel choice or negotiation timeout
+                    var negotiationTimeout = Task.Delay(NON_DECIDER_TOTAL_TIMEOUT_MS, cts.Token);
+                    var completed = await Task.WhenAny(_negotiationCompletionSource.Task, negotiationTimeout);
+
+                    if (completed == negotiationTimeout && !_negotiationCompletionSource.Task.IsCompleted)
+                    {
+                        Debug.Print($"[TIMEOUT] No PingRequest received from decider {_remotePlayer.Name} within 20 seconds.");
+                        _negotiationCompletionSource.TrySetResult(false);
+                        cts.Cancel();
+                        NegotiationComplete?.Invoke(this, EventArgs.Empty);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    Debug.Print($"[CANCELLED] Negotiation with {_remotePlayer.Name} was cancelled.");
+                }
+            }
+        }
+
+        // Send Connected packets every 500ms to tunnels we haven't yet had a ping request from.
+        private async Task SendConnectedPacketsAsync(CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                foreach (var tunnel in _tunnels)
+                {
+                    var result = _remotePlayer.GetTunnelResult(tunnel); 
+                    if (result == null || result.ConnectedTimedOut || result.PingRequestReceived)
+                        continue;
+
+                    var packet = CreateNegotiationPacket(NegotiationPacketType.Connected, Array.Empty<byte>());
+                    Debug.Print($"Sending Connected packet to player {_remotePlayer.Name} ({_remotePlayer.Id}) via {tunnel.Name}");
+                    await _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, packet);
+
+                    if (!result.FirstConnectedSentTime.HasValue)
+                        result.FirstConnectedSentTime = DateTime.UtcNow;
+                }
+
+                await Task.Delay(NON_DECIDER_CONNECTED_INTERVAL_MS, cancellationToken);
+            }
+        }
+
+        //send a ping, wait for response or timeout, next ping...
+        private async Task PerformPingsAsync(CnCNetTunnel tunnel, TunnelTestResult result)
+        {
+            for (int i = 0; i < PINGS_PER_TUNNEL && !_negotiationCts.Token.IsCancellationRequested; i++)
+            {
+                var ping = new PingResult { ID = i, SentTimeTicks = Stopwatch.GetTimestamp() };
+
+                result.PingResults.Add(ping);
+
+                var packet = CreateNegotiationPacket(NegotiationPacketType.PingRequest, BitConverter.GetBytes(i));
+                await _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, packet);
+
+                Debug.Print($"[PING REQUEST] ID {i} sent to {_remotePlayer.Name} on {tunnel.Name}");
+
+                // Wait for a ping response or timeout
+                try
+                {
+                    var timeoutTask = Task.Delay(PING_TIMEOUT_MS, _negotiationCts.Token);
+                    var completedTask = await Task.WhenAny(ping.CompletionSource.Task, timeoutTask);
+
+                    if (completedTask == timeoutTask)
+                        Debug.Print($"[PING TIMEOUT] ID {i} to {_remotePlayer.Name} on {tunnel.Name}");
+                    else
+                        Debug.Print($"[PING RESPONSE] ID {i} received from {_remotePlayer.Name} on {tunnel.Name}");
+                }
+                catch (OperationCanceledException)
+                {
+                    Debug.Print($"[PING CANCELLED] ID {i} to {_remotePlayer.Name} on {tunnel.Name}");
+                    break;
+                }
+            }
+
+            result.PingsCompletedTcs.TrySetResult(true);
+        }
+
+        private void OnPacketReceived(uint senderId, uint receiverId, NegotiationPacketType packetType,
+            byte[] payload, DateTime receivedTime, CnCNetTunnel tunnel)
+        {
+            var result = _remotePlayer.GetTunnelResult(tunnel);
+            if (result == null)
+                return;
+
+            switch (packetType)
+            {
+                case NegotiationPacketType.Connected:
+                    //if we receive a connected packet, move on to the pinging phase.
+                    if (_isDecider && !result.ConnectedReceived)
+                    {
+                        Debug.Print($"[CONNECTED] Received from {_remotePlayer.Name} on tunnel {tunnel.Name}");
+                        result.ConnectedReceived = true;
+                        result.ConnectedTcs.TrySetResult(true);
+                        _ = PerformPingsAsync(tunnel, result);
+                    }
+                    break;
+
+                case NegotiationPacketType.PingRequest:
+                    //if we receive a ping request, reply with a ping response that contains the ping ID.
+                    Debug.Print($"[PING REQUEST] From {_remotePlayer.Name} on tunnel {tunnel.Name}");
+                    if (!_isDecider)
+                    {
+                        var tunnelResult = _remotePlayer.GetTunnelResult(tunnel);
+                        if (tunnelResult != null)
+                            tunnelResult.PingRequestReceived = true;
+
+                        var response = CreateNegotiationPacket(NegotiationPacketType.PingResponse, payload);
+                        _ = _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, response);
+                    }
+                    break;
+
+                case NegotiationPacketType.PingResponse:
+                    //if we receive a ping response, note down the received time and complete the ping.
+                    if (_isDecider && payload.Length >= 4)
+                    {
+                        int id = BitConverter.ToInt32(payload, 0);
+                        var ping = result.PingResults.FirstOrDefault(p => p.ID == id);
+                        if (ping != null && !ping.ReceivedTimeTicks.HasValue)
+                        {
+                            ping.ReceivedTimeTicks = Stopwatch.GetTimestamp();
+                            ping.CompletionSource.TrySetResult(true); //ping complete
+                            Debug.Print($"[PING RESPONSE] Received ID {id} from {_remotePlayer.Name} on tunnel {tunnel.Name}, RTT: {ping.RoundTripTime:F1}ms");
+                        }
+                    }
+                    break;
+
+                case NegotiationPacketType.TunnelChoice:
+                    //if we receive a tunnel choice, update our V3PlayerInfo with the details and
+                    //send back an acknowledgement
+                    if (!_isDecider && payload.Length >= 4)
+                    {
+                        int tunnelIndex = BitConverter.ToInt32(payload, 0);
+                        if (tunnelIndex >= 0 && tunnelIndex < _tunnels.Count)
+                        {
+                            var chosenTunnel = _tunnels[tunnelIndex];
+                            Debug.Print($"[TUNNEL CHOICE] {_remotePlayer.Name} chose {chosenTunnel.Name}");
+                            _remotePlayer.IpAddress = chosenTunnel.Address;
+                            _remotePlayer.Port = chosenTunnel.Port;
+
+                            // Send acknowledgment back to decider
+                            var ackPacket = CreateNegotiationPacket(NegotiationPacketType.TunnelAck, payload);
+                            _ = _tunnelHandler.SendPacketAsync(chosenTunnel.Address, chosenTunnel.Port, ackPacket);
+                            Debug.Print($"[TUNNEL ACK] Sent acknowledgment to {_remotePlayer.Name} for tunnel {chosenTunnel.Name}");
+
+                            TunnelChosen?.Invoke(this, chosenTunnel);
+                            _negotiationCompletionSource.TrySetResult(true);
+                        }
+                    }
+                    break;
+                case NegotiationPacketType.TunnelAck:
+                    if (_isDecider && payload.Length >= 4)
+                    {
+                        int tunnelIndex = BitConverter.ToInt32(payload, 0);
+                        Debug.Print($"[TUNNEL ACK] Received acknowledgment from {_remotePlayer.Name} for tunnel index {tunnelIndex}");
+                        _tunnelAckReceived.TrySetResult(true);
+                    }
+                    break;
+                case NegotiationPacketType.NegotiationFailed:
+                    Debug.Print($"[NEGOTIATION FAILED] Received failure notification from {_remotePlayer.Name}");
+                    _negotiationCompletionSource.TrySetResult(false);
+                    NegotiationFailed?.Invoke(this, "Remote player reported negotiation failure");
+                    break;
+            }
+        }
+
+        //informs other player of the tunnel to use.
+        private async Task SendTunnelChoiceAsync(CnCNetTunnel tunnel)
+        {
+            int tunnelIndex = _tunnels.IndexOf(tunnel);
+            var packet = CreateNegotiationPacket(NegotiationPacketType.TunnelChoice, BitConverter.GetBytes(tunnelIndex));
+
+            Debug.Print($"[TUNNEL CHOICE] Sending tunnel choice to {_remotePlayer.Name}: {tunnel.Name}");
+
+            for (int attempt = 0; attempt < TUNNEL_CHOICE_MAX_RETRIES; attempt++)
+            {
+                //send the tunnel choice
+                await _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, packet);
+                Debug.Print($"[TUNNEL CHOICE] Attempt {attempt + 1} sent to {_remotePlayer.Name} via {tunnel.Name}");
+
+                try
+                {
+                    //wait for acknowledgment or timeout
+                    var timeoutTask = Task.Delay(TUNNEL_CHOICE_RETRY_INTERVAL_MS, _negotiationCts.Token);
+                    var completedTask = await Task.WhenAny(_tunnelAckReceived.Task, timeoutTask);
+
+                    if (completedTask == _tunnelAckReceived.Task)
+                    {
+                        Debug.Print($"[TUNNEL CHOICE] Acknowledgment received from {_remotePlayer.Name} for {tunnel.Name}");
+                        TunnelChosen?.Invoke(this, tunnel);
+                        return; // success
+                    }
+                    else
+                    {
+                        Debug.Print($"[TUNNEL CHOICE] No acknowledgment received, retrying... (attempt {attempt + 1}/{TUNNEL_CHOICE_MAX_RETRIES})");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    Debug.Print($"[TUNNEL CHOICE] Cancelled while waiting for acknowledgment from {_remotePlayer.Name}");
+                    return;
+                }
+            }
+
+            Debug.Print($"[TUNNEL CHOICE] Failed to recieve tunnel acknowledgment from {_remotePlayer.Name} after {TUNNEL_CHOICE_MAX_RETRIES} goes");
+            //todo: what now it's failed to send? Maybe nothing as the ack is just a one-packet jobbie that might have got lost anyway. Is it hacky to just send 5 acks and hope one gets through?
+        }
+
+        private byte[] CreateNegotiationPacket(NegotiationPacketType packetType, byte[] payload)
+        {
+            var packet = new byte[4 + 4 + MAGIC_DATA.Length + 1 + payload.Length];
+            int offset = 0;
+
+            Array.Copy(BitConverter.GetBytes(_localId), 0, packet, offset, 4); //sender
+            offset += 4;
+            Array.Copy(BitConverter.GetBytes(_remotePlayer.Id), 0, packet, offset, 4); //receiver
+            offset += 4;
+            Array.Copy(MAGIC_DATA, 0, packet, offset, MAGIC_DATA.Length); //EJEJEJ
+            offset += MAGIC_DATA.Length;
+            packet[offset] = (byte)packetType;
+            offset++;
+
+            if (payload.Length > 0)
+                Array.Copy(payload, 0, packet, offset, payload.Length);
+
+            return packet;
+        }
+
+        private void PrintNegotiationResults()
+        {
+            Debug.Print($"=== Negotiation Results for {_remotePlayer.Name} (ID: {_remotePlayer.Id}) ===");
+
+            foreach (var tunnel in _tunnels)
+            {
+                var result = _remotePlayer.GetTunnelResult(tunnel);
+                if (result != null)
+                {
+                    var successfulPings = result.PingResults.Count(p => p.RoundTripTime.HasValue);
+
+                    Debug.Print($"Player: {_remotePlayer.Name} | Tunnel: {tunnel.Name} | " +
+                               $"Avg RTT: {(result.AverageRtt >= 0 ? $"{result.AverageRtt:F1}ms" : "N/A")} | " +
+                               $"Packet Loss: {result.PacketLoss:F1}% | " +
+                               $"Pings: {successfulPings}/{result.PingResults.Count} | " +
+                               $"Connected: {result.ConnectedReceived}");
+                }
+            }
+
+            var bestTunnel = _remotePlayer.SelectBestTunnel(_tunnels);
+            if (bestTunnel != null)
+            {
+                var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
+                Debug.Print($"BEST TUNNEL for {_remotePlayer.Name}: {bestTunnel.Name} " +
+                           $"(RTT: {bestResult.AverageRtt:F1}ms, Loss: {bestResult.PacketLoss:F1}%)");
+            }
+            else
+                Debug.Print($"NO VIABLE TUNNEL found for {_remotePlayer.Name}");
+
+            Debug.Print($"=== End Results for {_remotePlayer.Name} ===");
+        }
+
+        public void Dispose()
+        {
+            _negotiationCts?.Cancel();
+            _negotiationCts?.Dispose();
+
+            _tunnelAckReceived?.TrySetCanceled();
+            _negotiationCompletionSource?.TrySetCanceled();
+
+            if (_tunnelHandler != null)
+                _tunnelHandler.UnregisterNegotiationHandler(_localId, _remotePlayer.Id);
+        }
+    }
+
+    public class V3TunnelNegotiationManager : IDisposable
+    {
+        private readonly uint _localId;
+        private readonly TunnelHandler _tunnelHandler;
+        private readonly Dictionary<uint, V3PlayerNegotiator> _negotiators = new Dictionary<uint, V3PlayerNegotiator>(); //todo double check dict use
+        private readonly object _lock = new object();
+
+        public event EventHandler<TunnelChosenEventArgs> TunnelChosen;
+
+        public V3TunnelNegotiationManager(uint localId, TunnelHandler tunnelHandler)
+        {
+            _localId = localId;
+            _tunnelHandler = tunnelHandler;
+        }
+        
+        private List<CnCNetTunnel> GetAvailableTunnels()
+        {
+            return _tunnelHandler.Tunnels
+                .Where(t => t.Version == 3 &&
+                    (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended))
+                .ToList();
+        }
+
+        public async Task<bool> StartNegotiation(V3PlayerInfo player)
+        {
+            if (player.Id == _localId)
+                return true;
+
+            player.HasNegotiated = false;
+            player.IsNegotiating = true;
+
+            Debug.Print($"[ADD PLAYER] Adding player {player.Name} (ID: {player.Id})");
+
+            lock (_lock)
+            {
+                if (_negotiators.ContainsKey(player.Id))
+                    return true;
+            }
+
+            var availableTunnels = GetAvailableTunnels();
+
+            if (availableTunnels.Count == 0)
+            {
+                Debug.Print($"[ADD PLAYER] No available V3 tunnels for negotiation with {player.Name}");
+                player.HasNegotiated = true;
+                player.IsNegotiating = false;
+                return false;
+            }
+
+            var negotiator = new V3PlayerNegotiator(_localId, player, availableTunnels, _tunnelHandler);
+
+            negotiator.TunnelChosen += OnTunnelChosenHandler;
+            negotiator.NegotiationComplete += OnNegotiationCompleteHandler;
+            negotiator.NegotiationFailed += OnNegotiationFailedHandler;
+
+            lock (_lock)
+            {
+                _negotiators[player.Id] = negotiator;
+            }
+
+            var negotiationThread = new Thread(() => NegotiationWorker(negotiator, player))
+            {
+                Name = $"TunnelNegotiation-{player.Name}",
+                IsBackground = true
+            };
+            negotiationThread.Start();
+
+            return true;
+        }
+
+        private void NegotiationWorker(V3PlayerNegotiator negotiator, V3PlayerInfo player)
+        {
+            Debug.Print($"Negotiation thread started for {player.Name}");
+
+            try
+            {
+                bool success = negotiator.NegotiateAsync().GetAwaiter().GetResult();
+                if (!success)
+                {
+                    Debug.Print($"[NEGOTIATION FAILED] For player {player.Name}, cleaning up.");
+                    StopNegotiation(player.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"[NEGOTIATION ERROR] For player {player.Name}: {ex.Message}");
+                StopNegotiation(player.Id);
+            }
+
+            Debug.Print($"Negotiation thread finished for {player.Name}");
+        }
+
+        public void StopNegotiation(uint playerId)
+        {
+            V3PlayerNegotiator negotiator;
+            lock (_lock)
+            {
+                if (!_negotiators.TryGetValue(playerId, out negotiator))
+                    return;
+
+                _negotiators.Remove(playerId);
+            }
+
+            if (negotiator != null)
+            {
+                negotiator.TunnelChosen -= OnTunnelChosenHandler;
+                negotiator.NegotiationComplete -= OnNegotiationCompleteHandler;
+                negotiator.NegotiationFailed -= OnNegotiationFailedHandler;
+                negotiator.Dispose();
+            }
+        }
+
+        private void OnNegotiationFailedHandler(object sender, string reason)
+        {
+            var negotiator = (V3PlayerNegotiator)sender;
+            var player = negotiator.RemotePlayer;
+            if (player == null) return;
+
+            Debug.Print($"[NEGOTIATION FAILED] Player {player.Name}: {reason}");
+
+            TunnelChosen?.Invoke(this, new TunnelChosenEventArgs
+            {
+                PlayerId = player.Id,
+                PlayerName = player.Name,
+                ChosenTunnel = null,
+                IsLocalDecision = _localId < player.Id
+            });
+        }
+
+        private void OnTunnelChosenHandler(object sender, CnCNetTunnel tunnel)
+        {
+            var negotiator = (V3PlayerNegotiator)sender;
+            var player = negotiator.RemotePlayer;
+            if (player == null) return;
+
+            player.HasNegotiated = true;
+            player.IsNegotiating = false;
+
+            TunnelChosen?.Invoke(this, new TunnelChosenEventArgs
+            {
+                PlayerId = player.Id,
+                PlayerName = player.Name,
+                ChosenTunnel = tunnel,
+                IsLocalDecision = _localId < player.Id
+            });
+
+            StopNegotiation(player.Id);
+        }
+
+        private void OnNegotiationCompleteHandler(object sender, EventArgs e)
+        {
+            var negotiator = (V3PlayerNegotiator)sender;
+            var player = negotiator.RemotePlayer;
+            if (player == null) return;
+
+            if (!player.HasNegotiated)
+            {
+                player.HasNegotiated = true;
+                player.IsNegotiating = false;
+                Debug.Print($"[NEGOTIATION COMPLETE] Cleaning up failed negotiator for {player.Name}");
+
+                var failureEvent = new TunnelChosenEventArgs
+                {
+                    PlayerId = player.Id,
+                    PlayerName = player.Name,
+                    ChosenTunnel = null,
+                    IsLocalDecision = false
+                };
+
+                // This will trigger the failure broadcast in the game lobby
+                TunnelChosen?.Invoke(this, failureEvent);
+
+                StopNegotiation(player.Id);
+            }
+        }
+
+        public void Dispose()
+        {
+            List<V3PlayerNegotiator> negotiators;
+            lock (_lock)
+            {
+                negotiators = _negotiators.Values.ToList();
+                _negotiators.Clear();
+            }
+
+            foreach (var negotiator in negotiators)
+                negotiator?.Dispose();
+        }
+    }
+}

@@ -396,11 +396,7 @@ namespace DTAConfig.OptionPanels
             IniSettings.PersistentMode.Value = chkPersistentMode.Checked;
             IniSettings.SteamIntegration.Value = chkSteamIntegration.Checked;
 
-            if (IniSettings.UseLegacyTunnels.Value != chkUseLegacyTunnels.Checked)
-            {
-                IniSettings.UseLegacyTunnels.Value = chkUseLegacyTunnels.Checked;
-                restartRequired = true;
-            }
+            IniSettings.UseLegacyTunnels.Value = chkUseLegacyTunnels.Checked;
 
             if (IniSettings.UseDynamicTunnels.Value != chkUseDynamicTunnels.Checked)
             {

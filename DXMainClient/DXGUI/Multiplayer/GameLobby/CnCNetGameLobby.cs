@@ -20,9 +20,19 @@ using System.Text;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using ClientCore.Extensions;
 using System.Net;
+using System.Diagnostics;
+using System.Collections.Concurrent;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
+    public enum NegotiationStatus
+    {
+        NotStarted,
+        InProgress,
+        Succeeded,
+        Failed
+    }
+
     public class CnCNetGameLobby : MultiplayerGameLobby
     {
         private const int HUMAN_PLAYER_OPTIONS_LENGTH = 3;
@@ -42,6 +52,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private const string DICE_ROLL_MESSAGE = "DR";
         private const string CHANGE_TUNNEL_SERVER_MESSAGE = "CHTNL";
         private const string PLAYER_TUNNEL_MESSAGE = "PLYTNL";
+
+        private const string NEGOTIATION_STATUS_MESSAGE = "NEGSTAT";
+        private const string NEGOTIATION_PING_INFO_MESSAGE = "NEGPING";
+        private const string NEGOTIATION_FAILED_MESSAGE = "NEGFAIL";
 
         public CnCNetGameLobby(
             WindowManager windowManager, 
@@ -98,7 +112,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(DICE_ROLL_MESSAGE, HandleDiceRollResult),
                 new NoParamCommandHandler(CHEAT_DETECTED_MESSAGE, HandleCheatDetectedMessage),
                 new StringCommandHandler(CHANGE_TUNNEL_SERVER_MESSAGE, HandleTunnelServerChangeMessage),
-                new StringCommandHandler(PLAYER_TUNNEL_MESSAGE, HandlePlayerTunnelMessage)
+                new StringCommandHandler(PLAYER_TUNNEL_MESSAGE, HandlePlayerTunnelMessage),
+                new StringCommandHandler(NEGOTIATION_STATUS_MESSAGE, HandleNegotiationStatusMessage),
+                new StringCommandHandler(NEGOTIATION_PING_INFO_MESSAGE, HandleNegotiationPingInfoMessage),
+                new StringCommandHandler(NEGOTIATION_FAILED_MESSAGE, HandleNegotiationFailedMessage)
             };
 
             MapSharer.MapDownloadFailed += MapSharer_MapDownloadFailed;
@@ -114,6 +131,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             AddChatBoxCommand(new ChatBoxCommand("DOWNLOADMAP",
                 "Download a map from CNCNet's map server using a map ID and an optional filename.\nExample: \"/downloadmap MAPID [2] My Battle Map\"".L10N("Client:Main:DownloadMapCommandDescription"),
                 false, DownloadMapByIdCommand));
+            AddChatBoxCommand(new ChatBoxCommand("NEGSTATUS",
+                "Toggle the tunnel negotiation status display",
+                false, ToggleNegotiationStatus));
+            AddChatBoxCommand(new ChatBoxCommand("TUNNELMODE",
+                "Change tunnel mode (0=V3 static, 1=V3 dynamic, 2=V2 legacy) - game host only".L10N("Client:Main:TunnelModeCommand"),
+                false, HandleTunnelModeCommand));
+
         }
 
         public event EventHandler GameLeft;
@@ -159,8 +183,17 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private Random random;
 
         private readonly List<V3PlayerInfo> v3PlayerInfos = new();
-        private V3TunnelBridge v3Bridge;
-        private bool useDynamicTunnels;
+        private V3GameTunnelBridge v3Bridge;
+        private V3TunnelNegotiationManager tunnelNegotiationManager;
+        private bool useLegacyTunnels; //uses global setting, can be toggled per game by host
+        private bool useDynamicTunnels; //uses global setting, can be toggled per game by host
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, NegotiationStatus>> negotiationStatuses = new();
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, int>> playerPingMatrix = new();
+        private TunnelNegotiationStatusPanel negotiationStatusPanel;
+        private bool showNegotiationStatusPanel = false;
+        private const int TUNNEL_MODE_V3_STATIC = 0;  // V3 tunnels, host-selected
+        private const int TUNNEL_MODE_V3_DYNAMIC = 1; // V3 tunnels, dynamic negotiation
+        private const int TUNNEL_MODE_V2_LEGACY = 2;  // V2 tunnels, host-selected
 
         /// <summary>
         /// The SHA1 of the latest selected map.
@@ -225,7 +258,54 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             MultiplayerNameRightClicked += MultiplayerName_RightClick;
 
+            negotiationStatusPanel = new TunnelNegotiationStatusPanel(WindowManager);
+            negotiationStatusPanel.Name = nameof(negotiationStatusPanel);
+            negotiationStatusPanel.X = Width - negotiationStatusPanel.Width - 10;
+            negotiationStatusPanel.Y = MapPreviewBox.Y;
+            AddChild(negotiationStatusPanel);
+
             PostInitialize();
+        }
+
+        private void UpdateNegotiationUI()
+        {
+            if (!useDynamicTunnels || !showNegotiationStatusPanel)
+            {
+                negotiationStatusPanel.Disable();
+                return;
+            }
+
+            var playerNames = Players.Select(p => p.Name).ToList();
+            negotiationStatusPanel.UpdateNegotiationStatus(playerNames, negotiationStatuses, playerPingMatrix);
+
+            if (IsHost)
+            {
+                var summary = negotiationStatusPanel.GetStatusSummary(playerNames, negotiationStatuses);
+                Logger.Log($"Negotiation Status: {summary}");
+            }
+        }
+
+        private void ToggleNegotiationStatus(string args)
+        {
+            if (!useDynamicTunnels)
+            {
+                AddNotice("Negotiation status is only available when using dynamic tunnels.");
+                return;
+            }
+
+            showNegotiationStatusPanel = !showNegotiationStatusPanel;
+
+            if (showNegotiationStatusPanel)
+            {
+                negotiationStatusPanel.Enable();
+                UpdateNegotiationUI();
+                AddNotice("Negotiation status panel shown.");
+            }
+            else
+            {
+                negotiationStatusPanel.Disable();
+                AddNotice("Negotiation status panel hidden.");
+            }
         }
 
         private void MultiplayerName_RightClick(object sender, MultiplayerNameRightClickedEventArgs args)
@@ -259,25 +339,34 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             this.playerLimit = playerLimit;
             this.isCustomPassword = isCustomPassword;
             this.skillLevel = skillLevel;
-            if(isHost)
-                this.useDynamicTunnels = UserINISettings.Instance.UseDynamicTunnels;
+
+            RegenerateV3PlayerInfos();
 
             if (isHost)
             {
+                this.useDynamicTunnels = UserINISettings.Instance.UseDynamicTunnels;
+                this.useLegacyTunnels = UserINISettings.Instance.UseLegacyTunnels;
                 RandomSeed = random.Next();
                 RefreshMapSelectionUI();
                 StartInactiveCheck();
-                RegenerateV3PlayerInfos();
             }
             else
             {
+                this.useDynamicTunnels = tunnel == null;
+                this.useLegacyTunnels = tunnel?.Version == 2;
+
                 channel.ChannelModesChanged += Channel_ChannelModesChanged;
                 AIPlayers.Clear();
             }
 
-            tunnelHandler.CurrentTunnel = tunnel;
-            tunnelHandler.CurrentTunnelPinged += TunnelHandler_CurrentTunnelPinged;
+            var localV3Player = v3PlayerInfos.FirstOrDefault(p => p.Name == ProgramConstants.PLAYERNAME);
 
+            if (useDynamicTunnels)
+                InitializeTunnelNegotiationManager();
+            else
+                tunnelHandler.CurrentTunnel = tunnel;
+
+            tunnelHandler.CurrentTunnelPinged += TunnelHandler_CurrentTunnelPinged;
             connectionManager.ConnectionLost += ConnectionManager_ConnectionLost;
             connectionManager.Disconnected += ConnectionManager_Disconnected;
 
@@ -287,6 +376,55 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 btnChangeTunnel.Enable();
             else
                 btnChangeTunnel.Disable();
+        }
+
+        private void InitializeTunnelNegotiationManager()
+        {
+            if (tunnelNegotiationManager != null)
+                return;
+
+            var localV3Player = v3PlayerInfos.FirstOrDefault(p => p.Name == ProgramConstants.PLAYERNAME);
+            if (localV3Player == null)
+                return;
+
+            tunnelNegotiationManager = new V3TunnelNegotiationManager(localV3Player.Id, tunnelHandler);
+            tunnelNegotiationManager.TunnelChosen += TunnelNegotiationManager_TunnelChosen;
+        }
+
+        private void TunnelNegotiationManager_TunnelChosen(object sender, TunnelChosenEventArgs e)
+        {
+            var playerInfo = Players.FirstOrDefault(p => p.Name == e.PlayerName);
+            if (playerInfo != null)
+            {
+                if (e.ChosenTunnel != null)
+                {
+                    if (e.IsLocalDecision)
+                        AddNotice($"Selected tunnel for {e.PlayerName}: {e.ChosenTunnel.Name} (Ping: {e.ChosenTunnel.PingInMs}ms)");
+                    else
+                        AddNotice($"Assigned to tunnel: {e.ChosenTunnel.Name} (Ping: {e.ChosenTunnel.PingInMs}ms) from {e.PlayerName}");
+
+                    var v3Player = v3PlayerInfos.FirstOrDefault(p => p.Id == e.PlayerId);
+                    if (v3Player != null)
+                        BroadcastNegotiationPingInfo(e.PlayerName, v3Player.GetBestPing());
+
+                    BroadcastNegotiationStatus(e.PlayerName, NegotiationStatus.Succeeded);
+                }
+                else
+                {
+                    AddNotice($"Failed to negotiate tunnel with {e.PlayerName}", Color.Yellow);
+                    BroadcastNegotiationStatus(e.PlayerName, NegotiationStatus.Failed);
+                    BroadcastNegotiationFailed(e.PlayerName);
+                }
+            }
+
+            var v3PlayerInfo = v3PlayerInfos.FirstOrDefault(p => p.Id == e.PlayerId);
+            if (v3PlayerInfo != null && e.ChosenTunnel != null)
+            {
+                v3PlayerInfo.IpAddress = e.ChosenTunnel.Address;
+                v3PlayerInfo.Port = e.ChosenTunnel.Port;
+            }
+
+            CheckAllNegotiationsComplete();
         }
 
         private void TunnelHandler_CurrentTunnelPinged(object sender, EventArgs e) => UpdatePing();
@@ -385,37 +523,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 tunnelHandler.CurrentTunnel?.Address);
         }
 
-        private void HostChangeTunnel()
-        {
-            channel.SendCTCPMessage($"{CHANGE_TUNNEL_SERVER_MESSAGE} {tunnelHandler.CurrentTunnel.Address}:{tunnelHandler.CurrentTunnel.Port}",
-                QueuedMessageType.SYSTEM_MESSAGE, 10);
-            HandleTunnelServerChange(tunnelHandler.CurrentTunnel);
-        }
-
         private void TunnelSelectionWindow_TunnelSelected(object sender, TunnelEventArgs e)
         {
-            if (IsHost && !useDynamicTunnels)
-            {
-                HostChangeTunnel();
-            }
-            else if (useDynamicTunnels)
-            {
-                tunnelHandler.CurrentTunnel = e.Tunnel;
-                BroadcastMyTunnelSelection();
-                UpdatePing();
-                if (IsHost)
-                {
-                    AddNotice($"Selected tunnel: {e.Tunnel.Name} (host only)");
-                    var v3PlayerInfo = v3PlayerInfos.FirstOrDefault(p => p.Name == ProgramConstants.PLAYERNAME);
-                    if (v3PlayerInfo != null)
-                    {
-                        v3PlayerInfo.IpAddress = tunnelHandler.CurrentTunnel.Address;
-                        v3PlayerInfo.Port = tunnelHandler.CurrentTunnel.Port;
-                    }
-                }
-                else
-                    AddNotice($"Selected tunnel: {e.Tunnel.Name}");
-            }
+            channel.SendCTCPMessage($"{CHANGE_TUNNEL_SERVER_MESSAGE} {e.Tunnel.Address}:{e.Tunnel.Port}",
+                QueuedMessageType.SYSTEM_MESSAGE, 10);
+            HandleTunnelServerChange(e.Tunnel);
         }
 
         public void ChangeChatColor(IRCColor chatColor)
@@ -427,9 +539,29 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public override void Clear()
         {
             base.Clear();
-            v3Bridge?.Stop();
-            v3PlayerInfos.Clear();
 
+            negotiationStatuses.Clear();
+            playerPingMatrix.Clear();
+
+            if (negotiationStatusPanel != null)
+                negotiationStatusPanel.Disable();
+            showNegotiationStatusPanel = false;
+
+            if (tunnelNegotiationManager != null)
+            {
+                tunnelNegotiationManager.TunnelChosen -= TunnelNegotiationManager_TunnelChosen;
+                tunnelNegotiationManager.Dispose();
+                tunnelNegotiationManager = null;
+            }
+
+            if (v3Bridge != null)
+            {
+                v3Bridge.Stop();
+                v3Bridge = null;
+            }
+
+            v3PlayerInfos.Clear();
+            
             if (channel != null)
             {
                 channel.MessageAdded -= Channel_MessageAdded;
@@ -471,8 +603,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public void LeaveGameLobby()
         {
-            v3Bridge?.Stop();
-
             if (IsHost)
             {
                 StopInactiveCheck();
@@ -590,7 +720,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     BtnLeaveGame_LeftClick(this, EventArgs.Empty);
                 }
             }
+
             RegenerateV3PlayerInfos();
+
             UpdateDiscordPresence();
         }
 
@@ -609,17 +741,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             RegenerateV3PlayerInfos();
 
-            if (!IsHost)
-            {
-                CopyPlayerDataToUI();
-                return;
-            }
+            CopyPlayerDataToUI();
 
             if (e.User.IRCUser.Name != ProgramConstants.PLAYERNAME)
             {
                 // Changing the map applies forced settings (co-op sides etc.) to the
                 // new player, and it also sends an options broadcast message
-                //CopyPlayerDataToUI(); This is also called by ChangeMap()
                 ChangeMap(GameModeMap);
                 BroadcastPlayerOptions();
                 BroadcastPlayerExtraOptions();
@@ -636,6 +763,51 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 AddNotice("Player limit reached. The game room has been locked.".L10N("Client:Main:GameRoomNumberLimitReached"));
                 LockGame();
             }
+
+            // Start negotiating tunnels with the new player
+            if (pInfo.Name != ProgramConstants.PLAYERNAME && useDynamicTunnels)
+            {
+                var newV3Player = v3PlayerInfos.FirstOrDefault(p => p.Name == pInfo.Name);
+
+                if (newV3Player != null)
+                    StartTunnelNegotiationForPlayer(newV3Player);
+            }
+        }
+
+        private async void StartTunnelNegotiationForPlayer(V3PlayerInfo player)
+        {
+            if (tunnelNegotiationManager == null)
+                InitializeTunnelNegotiationManager();
+
+            if (!useDynamicTunnels || tunnelNegotiationManager == null)
+                return;
+
+            if (player.Name == ProgramConstants.PLAYERNAME)
+                return;
+
+            BroadcastNegotiationStatus(player.Name, NegotiationStatus.InProgress);
+
+            try
+            {
+                AddNotice($"Negotiating tunnel with {player.Name}...");
+                bool success = await tunnelNegotiationManager.StartNegotiation(player);
+
+                if (!success)
+                {
+                    AddNotice($"Failed to negotiate tunnel with {player.Name}", Color.Yellow);
+                    BroadcastNegotiationStatus(player.Name, NegotiationStatus.Failed);
+                    BroadcastNegotiationFailed(player.Name);
+                }
+
+                //success is handled in _TunnelChosen
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"Error negotiating with player {player.Name}: {ex.Message}");
+                AddNotice($"Error negotiating tunnel with {player.Name}", Color.Red);
+                BroadcastNegotiationStatus(player.Name, NegotiationStatus.Failed);
+                BroadcastNegotiationFailed(player.Name);
+            }
         }
 
         private void RemovePlayer(string playerName)
@@ -644,15 +816,23 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (pInfo != null)
             {
-                Players.Remove(pInfo);
-
-                RegenerateV3PlayerInfos();
-
-                CopyPlayerDataToUI();
-                if (IsHost)
+                var v3Player = v3PlayerInfos.FirstOrDefault(p => p.Name == playerName);
+                if (v3Player != null)
                 {
-                    BroadcastPlayerOptions();
+                    v3PlayerInfos.Remove(v3Player);
+
+                    if (useDynamicTunnels && tunnelNegotiationManager != null)
+                    {
+                        Debug.Print($"Removing player {playerName} from tunnel negotiation");
+                        tunnelNegotiationManager.StopNegotiation(v3Player.Id);
+                    }
                 }
+
+                Players.Remove(pInfo);
+                CopyPlayerDataToUI();
+
+                if (IsHost)
+                    BroadcastPlayerOptions();
             }
 
             sndLeaveSound.Play();
@@ -661,6 +841,19 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 UnlockGame(true);
             }
+
+            negotiationStatuses.TryRemove(playerName, out _);
+            playerPingMatrix.TryRemove(playerName, out _);
+
+            // Remove this player from other players' statuses
+            foreach (var status in negotiationStatuses.Values)
+                status.TryRemove(playerName, out _);
+
+            foreach (var pings in playerPingMatrix.Values)
+                pings.TryRemove(playerName, out _);
+
+            UpdateNegotiationUI();
+            CheckAllNegotiationsComplete();
         }
 
         private void Channel_ChannelModesChanged(object sender, ChannelModeEventArgs e)
@@ -717,11 +910,26 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         protected override void HostLaunchGame()
         {
+            if (useDynamicTunnels && !AreAllNegotiationsComplete())
+            {
+                AddNotice("Cannot start game as tunnel negotiations are still in progress.", Color.Yellow);
+
+                var incompleteNegotiations = GetIncompleteNegotiations();
+                if (incompleteNegotiations.Count > 0)
+                {
+                    AddNotice("Waiting for negotiations between:", Color.Yellow);
+                    foreach (var (p1, p2, status) in incompleteNegotiations)
+                        AddNotice($"  {p1} <-> {p2} ({status})", Color.Yellow);
+                }
+
+                return;
+            }
+
             if (Players.Count > 1)
             {
                 // with V2 tunnels we get our ids from the tunnel server
                 // V3 tunnels register on the fly
-                if (tunnelHandler.CurrentTunnel.Version == 2)
+                if (tunnelHandler.CurrentTunnel?.Version == 2)
                 {
                     AddNotice("Contacting V2 tunnel server...".L10N("Client:Main:ConnectingTunnelV2"));
 
@@ -738,15 +946,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                     SendStartV2ToPlayers(playerPorts);
                 }
-                else if (tunnelHandler.CurrentTunnel.Version == 3)
-                {
+                else if (useDynamicTunnels || tunnelHandler.CurrentTunnel.Version == 3)
                     SendStartV3ToPlayers();
-                }
             }
             else
-            {
                 Logger.Log("One player MP -- starting!");
-            }
 
             cncnetUserData.AddRecentPlayers(Players.Select(p => p.Name), channel.UIName);
 
@@ -755,7 +959,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void SendStartV2ToPlayers(List<int> playerPorts)
         {
-
             StringBuilder sb = new StringBuilder("STARTV2 ");
             sb.Append(UniqueGameID);
             for (int pId = 0; pId < Players.Count; pId++)
@@ -772,82 +975,135 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void SendStartV3ToPlayers()
         {
-            string playerIDs = GeneratePlayerIDs();
+            string playerStartString = GenerateV3PlayerStartString();
 
-            //STARTV3 345353;1234567891;Player1;[tunnelIP]:[tunnelPort];9876543210;Player2;0.0.0.0:[tunnelIP]:[tunnelPort]
-            channel.SendCTCPMessage($"STARTV3 {UniqueGameID};{playerIDs}", QueuedMessageType.SYSTEM_MESSAGE, 10);
+            //STARTV3 345353;1234567891;Player1;[tunnelIP]:[tunnelPort];9876543210;Player2;[tunnelIP]:[tunnelPort]
+            channel.SendCTCPMessage($"STARTV3 {UniqueGameID};{playerStartString}", QueuedMessageType.SYSTEM_MESSAGE, 10);
         }
 
-        private string GeneratePlayerIDs()
+        private string GenerateV3PlayerStartString()
         {
             var sb = new StringBuilder();
 
             for (int i = 0; i < Players.Count; i++)
             {
-                uint id = GeneratePlayerID(Players[i].Name);
-                int port = 48000 - i;
-                Players[i].Port = port;
-
-                var v3PlayerInfo = v3PlayerInfos.FirstOrDefault(v3p => v3p.Name == Players[i].Name);
-                if (v3PlayerInfo != null)
-                {
-                    v3PlayerInfo.Id = id;
-                    v3PlayerInfo.PlayerIndex = i;
-                    if (string.IsNullOrEmpty(v3PlayerInfo.IpAddress) || v3PlayerInfo.IpAddress == IPAddress.Any.ToString())
-                    {
-                        if (!useDynamicTunnels)
-                        {
-                            // for non-dynamic mode, all players use the host's tunnel
-                            v3PlayerInfo.IpAddress = tunnelHandler.CurrentTunnel?.Address ?? IPAddress.Any.ToString();
-                            v3PlayerInfo.Port = tunnelHandler.CurrentTunnel?.Port ?? 0;
-                        }
-                    }
-                    v3PlayerInfo.PlayerGameId = (ushort)port;
-                }
-
-                sb.Append(id)
-                    .Append(';')
-                    .Append(Players[i].Name)
-                    .Append(';')
-                    .Append(v3PlayerInfo.IpAddress + ":")
-                    .Append(v3PlayerInfo.Port)
-                    .Append(';');
+                var playerData = PreparePlayerGameData(i);
+                sb.Append(playerData.Id)
+                  .Append(';')
+                  .Append(playerData.Name)
+                  .Append(';')
+                  .Append(playerData.TunnelAddress)
+                  .Append(';');
             }
 
             return sb.ToString().TrimEnd(';');
         }
 
+        private (uint Id, string Name, string TunnelAddress) PreparePlayerGameData(int playerIndex)
+        {
+            var player = Players[playerIndex];
+            uint id = GeneratePlayerID(player.Name);
+            int port = 48000 - playerIndex;  //more like an ID for the game. Saved in spawn.ini and is the first 4 bytes of the game's packet data (sender+receiver)
+            player.Port = port;
+
+            var v3PlayerInfo = v3PlayerInfos.FirstOrDefault(v3p => v3p.Name == player.Name);
+            if (v3PlayerInfo != null)
+            {
+                v3PlayerInfo.Id = id;
+                v3PlayerInfo.PlayerIndex = playerIndex;
+
+                SetPlayerTunnelInfo(v3PlayerInfo);
+                v3PlayerInfo.PlayerGameId = (ushort)port;
+            }
+
+            string tunnelAddress = v3PlayerInfo?.IpAddress + ":" + v3PlayerInfo?.Port;
+            return (id, player.Name, tunnelAddress);
+        }
+
+        private void SetPlayerTunnelInfo(V3PlayerInfo v3PlayerInfo)
+        {
+            if (string.IsNullOrEmpty(v3PlayerInfo.IpAddress) || v3PlayerInfo.IpAddress == IPAddress.Any.ToString())
+            {
+                if (!useDynamicTunnels)
+                {
+                    // for non-dynamic mode, all players use the host's tunnel
+                    v3PlayerInfo.IpAddress = tunnelHandler.CurrentTunnel?.Address ?? IPAddress.Any.ToString();
+                    v3PlayerInfo.Port = tunnelHandler.CurrentTunnel?.Port ?? 0;
+                }
+            }
+        }
+
         private uint GeneratePlayerID(string playerName)
         {
             //we need an ID for a player that all players can generate without communicating
-            //(same id generated by all players)
-
-            string input = $"{playerName}:{channel.ChannelName}";
+            //(same id generated by all players).
 
             using (var sha1 = System.Security.Cryptography.SHA1.Create())
             {
-                byte[] hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(input));
+                byte[] hash = sha1.ComputeHash(Encoding.UTF8.GetBytes($"{playerName}:{channel.ChannelName}"));
                 return BitConverter.ToUInt32(hash, 0);
             }
         }
 
         private void RegenerateV3PlayerInfos()
         {
-            v3PlayerInfos.Clear();
+            // Remove players who are no longer in the game
+            v3PlayerInfos.RemoveAll(v3p => !Players.Any(p => p.Name == v3p.Name));
 
+            // Add missing players
             for (int i = 0; i < Players.Count; i++)
             {
                 var player = Players[i];
-                var v3PlayerInfo = new V3PlayerInfo(
-                    GeneratePlayerID(player.Name), //id will be generated later during game start
-                    player.Name,
-                    IPAddress.Any.ToString(), //empty tunnel address - will be set by host or during tunnel negotiation depending on useDynamicTunnels
-                    0,  //empty tunnel port - will be set by host or during tunnel negotiation depending on useDynamicTunnels
-                    i,  //player index
-                    0   //PlayerGameId will be set at game start
-                );
-                v3PlayerInfos.Add(v3PlayerInfo);
+                var v3Player = v3PlayerInfos.FirstOrDefault(v3p => v3p.Name == player.Name);
+                if (v3Player == null)
+                {
+                    v3PlayerInfos.Add(new V3PlayerInfo(
+                        GeneratePlayerID(player.Name),
+                        player.Name,
+                        IPAddress.Any.ToString(),
+                        0,
+                        i,
+                        0 // PlayerGameId will be set at game start
+                    ));
+                }
+                else
+                    v3Player.PlayerIndex = i;
             }
+        }
+
+        private bool AreAllNegotiationsComplete()
+        {
+            if (!useDynamicTunnels)
+                return true;
+
+            for (int i = 0; i < Players.Count; i++)
+            {
+                for (int j = i + 1; j < Players.Count; j++)
+                {
+                    var status = GetNegotiationStatus(Players[i].Name, Players[j].Name);
+                    if (status == NegotiationStatus.NotStarted || status == NegotiationStatus.InProgress)
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        private List<(string, string, NegotiationStatus)> GetIncompleteNegotiations()
+        {
+            var incomplete = new List<(string, string, NegotiationStatus)>();
+
+            for (int i = 0; i < Players.Count; i++)
+            {
+                for (int j = i + 1; j < Players.Count; j++)
+                {
+                    var status = GetNegotiationStatus(Players[i].Name, Players[j].Name);
+                    if (status == NegotiationStatus.NotStarted || status == NegotiationStatus.InProgress)
+                        incomplete.Add((Players[i].Name, Players[j].Name, status));
+                }
+            }
+
+            return incomplete;
         }
 
         protected override void RequestPlayerOptions(int side, int color, int start, int team)
@@ -1147,42 +1403,194 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             RegenerateV3PlayerInfos();
 
             CopyPlayerDataToUI();
+
+            //when you join a lobby, you get existing player information here.
+            //start negotiating with players that we haven't already negotiated with or in the middle of negotiating
+            if (useDynamicTunnels && Players.Count > 1)
+                foreach (var v3Player in v3PlayerInfos.Where(p => p.Name != ProgramConstants.PLAYERNAME && p.HasNegotiated == false && p.IsNegotiating == false))
+                    StartTunnelNegotiationForPlayer(v3Player);
         }
 
-        protected override void HandleDynamicTunnelsCommand(string value)
+        private void HandleTunnelModeCommand(string args)
         {
-            if (tunnelHandler.CurrentTunnel?.Version != 3)
+            if (!IsHost)
             {
-                AddNotice("Dynamic tunnels are only supported with V3 tunnel servers.".L10N("Client:Main:DynamicTunnelsV3Only"));
+                AddNotice("Only the game host can change tunnel settings.", Color.Yellow);
                 return;
             }
 
-            bool newValue = Conversions.BooleanFromString(value, useDynamicTunnels);
+            int currentMode = useDynamicTunnels ? TUNNEL_MODE_V3_DYNAMIC :
+                             (useLegacyTunnels ? TUNNEL_MODE_V2_LEGACY : TUNNEL_MODE_V3_STATIC);
 
-            if (newValue != useDynamicTunnels)
+            int newMode;
+            if (string.IsNullOrWhiteSpace(args))
             {
-                useDynamicTunnels = newValue;
-
-                if (useDynamicTunnels)
+                // Cycle through modes
+                newMode = (currentMode + 1) % 3;
+            }
+            else
+            {
+                newMode = Conversions.IntFromString(args, currentMode);
+                if (newMode < 0 || newMode > 2)
                 {
-                    AddNotice("Dynamic tunnels have been enabled for this game.".L10N("Client:Main:DynamicTunnelsEnabled"));
-                    btnChangeTunnel.Enable();
+                    AddNotice("Invalid tunnel mode. Use 0 (V3 static), 1 (V3 dynamic), or 2 (V2 legacy).", Color.Yellow);
+                    return;
                 }
-                else
-                {
-                    AddNotice("Dynamic tunnels have been disabled for this game.".L10N("Client:Main:DynamicTunnelsDisabled"));
-                    btnChangeTunnel.Disable();
-                    AutoSelectBestTunnel();
-                }
-
-                if (IsHost && !useDynamicTunnels) 
-                    btnChangeTunnel.Enable();
-                else 
-                    btnChangeTunnel.Disable();
             }
 
+            HandleTunnelModeChange(newMode, true);
             OnGameOptionChanged();
             ClearReadyStatuses();
+        }
+
+        private void HandleNegotiationStatusMessage(string sender, string message)
+        {
+            //NEGSTAT targetPlayer;status
+            string[] parts = message.Split(';');
+            if (parts.Length != 2)
+                return;
+
+            string targetPlayer = parts[0];
+            if (!Enum.TryParse<NegotiationStatus>(parts[1], out var status))
+                return;
+
+            var senderStatuses = negotiationStatuses.GetOrAdd(sender,
+                _ => new ConcurrentDictionary<string, NegotiationStatus>());
+
+            senderStatuses[targetPlayer] = status;
+
+            UpdateNegotiationUI();
+            CheckAllNegotiationsComplete();
+        }
+
+        private void HandleNegotiationPingInfoMessage(string sender, string message)
+        {
+            //NEGPING targetPlayer;ping
+            string[] parts = message.Split(';');
+            if (parts.Length != 2)
+                return;
+
+            string targetPlayer = parts[0];
+            if (!int.TryParse(parts[1], out int ping))
+                return;
+
+            var senderPings = playerPingMatrix.GetOrAdd(sender,
+                _ => new ConcurrentDictionary<string, int>());
+
+            senderPings[targetPlayer] = ping;
+
+            UpdateNegotiationUI();
+        }
+
+        private void HandleNegotiationFailedMessage(string sender, string message)
+        {
+            //NEGFAIL targetPlayer
+            AddNotice($"Tunnel negotiation between {sender} and {message} failed", Color.Yellow);
+
+            var senderStatuses = negotiationStatuses.GetOrAdd(sender,
+                _ => new ConcurrentDictionary<string, NegotiationStatus>());
+            var targetStatuses = negotiationStatuses.GetOrAdd(message,
+                _ => new ConcurrentDictionary<string, NegotiationStatus>());
+
+            // Update both directions
+            senderStatuses[message] = NegotiationStatus.Failed;
+            targetStatuses[sender] = NegotiationStatus.Failed;
+
+            UpdateNegotiationUI();
+            CheckAllNegotiationsComplete();
+        }
+
+        private void BroadcastNegotiationStatus(string targetPlayer, NegotiationStatus status)
+        {
+            channel.SendCTCPMessage($"{NEGOTIATION_STATUS_MESSAGE} {targetPlayer};{status}",
+                QueuedMessageType.SYSTEM_MESSAGE, 10);
+        }
+
+        private void BroadcastNegotiationPingInfo(string targetPlayer, double ping)
+        {
+            channel.SendCTCPMessage($"{NEGOTIATION_PING_INFO_MESSAGE} {targetPlayer};{(int)Math.Round(ping)}",
+                QueuedMessageType.SYSTEM_MESSAGE, 10);
+        }
+
+        private void BroadcastNegotiationFailed(string targetPlayer)
+        {
+            channel.SendCTCPMessage($"{NEGOTIATION_FAILED_MESSAGE} {targetPlayer}",
+                QueuedMessageType.SYSTEM_MESSAGE, 10);
+        }
+
+        private void CheckAllNegotiationsComplete()
+        {
+            if (!IsHost || !useDynamicTunnels)
+                return;
+
+            bool allComplete = true;
+            int totalNegotiations = 0;
+            int completedNegotiations = 0;
+            int failedNegotiations = 0;
+
+            for (int i = 0; i < Players.Count; i++)
+            {
+                for (int j = i + 1; j < Players.Count; j++)
+                {
+                    var player1 = Players[i].Name;
+                    var player2 = Players[j].Name;
+
+                    totalNegotiations++;
+
+                    var status = GetNegotiationStatus(player1, player2);
+                    if (status == NegotiationStatus.Succeeded)
+                        completedNegotiations++;
+                    else if (status == NegotiationStatus.Failed)
+                        failedNegotiations++;
+                    else if (status == NegotiationStatus.InProgress || status == NegotiationStatus.NotStarted)
+                        allComplete = false;
+                }
+            }
+
+            if (allComplete)
+            {
+                if (failedNegotiations > 0)
+                    AddNotice($"All tunnel negotiations complete. {completedNegotiations} succeeded, {failedNegotiations} failed.",
+                        failedNegotiations > 0 ? Color.Yellow : Color.LightGreen);
+                else
+                    AddNotice($"All tunnel negotiations successfully completed!", Color.LightGreen);
+
+                CheckHighPingPairs();
+            }
+
+            UpdateLaunchGameButtonStatus();
+        }
+
+        private NegotiationStatus GetNegotiationStatus(string player1, string player2)
+        {
+            //either player could be the reporter
+            if (negotiationStatuses.TryGetValue(player1, out var player1Statuses) &&
+                player1Statuses.TryGetValue(player2, out var status))
+                return status;
+
+            if (negotiationStatuses.TryGetValue(player2, out var player2Statuses) &&
+                player2Statuses.TryGetValue(player1, out status))
+                return status;
+
+            return NegotiationStatus.NotStarted;
+        }
+
+        private void CheckHighPingPairs()
+        {
+            const int HIGH_PING_THRESHOLD = 350; //ms
+            var highPingPairs = new List<(string, string, int)>();
+
+            foreach (var player1 in playerPingMatrix.Keys)
+                foreach (var kvp in playerPingMatrix[player1])
+                    if (kvp.Value > HIGH_PING_THRESHOLD)
+                        highPingPairs.Add((player1, kvp.Key, kvp.Value));
+
+            if (highPingPairs.Count > 0)
+            {
+                AddNotice("Warning: The following player pairs have high ping:", Color.Yellow);
+                foreach (var (p1, p2, ping) in highPingPairs)
+                    AddNotice($"  {p1} <-> {p2}: {ping}ms", Color.Yellow);
+            }
         }
 
         /// <summary>
@@ -1230,10 +1638,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             sb.Append(RandomSeed);
             sb.Append(Convert.ToInt32(RemoveStartingLocations));
             sb.Append(Map?.UntranslatedName ?? string.Empty);
-            if (tunnelHandler.CurrentTunnel?.Version == 3)
-                sb.Append(Convert.ToInt32(useDynamicTunnels));
-            else
-                sb.Append(Convert.ToInt32(false));
+            int tunnelMode = useDynamicTunnels ? TUNNEL_MODE_V3_DYNAMIC :
+                             (useLegacyTunnels ? TUNNEL_MODE_V2_LEGACY : TUNNEL_MODE_V3_STATIC);
+            sb.Append(tunnelMode);
 
             channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.GAME_SETTINGS_MESSAGE, 11);
         }
@@ -1412,26 +1819,78 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (parts.Length > partIndex + 9)
             {
-                bool newUseDynamicTunnels = Convert.ToInt32(parts[partIndex + 9]) != 0;
+                int tunnelMode = Conversions.IntFromString(parts[partIndex + 9], TUNNEL_MODE_V3_STATIC);
+                HandleTunnelModeChange(tunnelMode, false);
+            }
+        }
 
-                if (newUseDynamicTunnels != useDynamicTunnels)
-                {
-                    useDynamicTunnels = newUseDynamicTunnels;
+        private void HandleTunnelModeChange(int tunnelMode, bool isHostInitiated)
+        {
+            bool newUseDynamic = tunnelMode == TUNNEL_MODE_V3_DYNAMIC;
+            bool newUseLegacy = tunnelMode == TUNNEL_MODE_V2_LEGACY;
 
-                    AddNotice(useDynamicTunnels
-                        ? "The game host has enabled dynamic tunnels.".L10N("Client:Main:HostEnabledDynamicTunnels")
-                        : "The game host has disabled dynamic tunnels.".L10N("Client:Main:HostDisabledDynamicTunnels"));
+            if (newUseDynamic == useDynamicTunnels && newUseLegacy == useLegacyTunnels)
+                return;
 
-                    if (useDynamicTunnels)
+            if (tunnelNegotiationManager != null && !newUseDynamic)
+            {
+                tunnelNegotiationManager.Dispose();
+                tunnelNegotiationManager = null;
+            }
+
+            useDynamicTunnels = newUseDynamic;
+            useLegacyTunnels = newUseLegacy;
+
+            string modeDescription = tunnelMode switch
+            {
+                TUNNEL_MODE_V3_DYNAMIC => "dynamic tunnels (V3)",
+                TUNNEL_MODE_V2_LEGACY => "legacy tunnels (V2)",
+                _ => "static tunnels (V3)"
+            };
+
+            AddNotice(isHostInitiated
+                ? $"Tunnel mode changed to {modeDescription}."
+                : $"The game host has changed tunnel mode to {modeDescription}.");
+
+            switch (tunnelMode)
+            {
+                case TUNNEL_MODE_V3_DYNAMIC:
+                    btnChangeTunnel.Disable();
+                    InitializeTunnelNegotiationManager();
+
+                    foreach (var v3Player in v3PlayerInfos)
                     {
-                        AutoSelectBestTunnel();
+                        v3Player.IpAddress = IPAddress.Any.ToString();
+                        v3Player.Port = 0;
+                        v3Player.HasNegotiated = false;
+                        v3Player.IsNegotiating = false;
+                    }
+
+                    if (Players.Count > 1)
+                    {
+                        foreach (var v3Player in v3PlayerInfos.Where(p => p.Name != ProgramConstants.PLAYERNAME))
+                            StartTunnelNegotiationForPlayer(v3Player);
+                    }
+                    break;
+
+                case TUNNEL_MODE_V2_LEGACY:
+                case TUNNEL_MODE_V3_STATIC:
+                    if (IsHost)
+                    {
                         btnChangeTunnel.Enable();
+                        AutoSelectBestTunnel();
                     }
                     else
-                    { //host will send another message with the tunnel to use
                         btnChangeTunnel.Disable();
-                    }
-                }
+                    break;
+            }
+
+            if (!newUseDynamic)
+            {
+                negotiationStatuses.Clear();
+                playerPingMatrix.Clear();
+                negotiationStatusPanel.Disable();
+                showNegotiationStatusPanel = false;
             }
         }
 
@@ -1487,9 +1946,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             ResetGameState();
         }
 
-        protected void ResetGameState() 
+        protected void ResetGameState()
         {
             base.GameProcessExited();
+
+            v3Bridge?.Stop();
+            v3Bridge = null;
 
             channel.SendCTCPMessage("RETURN", QueuedMessageType.SYSTEM_MESSAGE, 20);
             ReturnNotification(ProgramConstants.PLAYERNAME);
@@ -1608,23 +2070,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 recentPlayers.Add(pName);
 
                 V3PlayerInfo v3PlayerInfo = v3PlayerInfos.Find(p => p.Name == pName);
-                if (!useDynamicTunnels)
+                if (v3PlayerInfo != null)
                 {
-                    v3PlayerInfo.IpAddress = ipAndPort[0];
-                    v3PlayerInfo.Port = port;
+                    if (!useDynamicTunnels)
+                    {
+                        v3PlayerInfo.IpAddress = ipAndPort[0];
+                        v3PlayerInfo.Port = port;
+                    }
+                    v3PlayerInfo.PlayerIndex = pInfo.Index;
                     v3PlayerInfo.PlayerGameId = (ushort)pInfo.Port;
-
-                    //v3PlayerInfo.
-                    //var v3PlayerInfo = new V3PlayerInfo(
-                    //    id,
-                    //    pName,
-                    //    ipAndPort[0],
-                    //    port,
-                    //    pInfo.Index,
-                    //    (ushort)pInfo.Port
-                    //);
-
-                    v3PlayerInfos.Add(v3PlayerInfo);
+                    v3PlayerInfo.Id = id;
                 }
             }
 
@@ -1647,10 +2102,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
 
             StopInactiveCheck();
+
             channel.SendCTCPMessage("STRTD", QueuedMessageType.SYSTEM_MESSAGE, 20);
 
             // if it's version 3, we need to start the bridge between game+tunnel
-            if (tunnelHandler.CurrentTunnel.Version == 3)
+            if (useDynamicTunnels || tunnelHandler.CurrentTunnel.Version == 3)
             {
                 PlayerInfo localPlayer = FindLocalPlayer();
                 if (localPlayer == null)
@@ -1666,9 +2122,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     return;
                 }
 
-                Logger.Log($"Starting V3 tunnel bridge for player {localV3Player.Name} (ID: {localV3Player.Id} Port: {localV3Player.Port})");
+                Logger.Log($"Starting V3 tunnel bridge.");
 
-                v3Bridge = new V3TunnelBridge(
+                v3Bridge = new V3GameTunnelBridge(
                     localId: localV3Player.Id,
                     localPort: localV3Player.PlayerGameId,
                     allPlayers: v3PlayerInfos,
@@ -1690,10 +2146,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (localPlayer == null)
                 return;
 
-            if (tunnelHandler.CurrentTunnel.Version == 3)
+            if (useLegacyTunnels == false)
             {
-                // tell the game to connect to our local bridge
-                iniFile.SetStringValue("Tunnel", "Ip", System.Net.IPAddress.Loopback.ToString());
+                // tell the game to connect to our bridge
+                iniFile.SetStringValue("Tunnel", "Ip", IPAddress.Loopback.ToString());
                 iniFile.SetIntValue("Tunnel", "Port", localPlayer.Port);
             }
             else if (tunnelHandler.CurrentTunnel.Version == 2)
@@ -1996,34 +2452,23 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
         }
 
-        private void BroadcastMyTunnelSelection()
-        {
-            //if (!useDynamicTunnels || tunnelHandler.CurrentTunnel == null)
-            //    return;
-
-            channel.SendCTCPMessage($"{PLAYER_TUNNEL_MESSAGE} {tunnelHandler.CurrentTunnel.Address}:{tunnelHandler.CurrentTunnel.Port}",
-                QueuedMessageType.SYSTEM_MESSAGE, 10);
-        }
-
         private void AutoSelectBestTunnel()
         {
-            // Find tunnel with lowest ping
+            int targetVersion = useLegacyTunnels ? 2 : 3;
+
             var bestTunnel = tunnelHandler.Tunnels
-                .Where(t => t.PingInMs > 0 && (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended))
+                .Where(t => t.PingInMs > 0
+                    && (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended)
+                    && t.Version == targetVersion)
                 .OrderBy(t => t.PingInMs)
                 .FirstOrDefault();
 
             if (bestTunnel != null)
             {
-                tunnelHandler.CurrentTunnel = bestTunnel;
-                if (IsHost && !useDynamicTunnels)
-                {
-                    HostChangeTunnel();
-                    return;
-                }
                 AddNotice($"Auto-selected tunnel: {bestTunnel.Name} (Ping: {bestTunnel.PingInMs}ms)");
-                BroadcastMyTunnelSelection();
-                UpdatePing();
+                    channel.SendCTCPMessage($"{CHANGE_TUNNEL_SERVER_MESSAGE} {bestTunnel.Address}:{bestTunnel.Port}",
+                        QueuedMessageType.SYSTEM_MESSAGE, 10);
+                HandleTunnelServerChange(bestTunnel);
             }
         }
 
@@ -2036,12 +2481,42 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             tunnelHandler.CurrentTunnel = tunnel;
             AddNotice(string.Format("The game host has changed the tunnel server to: {0}".L10N("Client:Main:HostChangeTunnel"), tunnel.Name));
             UpdatePing();
+
+            if (useLegacyTunnels == false && useDynamicTunnels == false) 
+            {
+                foreach (var v3Player in v3PlayerInfos)
+                {
+                    v3Player.IpAddress = tunnel.Address;
+                    v3Player.Port = tunnel.Port;
+                }
+            }
         }
 
         protected override bool UpdateLaunchGameButtonStatus()
         {
-            btnLaunchGame.Enabled = base.UpdateLaunchGameButtonStatus() && !tunnelErrorMode;
-            return btnLaunchGame.Enabled;
+            bool baseStatus = base.UpdateLaunchGameButtonStatus();
+
+            if (!baseStatus)
+                return false;
+
+            // Ensure negotiations are complete
+            if (useDynamicTunnels && IsHost)
+            {
+                for (int i = 0; i < Players.Count; i++)
+                {
+                    for (int j = i + 1; j < Players.Count; j++)
+                    {
+                        var status = GetNegotiationStatus(Players[i].Name, Players[j].Name);
+                        if (status == NegotiationStatus.NotStarted || status == NegotiationStatus.InProgress)
+                        {
+                            btnLaunchGame.Enabled = false;
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return true;
         }
 
         #region CnCNet map sharing

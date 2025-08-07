@@ -174,8 +174,11 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             AddChild(tbPassword);
             AddChild(lblPassword);
             AddChild(btnDisplayAdvancedOptions);
-            AddChild(lblTunnelServer);
-            AddChild(lbTunnelList);
+            if (!UserINISettings.Instance.UseDynamicTunnels)
+            {
+                AddChild(lblTunnelServer);
+                AddChild(lbTunnelList);
+            }
             AddChild(btnCreateGame);
             if (!ClientConfiguration.Instance.DisableMultiplayerGameLoading)
                 AddChild(btnLoadMPGame);
@@ -251,15 +254,17 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return;
             }
 
-            if (!lbTunnelList.IsValidIndexSelected())
+            CnCNetTunnel selectedTunnel = null;
+            if (!UserINISettings.Instance.UseDynamicTunnels)
             {
-                return;
+                if (!lbTunnelList.IsValidIndexSelected())
+                    return;
+                selectedTunnel = lbTunnelList.GetSelectedTunnel();
             }
 
             GameCreated?.Invoke(this,
                 new GameCreationEventArgs(gameName, int.Parse(ddMaxPlayers.SelectedItem.Text),
-                tbPassword.Text, lbTunnelList.GetSelectedTunnel(),
-                ddSkillLevel.SelectedIndex)
+                    tbPassword.Text, selectedTunnel, ddSkillLevel.SelectedIndex)
             );
         }
 
@@ -280,7 +285,11 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             Height = btnCreateGame.Bottom + UIDesignConstants.CONTROL_VERTICAL_MARGIN + UIDesignConstants.EMPTY_SPACE_BOTTOM;
 
             lblTunnelServer.Enable();
-            lbTunnelList.Enable();
+            if(!UserINISettings.Instance.UseDynamicTunnels)
+                lbTunnelList.Enable();
+            else
+                lbTunnelList.Disable();
+
             btnDisplayAdvancedOptions.Disable();
 
             SetAttributesFromIni();
