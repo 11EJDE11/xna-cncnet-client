@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using ClientCore;
+using Rampastring.Tools;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
@@ -119,7 +120,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 Debug.Print($"Negotiation failed with {_remotePlayer.Name}: {ex.Message}");
                 PrintNegotiationResults();
-                await NotifyNegotiationFailure();
+                NotifyNegotiationFailure();
                 _negotiationCompletionSource.TrySetResult(false);
                 NegotiationFailed?.Invoke(this, ex.Message);
                 NegotiationComplete?.Invoke(this, EventArgs.Empty);
@@ -128,18 +129,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         //todo: should really be ctcp, not communicated over tunnels
-        private async Task NotifyNegotiationFailure()
+        private void NotifyNegotiationFailure()
         {
             try
             {
                 // Send a failure packet to all tunnels to ensure the other side gets it
                 var failurePacket = CreateNegotiationPacket(NegotiationPacketType.NegotiationFailed, Array.Empty<byte>());
 
-                var tasks = _tunnels.Select(tunnel =>
-                    _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, failurePacket)
-                ).ToArray();
+                foreach (var tunnel in _tunnels)
+                    _tunnelHandler.SendPacket(tunnel, failurePacket);
 
-                await Task.WhenAll(tasks);
                 Debug.Print($"Sent negotiation failure notification to {_remotePlayer.Name}");
             }
             catch (Exception ex)
@@ -167,10 +166,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 try
                 {
                     await result.ConnectedTcs.Task.WaitAsync(DECIDER_CONNECTED_PHASE_TIMEOUT);
-                    Debug.Print($"[CONNECTED OK] {tunnel}");
+                    //Debug.Print($"[CONNECTED OK] {tunnel}");
 
                     await result.PingsCompletedTcs.Task.WaitAsync(DECIDER_PING_PHASE_TIMEOUT);
-                    Debug.Print($"[PING DONE] {tunnel} finished");
+                    //Debug.Print($"[PING DONE] {tunnel} finished");
 
                     // Check for early selection after this tunnel completes
                     lock (earlySelectionLock)
@@ -228,7 +227,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             else
             {
                 Debug.Print("[FAILURE] No tunnels had any ping responses");
-                await NotifyNegotiationFailure();
+                NotifyNegotiationFailure();
                 throw new Exception("No viable tunnel");
             }
         }
@@ -275,8 +274,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         continue;
 
                     var packet = CreateNegotiationPacket(NegotiationPacketType.Connected, Array.Empty<byte>());
-                    Debug.Print($"Sending Connected packet to player {_remotePlayer.Name} ({_remotePlayer.Id}) via {tunnel.Name}");
-                    await _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, packet);
+                    //Debug.Print($"Sending Connected packet to player {_remotePlayer.Name} ({_remotePlayer.Id}) via {tunnel.Name}");
+                    _tunnelHandler.SendPacket(tunnel, packet);
 
                     if (!result.FirstConnectedSentTime.HasValue)
                         result.FirstConnectedSentTime = DateTime.UtcNow;
@@ -296,9 +295,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 result.PingResults.Add(ping);
 
                 var packet = CreateNegotiationPacket(NegotiationPacketType.PingRequest, BitConverter.GetBytes(i));
-                await _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, packet);
+                _tunnelHandler.SendPacket(tunnel, packet);
 
-                Debug.Print($"[PING REQUEST] ID {i} sent to {_remotePlayer.Name} on {tunnel.Name}");
+                //Debug.Print($"[PING REQUEST] ID {i} sent to {_remotePlayer.Name} on {tunnel.Name}");
 
                 // Wait for a ping response or timeout
                 try
@@ -308,8 +307,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                     if (completedTask == timeoutTask)
                         Debug.Print($"[PING TIMEOUT] ID {i} to {_remotePlayer.Name} on {tunnel.Name}");
-                    else
-                        Debug.Print($"[PING RESPONSE] ID {i} received from {_remotePlayer.Name} on {tunnel.Name}");
+                    //else
+                        //Debug.Print($"[PING RESPONSE] ID {i} received from {_remotePlayer.Name} on {tunnel.Name}");
                 }
                 catch (OperationCanceledException)
                 {
@@ -322,7 +321,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         private void OnPacketReceived(uint senderId, uint receiverId, NegotiationPacketType packetType,
-            byte[] payload, DateTime receivedTime, CnCNetTunnel tunnel)
+            byte[] payload, long receivedTime, CnCNetTunnel tunnel)
         {
             var result = _remotePlayer.GetTunnelResult(tunnel);
             if (result == null)
@@ -334,7 +333,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     //if we receive a connected packet, move on to the pinging phase.
                     if (_isDecider && !result.ConnectedReceived)
                     {
-                        Debug.Print($"[CONNECTED] Received from {_remotePlayer.Name} on tunnel {tunnel.Name}");
+                        //Debug.Print($"[CONNECTED] Received from {_remotePlayer.Name} on tunnel {tunnel.Name}");
                         result.ConnectedReceived = true;
                         result.ConnectedTcs.TrySetResult(true);
                         _ = PerformPingsAsync(tunnel, result);
@@ -343,7 +342,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                 case NegotiationPacketType.PingRequest:
                     //if we receive a ping request, reply with a ping response that contains the ping ID.
-                    Debug.Print($"[PING REQUEST] From {_remotePlayer.Name} on tunnel {tunnel.Name}");
+                    //Debug.Print($"[PING REQUEST] From {_remotePlayer.Name} on tunnel {tunnel.Name}");
                     if (!_isDecider)
                     {
                         var tunnelResult = _remotePlayer.GetTunnelResult(tunnel);
@@ -351,7 +350,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                             tunnelResult.PingRequestReceived = true;
 
                         var response = CreateNegotiationPacket(NegotiationPacketType.PingResponse, payload);
-                        _ = _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, response);
+                        _tunnelHandler.SendPacket(tunnel, response);
                     }
                     break;
 
@@ -365,7 +364,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         {
                             ping.ReceivedTimeTicks = Stopwatch.GetTimestamp();
                             ping.CompletionSource.TrySetResult(true); //ping complete
-                            Debug.Print($"[PING RESPONSE] Received ID {id} from {_remotePlayer.Name} on tunnel {tunnel.Name}, RTT: {ping.RoundTripTime:F1}ms");
+                            //Debug.Print($"[PING RESPONSE] Received ID {id} from {_remotePlayer.Name} on tunnel {tunnel.Name}, RTT: {ping.RoundTripTime:F1}ms");
                         }
                     }
                     break;
@@ -385,7 +384,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                             // Send acknowledgment back to decider
                             var ackPacket = CreateNegotiationPacket(NegotiationPacketType.TunnelAck, payload);
-                            _ = _tunnelHandler.SendPacketAsync(chosenTunnel.Address, chosenTunnel.Port, ackPacket);
+                            _tunnelHandler.SendPacket(chosenTunnel, ackPacket);
                             Debug.Print($"[TUNNEL ACK] Sent acknowledgment to {_remotePlayer.Name} for tunnel {chosenTunnel.Name}");
 
                             TunnelChosen?.Invoke(this, chosenTunnel);
@@ -420,7 +419,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             for (int attempt = 0; attempt < TUNNEL_CHOICE_MAX_RETRIES; attempt++)
             {
                 //send the tunnel choice
-                await _tunnelHandler.SendPacketAsync(tunnel.Address, tunnel.Port, packet);
+                _tunnelHandler.SendPacket(tunnel, packet);
                 Debug.Print($"[TUNNEL CHOICE] Attempt {attempt + 1} sent to {_remotePlayer.Name} via {tunnel.Name}");
 
                 try
@@ -473,7 +472,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void PrintNegotiationResults()
         {
+            if (!_isDecider)
+            {
+                Debug.Print($"We are non decider. No tunnel is chosen.");
+                return;
+            }
+
             Debug.Print($"=== Negotiation Results for {_remotePlayer.Name} (ID: {_remotePlayer.Id}) ===");
+            Logger.Log($"=== Negotiation Results for {_remotePlayer.Name} (ID: {_remotePlayer.Id}) ===");
 
             foreach (var tunnel in _tunnels)
             {
@@ -484,6 +490,17 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                     Debug.Print($"Player: {_remotePlayer.Name} | Tunnel: {tunnel.Name} | " +
                                $"Avg RTT: {(result.AverageRtt >= 0 ? $"{result.AverageRtt:F1}ms" : "N/A")} | " +
+                               $"Real ping: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs:F1}ms" : "N/A")} | " +
+                               $"Real ping*2: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs * 2:F1}ms" : "N/A")} | " +
+                               $"Difference: {(tunnel.PingInMs >= 0 && result.AverageRtt > 0 ? $"{result.AverageRtt - (tunnel.PingInMs * 2):F1}ms" : "N/A")} | " +
+                               $"Packet Loss: {result.PacketLoss:F1}% | " +
+                               $"Pings: {successfulPings}/{result.PingResults.Count} | " +
+                               $"Connected: {result.ConnectedReceived}");
+                    Logger.Log($"Player: {_remotePlayer.Name} | Tunnel: {tunnel.Name} | " +
+                               $"Avg RTT: {(result.AverageRtt >= 0 ? $"{result.AverageRtt:F1}ms" : "N/A")} | " +
+                               $"Real ping: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs:F1}ms" : "N/A")} | " +
+                               $"Real ping*2: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs * 2:F1}ms" : "N/A")} | " +
+                               $"Difference: {(tunnel.PingInMs >= 0 && result.AverageRtt > 0 ? $"{result.AverageRtt- (tunnel.PingInMs * 2):F1}ms" : "N/A")} | " +
                                $"Packet Loss: {result.PacketLoss:F1}% | " +
                                $"Pings: {successfulPings}/{result.PingResults.Count} | " +
                                $"Connected: {result.ConnectedReceived}");
@@ -495,12 +512,18 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
                 Debug.Print($"BEST TUNNEL for {_remotePlayer.Name}: {bestTunnel.Name} " +
-                           $"(RTT: {bestResult.AverageRtt:F1}ms, Loss: {bestResult.PacketLoss:F1}%)");
+                            $"(RTT: {bestResult.AverageRtt:F1}ms, Loss: {bestResult.PacketLoss:F1}%)");
+                Logger.Log($"BEST TUNNEL for {_remotePlayer.Name}: {bestTunnel.Name} " +
+                            $"(RTT: {bestResult.AverageRtt:F1}ms, Loss: {bestResult.PacketLoss:F1}%)");
             }
             else
+            {
                 Debug.Print($"NO VIABLE TUNNEL found for {_remotePlayer.Name}");
+                Logger.Log($"NO VIABLE TUNNEL found for {_remotePlayer.Name}");
+            }
 
             Debug.Print($"=== End Results for {_remotePlayer.Name} ===");
+            Logger.Log($"=== End Results for {_remotePlayer.Name} ===");
         }
 
         public void Dispose()
@@ -576,26 +599,20 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 _negotiators[player.Id] = negotiator;
             }
 
-            var negotiationThread = new Thread(() => NegotiationWorker(negotiator, player))
-            {
-                Name = $"TunnelNegotiation-{player.Name}",
-                IsBackground = true
-            };
-            negotiationThread.Start();
+            var negotiationTask = Task.Run(() => NegotiationWorkerAsync(negotiator, player), CancellationToken.None);
 
             return true;
         }
-
-        private void NegotiationWorker(V3PlayerNegotiator negotiator, V3PlayerInfo player)
+        private async Task NegotiationWorkerAsync(V3PlayerNegotiator negotiator, V3PlayerInfo player)
         {
-            Debug.Print($"Negotiation thread started for {player.Name}");
-
+            Debug.Print($"Negotiation task started for {player.Name}");
             try
             {
-                bool success = negotiator.NegotiateAsync().GetAwaiter().GetResult();
+                bool success = await negotiator.NegotiateAsync().ConfigureAwait(false);
                 if (!success)
                 {
                     Debug.Print($"[NEGOTIATION FAILED] For player {player.Name}, cleaning up.");
+                    await Task.Yield(); // allow state to settle (optional)
                     StopNegotiation(player.Id);
                 }
             }
@@ -604,8 +621,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 Debug.Print($"[NEGOTIATION ERROR] For player {player.Name}: {ex.Message}");
                 StopNegotiation(player.Id);
             }
-
-            Debug.Print($"Negotiation thread finished for {player.Name}");
+            Debug.Print($"Negotiation task finished for {player.Name}");
         }
 
         public void StopNegotiation(uint playerId)

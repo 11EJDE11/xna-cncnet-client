@@ -18,13 +18,6 @@ using System.Threading.Tasks;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet
 {
-    public class IncomingPacket
-    {
-        public byte[] Data { get; set; }
-        public DateTime ReceivedTime { get; set; } //log this for accurate pings as the packets will enter a queue
-        public CnCNetTunnel Tunnel { get; set; }
-    }
-
     public ref struct ParsedPacket
     {
         public uint SenderId { get; init; }
@@ -63,38 +56,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         private static readonly byte[] MAGIC_BYTES = { 0x45, 0x4A, 0x45, 0x4A, 0x45, 0x4A }; //EJEJEJ
 
-        private const int PACKET_QUEUE_CAPACITY = 1000;
-        private const int PACKET_PROCESSOR_COUNT = 4;
-        private readonly BlockingCollection<IncomingPacket> _packetQueue;
-        private readonly Task[] _packetProcessorTasks;
-        private readonly CancellationTokenSource _processingCts = new CancellationTokenSource();
-
-        public class TunnelConnection
-        {
-            public CnCNetTunnel Tunnel { get; set; }
-            public UdpClient Client { get; set; }
-            public CancellationTokenSource ReceiveCts { get; set; }
-            public bool IsActive { get; set; } = true;
-            public DateTime LastRegistration { get; set; }
-            public Task ReceiveTask { get; set; }
-        }
-
         public TunnelHandler(WindowManager wm, CnCNetManager connectionManager) : base(wm.Game)
         {
             this.wm = wm;
             this.connectionManager = connectionManager;
-
-            _packetQueue = new BlockingCollection<IncomingPacket>(new ConcurrentQueue<IncomingPacket>(), PACKET_QUEUE_CAPACITY);
-
-            _packetProcessorTasks = new Task[PACKET_PROCESSOR_COUNT];
-            for (int i = 0; i < PACKET_PROCESSOR_COUNT; i++)
-            {
-                _packetProcessorTasks[i] = Task.Factory.StartNew(
-                () => ProcessPacketsWorker(_processingCts.Token),
-                _processingCts.Token,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default);
-            }
 
             wm.Game.Components.Add(this);
 
@@ -124,13 +89,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         //we'll connect to V3 tunnels in the TunneHandler so both the negotiator and bridge
         //can use the same endpoint and not get tripped up by the tunnel's mapping
-        private readonly ConcurrentDictionary<string, TunnelConnection> _v3Connections = new ConcurrentDictionary<string, TunnelConnection>();
         private readonly CancellationTokenSource _globalCts = new CancellationTokenSource();
         private bool _v3CommunicatorInitialized = false;
-        
+
         //when packets come in, we'll parse it and dish out the details to the appropriate negotiator.
         public delegate void PacketHandler(uint senderId, uint receiverId,
-                NegotiationPacketType packetType, byte[] payload, DateTime receivedTime, CnCNetTunnel tunnel);
+                NegotiationPacketType packetType, byte[] payload, long receivedTime, CnCNetTunnel tunnel);
 
         private readonly ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler> _negotiationHandlers
                 = new ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler>();
@@ -170,19 +134,44 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             });
         }
 
-        private void HandleRefreshedTunnels(List<CnCNetTunnel> tunnels)
+        private void HandleRefreshedTunnels(List<CnCNetTunnel> newTunnels)
         {
-            if (tunnels.Count > 0)
-                Tunnels = tunnels;
+            if (newTunnels.Count == 0)
+            {
+                TunnelsRefreshed?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
+            var existingTunnels = Tunnels.ToDictionary(t => $"{t.Address}:{t.Port}");
+            var updatedTunnels = new List<CnCNetTunnel>();
+
+            foreach (var newTunnel in newTunnels)
+            {
+                string key = $"{newTunnel.Address}:{newTunnel.Port}";
+
+                if (existingTunnels.TryGetValue(key, out var existingTunnel))
+                {
+                    // Update
+                    existingTunnel.UpdateFrom(newTunnel);
+                    updatedTunnels.Add(existingTunnel);
+                }
+                else
+                {
+                    // Add
+                    updatedTunnels.Add(newTunnel);
+                }
+            }
+
+            // Remove
+            Tunnels = updatedTunnels;
 
             TunnelsRefreshed?.Invoke(this, EventArgs.Empty);
 
-            Task[] pingTasks = new Task[Tunnels.Count];
-
+            // Ping tunnels
             for (int i = 0; i < Tunnels.Count; i++)
             {
                 if (UserINISettings.Instance.PingUnofficialCnCNetTunnels || Tunnels[i].Official || Tunnels[i].Recommended)
-                    pingTasks[i] = PingListTunnelAsync(i);
+                    _ = PingListTunnelAsync(i);
             }
 
             if (CurrentTunnel != null)
@@ -190,24 +179,18 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 var updatedTunnel = Tunnels.Find(t => t.Address == CurrentTunnel.Address && t.Port == CurrentTunnel.Port);
                 if (updatedTunnel != null)
                 {
-                    // don't re-ping if the tunnel still exists in list, just update the tunnel instance and
-                    // fire the event handler (the tunnel was already pinged when traversing the tunnel list)
                     CurrentTunnel = updatedTunnel;
                     DoCurrentTunnelPinged();
                 }
                 else
                 {
-                    // tunnel is not in the list anymore so it's not updated with a list instance and pinged
+                    // Current tunnel no longer in list, ping it separately
                     PingCurrentTunnelAsync();
                 }
             }
 
-            // Refresh V3 connections when tunnel list updates
-            // (adds/removes tunnels, keeping same UDP deets)
             if (!_v3CommunicatorInitialized)
                 _ = InitializeV3CommunicatorAsync();
-            else
-                _ = RefreshV3ConnectionsAsync();
         }
 
         private Task PingListTunnelAsync(int index)
@@ -429,33 +412,21 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             Debug.Print($"Unregistered negotiation handler for {localId} <-> {remoteId}");
         }
 
-        public async Task SendPacketAsync(string address, int port, byte[] packet) => await SendPacketAsync(GetTunnelConnection($"{address}:{port}"), packet);
-
-        private async Task SendPacketAsync(CnCNetTunnel tunnel, byte[] packet) => await SendPacketAsync(GetTunnelConnection(GetTunnelKey(tunnel)), packet);
-
-        private async Task SendPacketAsync(TunnelConnection connection, byte[] packet)
+        public void SendPacket(CnCNetTunnel tunnel, byte[] packet)
         {
+            var connection = tunnel.V3Connection;
             if (connection?.IsActive != true)
-            {
-                Debug.Print($"[SEND ERROR] No active connection");
                 return;
-            }
 
             try
             {
-                await connection.Client.SendAsync(packet, packet.Length);
-                //Debug.Print($"[SEND] {GetPacketTypeForDebug(packet)} to {connection.Tunnel.Name} ({packet.Length} bytes)");
+                connection.Client.Send(packet, packet.Length);
             }
             catch (Exception ex)
             {
-                Debug.Print($"[SEND ERROR] {connection.Tunnel.Name}: {ex.Message}");
+                Debug.Print($"[SEND ERROR] {tunnel.Name}: {ex.Message}");
                 connection.IsActive = false;
             }
-        }
-
-        private TunnelConnection GetTunnelConnection(string key)
-        {
-            return _v3Connections.TryGetValue(key, out var conn) && conn.IsActive ? conn : null;
         }
 
         private async Task InitializeV3ConnectionsAsync(List<CnCNetTunnel> tunnels)
@@ -474,11 +445,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                         ReceiveCts = new CancellationTokenSource()
                     };
 
-                    var key = GetTunnelKey(tunnel);
-                    _v3Connections.AddOrUpdate(key, connection, (k, existingConnection) =>
-                    {
-                        return connection;
-                    });
+                    tunnel.V3Connection = connection;
 
                     connection.ReceiveTask = ReceivePacketsAsync(connection);
                     return connection;
@@ -491,51 +458,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             });
 
             await Task.WhenAll(tasks);
-            Debug.Print($"Initialized {_v3Connections.Count} V3 tunnel connections");
-        }
-
-        private async Task RefreshV3ConnectionsAsync()
-        {
-            if (!_v3CommunicatorInitialized)
-                return;
-
-            var v3Tunnels = Tunnels.Where(t => t.Version == 3 &&
-            (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended))
-            .ToList();
-
-            var currentKeys = v3Tunnels.Select(GetTunnelKey).ToHashSet();
-
-            var keysToRemove = _v3Connections.Keys.Where(key => !currentKeys.Contains(key)).ToList();
-
-            foreach (var key in keysToRemove)
-            {
-                if (_v3Connections.TryRemove(key, out var kvpValue))
-                {
-                    Debug.Print($"[V3] Closing connection to removed tunnel {kvpValue.Tunnel.Name}");
-                    kvpValue.ReceiveCts?.Cancel();
-                    kvpValue.Client?.Close();
-                }
-            }
-
-            // Update existing connections with refreshed tunnel info
-            //but keep the same UDP connection to preserve port mapping
-            foreach (var tunnel in v3Tunnels)
-            {
-                var key = GetTunnelKey(tunnel);
-                if (_v3Connections.TryGetValue(key, out var existingConnection))
-                {
-                    existingConnection.Tunnel = tunnel;
-                    Debug.Print($"[V3] Updated tunnel info for {tunnel.Name} (keep same UDP port)");
-                }
-            }
-
-            //add connections for new tunnels only
-            var newTunnels = v3Tunnels.Where(t => !_v3Connections.ContainsKey(GetTunnelKey(t))).ToList();
-            if (newTunnels.Count > 0)
-            {
-                Debug.Print($"[V3] Adding connections to {newTunnels.Count} new tunnels");
-                await InitializeV3ConnectionsAsync(newTunnels);
-            }
+            Debug.Print($"Initialized {tunnels.Count} V3 tunnel connections");
         }
 
         /// <summary>
@@ -548,9 +471,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             BitConverter.GetBytes(0u).CopyTo(packet, 4);
             packet[8] = 0xFF;
 
-            var connections = (tunnels ?? Enumerable.Empty<CnCNetTunnel>())
-                .Select(tunnel => _v3Connections.TryGetValue(GetTunnelKey(tunnel), out var conn) && conn.IsActive ? conn : null)
-                .Where(conn => conn != null)
+            var connections = (tunnels ?? Tunnels.Where(t => t.Version == 3))
+                .Where(t => t.V3Connection?.IsActive == true)
+                .Select(t => t.V3Connection)
                 .ToList();
 
             if (connections.Count == 0)
@@ -562,7 +485,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             var tasks = connections.Select(async c =>
             {
                 Debug.Print($"[REGISTRATION] Sending to {c.Tunnel.Name}");
-                await SendPacketAsync(c.Tunnel, packet);
+                SendPacket(c.Tunnel, packet);
                 c.LastRegistration = DateTime.UtcNow;
             });
 
@@ -570,58 +493,20 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             Debug.Print($"[REGISTRATION] Registration complete for ID {localId}");
         }
 
-        private void ProcessPacketsWorker(CancellationToken cancellationToken)
+        private void ProcessPacket(byte[] data, long receivedTime, CnCNetTunnel tunnel)
         {
             try
             {
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    IncomingPacket packet;
-                    try
-                    {
-                        packet = _packetQueue.Take(cancellationToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        break;
-                    }
+                var parsed = ParsePacket(data.AsSpan());
 
-                    try
-                    {
-                        ProcessPacket(packet);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.Print($"Error processing packet from {packet.Tunnel.Name}: {ex.Message}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.Print($"Packet processor worker failed: {ex.Message}");
-            }
-
-            Debug.Print("Packet processor worker stopped");
-        }
-
-        private void ProcessPacket(IncomingPacket packet)
-        {
-            try
-            {
-                var data = packet.Data.AsSpan();
-                var parsed = ParsePacket(data);
-
-                if (_negotiationHandlers.TryGetValue((parsed.ReceiverId, parsed.SenderId), out var handler))
+                if (parsed.NegotiationType.HasValue &&
+                    _negotiationHandlers.TryGetValue((parsed.ReceiverId, parsed.SenderId), out var handler))
                 {
                     try
                     {
                         byte[] payloadArray = parsed.Payload.ToArray();
                         handler(parsed.SenderId, parsed.ReceiverId, parsed.NegotiationType.Value,
-                        payloadArray, packet.ReceivedTime, packet.Tunnel);
+                                payloadArray, receivedTime, tunnel);
                     }
                     catch (Exception ex)
                     {
@@ -631,15 +516,18 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
             catch (Exception ex)
             {
-                Debug.Print($"Packet processing error: {ex.Message}");
+                Debug.Print($"Packet processing error from {tunnel.Name}: {ex.Message}");
             }
         }
 
         private ParsedPacket ParsePacket(ReadOnlySpan<byte> data)
         {
+            if (data.Length < 8)
+                return new ParsedPacket();
+
             uint senderId = BinaryPrimitives.ReadUInt32LittleEndian(data);
             uint receiverId = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4));
-            
+
             if (data.Length >= 8 + MAGIC_BYTES.Length + 1)
             {
                 var magicSpan = data.Slice(8, MAGIC_BYTES.Length);
@@ -659,68 +547,42 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 }
             }
 
-            return new ParsedPacket();
+            return new ParsedPacket
+            {
+                SenderId = senderId,
+                ReceiverId = receiverId,
+                NegotiationType = null,
+                Payload = ReadOnlySpan<byte>.Empty
+            };
         }
-
         private async Task ReceivePacketsAsync(TunnelConnection connection)
         {
-            Debug.Print($"[RECEIVE] Started listening on {connection.Tunnel.Name}");
-
-            while (!connection.ReceiveCts.Token.IsCancellationRequested &&
-            !_globalCts.Token.IsCancellationRequested &&
-            !_processingCts.Token.IsCancellationRequested &&
-            connection.IsActive)
+            try
             {
-                try
+                while (connection.IsActive)
                 {
-                    var result = await connection.Client.ReceiveAsync();
-                    //Debug.Print($"[RECEIVE] Got {result.Buffer.Length} bytes from {connection.Tunnel.Name}");
-
-                    var incomingPacket = new IncomingPacket
-                    {
-                        Data = result.Buffer,
-                        ReceivedTime = DateTime.UtcNow,
-                        Tunnel = connection.Tunnel
-                    };
-
-                    try
-                    {
-                        if (!_packetQueue.TryAdd(incomingPacket, 100, _processingCts.Token))
-                            Debug.Print($"[RECEIVE] Packet queue full, dropping packet from {connection.Tunnel.Name}");
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        Debug.Print($"[RECEIVE] Queue add cancelled for {connection.Tunnel.Name}");
-                        break;
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        Debug.Print($"[RECEIVE] Queue completed for {connection.Tunnel.Name}");
-                        break;
-                    }
-                }
-                catch (ObjectDisposedException)
-                {
-                    Debug.Print($"[RECEIVE] ObjectDisposed on {connection.Tunnel.Name}");
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    Debug.Print($"[RECEIVE ERROR] {connection.Tunnel.Name}: {ex.Message}");
-                    connection.IsActive = false;
-                    break;
+                    var result = await connection.Client.ReceiveAsync().ConfigureAwait(false);
+                    var receivedTime = Stopwatch.GetTimestamp();
+                    ProcessPacket(result.Buffer, receivedTime, connection.Tunnel);
                 }
             }
-
-            Debug.Print($"[RECEIVE] Stopped listening on {connection.Tunnel.Name}");
+            catch (ObjectDisposedException)
+            {
+                // Socket closed during shutdown
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"Receive error on {connection.Tunnel.Name}: {ex.Message}");
+            }
         }
 
         public TunnelConnection GetTunnelConnection(string address, int port)
         {
-            return _v3Connections.TryGetValue($"{address}:{port}", out var connection) ? connection : null;
-        }
+            var tunnel = Tunnels.FirstOrDefault(t =>
+                t.Address == address && t.Port == port && t.Version == 3);
 
-        private string GetTunnelKey(CnCNetTunnel tunnel) => $"{tunnel.Address}:{tunnel.Port}";
+            return tunnel?.V3Connection?.IsActive == true ? tunnel.V3Connection : null;
+        }
 
         public void Dispose()
         {
@@ -739,27 +601,28 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 DisposeV3Communicator();
             }
         }
+
         private void DisposeV3Communicator()
         {
             if (!_v3CommunicatorInitialized)
                 return;
 
-            _processingCts.Cancel();
+            _globalCts.Cancel();
 
-            _packetQueue.CompleteAdding();
-
-            try
+            foreach (var tunnel in Tunnels.Where(t => t.V3Connection != null))
             {
-                Task.WaitAll(_packetProcessorTasks, TimeSpan.FromSeconds(5));
-            }
-            catch (AggregateException ex)
-            {
-                Debug.Print($"Some packet processor tasks didn't complete cleanly: {ex.Message}");
+                tunnel.V3Connection.IsActive = false;
             }
 
-            var receiveTasks = _v3Connections.Values
-                .Where(c => c.ReceiveTask != null)
-                .Select(c => c.ReceiveTask)
+            // Cancel and close receive loops
+            var receiveTasks = Tunnels
+                .Where(t => t.V3Connection?.ReceiveTask != null)
+                .Select(t =>
+                {
+                    var conn = t.V3Connection;
+                    conn.ReceiveCts?.Cancel();
+                    return conn.ReceiveTask;
+                })
                 .ToArray();
 
             try
@@ -768,25 +631,22 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
             catch (AggregateException)
             {
-                // Some tasks didn't complete - they'll be abandoned
+                // Some tasks didn't complete - ignore
             }
-            _packetQueue.Dispose();
 
-            _globalCts.Cancel();
             _globalCts.Dispose();
-            _processingCts.Dispose();
 
-            foreach (var kvp in _v3Connections)
+            // Dispose sockets and CTS
+            foreach (var tunnel in Tunnels.Where(t => t.V3Connection != null))
             {
-                kvp.Value.ReceiveCts?.Cancel();
-                kvp.Value.ReceiveCts?.Dispose();
-                kvp.Value.Client?.Close();
-                kvp.Value.Client?.Dispose();
+                var conn = tunnel.V3Connection;
+                conn.ReceiveCts?.Dispose();
+                conn.Client?.Close();
+                conn.Client?.Dispose();
+                tunnel.V3Connection = null;
             }
-            _v3Connections.Clear();
 
             _negotiationHandlers.Clear();
-
             _v3CommunicatorInitialized = false;
             Debug.Print("V3 tunnel communicator disposed.");
         }
