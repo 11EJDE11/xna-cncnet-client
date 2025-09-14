@@ -154,67 +154,31 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             var totalTunnels = _remotePlayer.TunnelResults.Count;
             var completedTunnels = 0;
-            var earlySelectionTriggered = false;
-            var earlySelectionLock = new object();
-            var earlySelectionTcs = new TaskCompletionSource<bool>();
+            var selectionMade = false;
+            var completionLock = new object();
+            var selectionTcs = new TaskCompletionSource<bool>();
 
-            var allTunnelTasks = _remotePlayer.TunnelResults.Select(async kvp =>
+            foreach (var kvp in _remotePlayer.TunnelResults)
             {
                 var tunnel = kvp.Key;
                 var result = kvp.Value;
 
-                try
+                _ = ProcessTunnelAsync(tunnel, result, () =>
                 {
-                    await result.ConnectedTcs.Task.WaitAsync(DECIDER_CONNECTED_PHASE_TIMEOUT);
-                    //Debug.Print($"[CONNECTED OK] {tunnel}");
-
-                    await result.PingsCompletedTcs.Task.WaitAsync(DECIDER_PING_PHASE_TIMEOUT);
-                    //Debug.Print($"[PING DONE] {tunnel} finished");
-
-                    // Check for early selection after this tunnel completes
-                    lock (earlySelectionLock)
+                    lock (completionLock)
                     {
                         completedTunnels++;
-                        var completionPercentage = (double)completedTunnels / totalTunnels;
-
-                        if (!earlySelectionTriggered && completionPercentage >= 0.8)
+                        if (!selectionMade && (completedTunnels >= totalTunnels * 0.8 || completedTunnels == totalTunnels))
                         {
-                            earlySelectionTriggered = true;
-                            Debug.Print($"[EARLY SELECTION] {completedTunnels}/{totalTunnels} tunnels completed ({completionPercentage:P0}), selecting best tunnel");
-                            earlySelectionTcs.TrySetResult(true);
+                            selectionMade = true;
+                            selectionTcs.TrySetResult(true);
                         }
                     }
-                }
-                catch (TimeoutException)
-                {
-                    if (!result.ConnectedReceived)
-                        Debug.Print($"[SKIP] {tunnel} - no CONNECTED received in time");
-                    else
-                        Debug.Print($"[PING TIMEOUT] {tunnel.Name} didn't finish pinging");
+                });
+            }
 
-                    lock (earlySelectionLock)
-                    {
-                        completedTunnels++;
-                        var completionPercentage = (double)completedTunnels / totalTunnels;
-
-                        if (!earlySelectionTriggered && completionPercentage >= 0.8)
-                        {
-                            earlySelectionTriggered = true;
-                            Debug.Print($"[EARLY SELECTION] {completedTunnels}/{totalTunnels} tunnels completed ({completionPercentage:P0}), selecting best tunnel");
-                            earlySelectionTcs.TrySetResult(true);
-                        }
-                    }
-                }
-            }).ToList();
-
-            // Wait for either all tunnels to complete OR 80% completion
-            var allTunnelsTask = Task.WhenAll(allTunnelTasks);
-            var completedTask = await Task.WhenAny(allTunnelsTask, earlySelectionTcs.Task);
-
-            if (completedTask == earlySelectionTcs.Task)
-                Debug.Print($"[EARLY SELECTION] Triggered - proceeding with tunnel selection");
-            else
-                Debug.Print($"[FULL COMPLETION] All tunnel tasks completed normally");
+            // Wait for early selection or all completion
+            await selectionTcs.Task;
 
             var bestTunnel = _remotePlayer.SelectBestTunnel(_tunnels);
             if (bestTunnel != null)
@@ -229,6 +193,22 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 Debug.Print("[FAILURE] No tunnels had any ping responses");
                 NotifyNegotiationFailure();
                 throw new Exception("No viable tunnel");
+            }
+        }
+        private async Task ProcessTunnelAsync(CnCNetTunnel tunnel, TunnelTestResult result, Action onComplete)
+        {
+            try
+            {
+                await result.ConnectedTcs.Task.WaitAsync(DECIDER_CONNECTED_PHASE_TIMEOUT);
+                await result.PingsCompletedTcs.Task.WaitAsync(DECIDER_PING_PHASE_TIMEOUT);
+            }
+            catch (TimeoutException)
+            {
+                // Expected
+            }
+            finally
+            {
+                onComplete();
             }
         }
 
