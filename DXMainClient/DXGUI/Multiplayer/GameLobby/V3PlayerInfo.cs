@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using DTAClient.Domain.Multiplayer.CnCNet;
-using Rampastring.Tools;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
@@ -53,7 +52,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public bool PingRequestReceived { get; set; }
     }
 
-    //stores information about another player for use with V3 tunnels.
     public class V3PlayerInfo
     {
         public uint Id { get; set; }
@@ -65,8 +63,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public bool HasNegotiated { get; set; }
         public bool IsNegotiating { get; set; }
 
-        // per player and tunnel test results. Tunnels are recreated on each update, so don't store the object.
-        public Dictionary<string, TunnelTestResult> TunnelResults { get; } = new Dictionary<string, TunnelTestResult>();
+        public Dictionary<CnCNetTunnel, TunnelTestResult> TunnelResults { get; } = new Dictionary<CnCNetTunnel, TunnelTestResult>();
 
         public V3PlayerInfo(uint id, string name, string ipAddress, int port, int playerIndex, ushort playerGameID)
         {
@@ -85,34 +82,22 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             TunnelResults.Clear();
             foreach (var tunnel in tunnels)
             {
-                TunnelResults[$"{tunnel.Address}:{tunnel.Port}"] = new TunnelTestResult();
+                TunnelResults[tunnel] = new TunnelTestResult();
             }
         }
+
         public TunnelTestResult GetTunnelResult(CnCNetTunnel tunnel)
         {
-            return TunnelResults.TryGetValue($"{tunnel.Address}:{tunnel.Port}", out var result) ? result : null;
+            return TunnelResults.TryGetValue(tunnel, out var result) ? result : null;
         }
 
         public CnCNetTunnel SelectBestTunnel(List<CnCNetTunnel> availableTunnels)
         {
-            var bestKey = TunnelResults
+            return TunnelResults
                 .Where(kvp => kvp.Value.PingResults.Any(p => p.RoundTripTime.HasValue))
                 .OrderBy(kvp => kvp.Value.AverageRtt + kvp.Value.PacketLoss * 10)
                 .Select(kvp => kvp.Key)
                 .FirstOrDefault();
-
-            if (bestKey == null)
-                return null;
-
-            var parts = bestKey.Split(':');
-            if (parts.Length != 2)
-                return null;
-
-            string address = parts[0];
-            if (!int.TryParse(parts[1], out int port))
-                return null;
-
-            return availableTunnels.FirstOrDefault(t => t.Address == address && t.Port == port);
         }
 
         public double GetBestPing()
@@ -122,7 +107,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 .Select(kvp => kvp.Value.AverageRtt)
                 .DefaultIfEmpty(double.NaN)
                 .Min();
-
             return bestPing;
         }
 

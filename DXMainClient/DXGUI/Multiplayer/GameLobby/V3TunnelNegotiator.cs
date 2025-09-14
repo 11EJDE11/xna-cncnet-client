@@ -24,7 +24,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
     /// </summary>
     public class V3PlayerNegotiator : IDisposable
     {
-        private readonly uint _localId; //our V3PlayerInfo ID
+        private readonly V3PlayerInfo _localPlayer; //our V3PlayerInfo ID
         private readonly V3PlayerInfo _remotePlayer;
         private readonly List<CnCNetTunnel> _tunnels; //list of tunnels to test with
         private readonly TunnelHandler _tunnelHandler;
@@ -81,18 +81,18 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public event EventHandler NegotiationComplete;
         public event EventHandler<string> NegotiationFailed; //todo: merge with TunnelChosen
 
-        public V3PlayerNegotiator(uint localId, V3PlayerInfo remotePlayer, List<CnCNetTunnel> tunnels,
+        public V3PlayerNegotiator(V3PlayerInfo localPlayer, V3PlayerInfo remotePlayer, List<CnCNetTunnel> tunnels,
             TunnelHandler tunnelHandler)
         {
-            _localId = localId;
+            _localPlayer = localPlayer;
             _remotePlayer = remotePlayer;
             _tunnels = tunnels;
             _tunnelHandler = tunnelHandler;
-            _isDecider = localId < remotePlayer.Id;
+            _isDecider = localPlayer.Id < remotePlayer.Id;
 
             _remotePlayer.InitializeTunnelResults(tunnels);
 
-            _tunnelHandler.RegisterNegotiationHandler(_localId, _remotePlayer.Id, OnPacketReceived);
+            _tunnelHandler.RegisterNegotiationHandler(_localPlayer.Id, _remotePlayer.Id, OnPacketReceived);
         }
 
         public async Task<bool> NegotiateAsync()
@@ -104,7 +104,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 _negotiationCompletionSource = new TaskCompletionSource<bool>();
                 _tunnelAckReceived = new TaskCompletionSource<bool>();
 
-                await _tunnelHandler.SendRegistrationAsync(_localId, _tunnels);
+                await _tunnelHandler.SendRegistrationAsync(_localPlayer.Id, _tunnels);
 
                 if (_isDecider)
                     await PerformDeciderNegotiationAsync();
@@ -190,7 +190,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     if (!result.ConnectedReceived)
                         Debug.Print($"[SKIP] {tunnel} - no CONNECTED received in time");
                     else
-                        Debug.Print($"[PING TIMEOUT] {tunnel} didn't finish pinging");
+                        Debug.Print($"[PING TIMEOUT] {tunnel.Name} didn't finish pinging");
 
                     lock (earlySelectionLock)
                     {
@@ -455,7 +455,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             var packet = new byte[4 + 4 + MAGIC_DATA.Length + 1 + payload.Length];
             int offset = 0;
 
-            Array.Copy(BitConverter.GetBytes(_localId), 0, packet, offset, 4); //sender
+            Array.Copy(BitConverter.GetBytes(_localPlayer.Id), 0, packet, offset, 4); //sender
             offset += 4;
             Array.Copy(BitConverter.GetBytes(_remotePlayer.Id), 0, packet, offset, 4); //receiver
             offset += 4;
@@ -535,22 +535,22 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             _negotiationCompletionSource?.TrySetCanceled();
 
             if (_tunnelHandler != null)
-                _tunnelHandler.UnregisterNegotiationHandler(_localId, _remotePlayer.Id);
+                _tunnelHandler.UnregisterNegotiationHandler(_localPlayer.Id, _remotePlayer.Id);
         }
     }
 
     public class V3TunnelNegotiationManager : IDisposable
     {
-        private readonly uint _localId;
+        private readonly V3PlayerInfo _localPlayer;
         private readonly TunnelHandler _tunnelHandler;
         private readonly Dictionary<uint, V3PlayerNegotiator> _negotiators = new Dictionary<uint, V3PlayerNegotiator>(); //todo double check dict use
         private readonly object _lock = new object();
 
         public event EventHandler<TunnelChosenEventArgs> TunnelChosen;
 
-        public V3TunnelNegotiationManager(uint localId, TunnelHandler tunnelHandler)
+        public V3TunnelNegotiationManager(V3PlayerInfo localPlayer, TunnelHandler tunnelHandler)
         {
-            _localId = localId;
+            _localPlayer = localPlayer;
             _tunnelHandler = tunnelHandler;
         }
         
@@ -564,7 +564,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public async Task<bool> StartNegotiation(V3PlayerInfo player)
         {
-            if (player.Id == _localId)
+            if (player == _localPlayer)
                 return true;
 
             player.HasNegotiated = false;
@@ -588,7 +588,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return false;
             }
 
-            var negotiator = new V3PlayerNegotiator(_localId, player, availableTunnels, _tunnelHandler);
+            var negotiator = new V3PlayerNegotiator(_localPlayer, player, availableTunnels, _tunnelHandler);
 
             negotiator.TunnelChosen += OnTunnelChosenHandler;
             negotiator.NegotiationComplete += OnNegotiationCompleteHandler;
@@ -657,7 +657,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 PlayerId = player.Id,
                 PlayerName = player.Name,
                 ChosenTunnel = null,
-                IsLocalDecision = _localId < player.Id
+                IsLocalDecision = _localPlayer.Id < player.Id
             });
         }
 
@@ -675,7 +675,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 PlayerId = player.Id,
                 PlayerName = player.Name,
                 ChosenTunnel = tunnel,
-                IsLocalDecision = _localId < player.Id
+                IsLocalDecision = _localPlayer.Id < player.Id
             });
 
             StopNegotiation(player.Id);

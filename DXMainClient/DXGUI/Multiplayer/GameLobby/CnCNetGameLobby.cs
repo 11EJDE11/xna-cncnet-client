@@ -387,7 +387,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (localV3Player == null)
                 return;
 
-            tunnelNegotiationManager = new V3TunnelNegotiationManager(localV3Player.Id, tunnelHandler);
+            tunnelNegotiationManager = new V3TunnelNegotiationManager(localV3Player, tunnelHandler);
             tunnelNegotiationManager.TunnelChosen += TunnelNegotiationManager_TunnelChosen;
         }
 
