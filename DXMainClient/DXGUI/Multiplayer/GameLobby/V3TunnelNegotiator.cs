@@ -350,33 +350,27 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     break;
 
                 case NegotiationPacketType.TunnelChoice:
-                    //if we receive a tunnel choice, update our V3PlayerInfo with the details and
-                    //send back an acknowledgement
-                    if (!_isDecider && payload.Length >= 4)
+                    if (!_isDecider)
                     {
-                        int tunnelIndex = BitConverter.ToInt32(payload, 0);
-                        if (tunnelIndex >= 0 && tunnelIndex < _tunnels.Count)
-                        {
-                            var chosenTunnel = _tunnels[tunnelIndex];
-                            Debug.Print($"[TUNNEL CHOICE] {_remotePlayer.Name} chose {chosenTunnel.Name}");
-                            _remotePlayer.IpAddress = chosenTunnel.Address;
-                            _remotePlayer.Port = chosenTunnel.Port;
+                        // The chosen tunnel is the one this packet came through
+                        Debug.Print($"[TUNNEL CHOICE] {_remotePlayer.Name} chose {tunnel.Name}");
 
-                            // Send acknowledgment back to decider
-                            var ackPacket = CreateNegotiationPacket(NegotiationPacketType.TunnelAck, payload);
-                            _tunnelHandler.SendPacket(chosenTunnel, ackPacket);
-                            Debug.Print($"[TUNNEL ACK] Sent acknowledgment to {_remotePlayer.Name} for tunnel {chosenTunnel.Name}");
+                        _remotePlayer.IpAddress = tunnel.Address;
+                        _remotePlayer.Port = tunnel.Port;
 
-                            TunnelChosen?.Invoke(this, chosenTunnel);
-                            _negotiationCompletionSource.TrySetResult(true);
-                        }
+                        var ackPacket = CreateNegotiationPacket(NegotiationPacketType.TunnelAck, new byte[] { 0x01 });
+                        _tunnelHandler.SendPacket(tunnel, ackPacket);
+
+                        TunnelChosen?.Invoke(this, tunnel);
+                        _negotiationCompletionSource.TrySetResult(true);
                     }
+
                     break;
+
                 case NegotiationPacketType.TunnelAck:
-                    if (_isDecider && payload.Length >= 4)
+                    if (_isDecider)
                     {
-                        int tunnelIndex = BitConverter.ToInt32(payload, 0);
-                        Debug.Print($"[TUNNEL ACK] Received acknowledgment from {_remotePlayer.Name} for tunnel index {tunnelIndex}");
+                        Debug.Print($"[TUNNEL ACK] Received acknowledgment from {_remotePlayer.Name} for tunnel {tunnel.Name}");
                         _tunnelAckReceived.TrySetResult(true);
                     }
                     break;
@@ -392,7 +386,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private async Task SendTunnelChoiceAsync(CnCNetTunnel tunnel)
         {
             int tunnelIndex = _tunnels.IndexOf(tunnel);
-            var packet = CreateNegotiationPacket(NegotiationPacketType.TunnelChoice, BitConverter.GetBytes(tunnelIndex));
+            var packet = CreateNegotiationPacket(NegotiationPacketType.TunnelChoice, new byte[] { 0x01 });
 
             Debug.Print($"[TUNNEL CHOICE] Sending tunnel choice to {_remotePlayer.Name}: {tunnel.Name}");
 
