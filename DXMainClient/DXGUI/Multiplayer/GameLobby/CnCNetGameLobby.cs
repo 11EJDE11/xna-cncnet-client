@@ -845,7 +845,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             negotiationStatuses.TryRemove(playerName, out _);
             playerPingMatrix.TryRemove(playerName, out _);
 
-            // Remove this player from other players' statuses
             foreach (var status in negotiationStatuses.Values)
                 status.TryRemove(playerName, out _);
 
@@ -853,7 +852,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 pings.TryRemove(playerName, out _);
 
             UpdateNegotiationUI();
-            CheckAllNegotiationsComplete();
+
+            if (Players.Count > 1 && useDynamicTunnels)
+                CheckAllNegotiationsComplete();
         }
 
         private void Channel_ChannelModesChanged(object sender, ChannelModeEventArgs e)
@@ -1523,6 +1524,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (!IsHost || !useDynamicTunnels)
                 return;
 
+            if (Players.Count <= 1)
+                return;
+
+            bool anyNegotiationStarted = false;
             bool allComplete = true;
             int totalNegotiations = 0;
             int completedNegotiations = 0;
@@ -1538,6 +1543,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     totalNegotiations++;
 
                     var status = GetNegotiationStatus(player1, player2);
+
+                    if (status != NegotiationStatus.NotStarted)
+                        anyNegotiationStarted = true;
+
                     if (status == NegotiationStatus.Succeeded)
                         completedNegotiations++;
                     else if (status == NegotiationStatus.Failed)
@@ -1547,7 +1556,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
-            if (allComplete)
+            if (allComplete && anyNegotiationStarted && totalNegotiations > 0)
             {
                 if (failedNegotiations > 0)
                     AddNotice($"All tunnel negotiations complete. {completedNegotiations} succeeded, {failedNegotiations} failed.",
