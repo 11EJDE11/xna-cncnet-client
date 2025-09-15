@@ -89,7 +89,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         //we'll connect to V3 tunnels in the TunneHandler so both the negotiator and bridge
         //can use the same endpoint and not get tripped up by the tunnel's mapping
-        private readonly CancellationTokenSource _globalCts = new CancellationTokenSource();
         private bool _v3CommunicatorInitialized = false;
 
         //when packets come in, we'll parse it and dish out the details to the appropriate negotiator.
@@ -111,7 +110,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 wm.AddCallback(CurrentTunnelPinged, this, EventArgs.Empty);
         }
 
-        private void ConnectionManager_Connected(object sender, EventArgs e) => Enabled = true;
+        private void ConnectionManager_Connected(object sender, EventArgs e)
+        {
+            if (!_v3CommunicatorInitialized)
+                _ = InitializeV3CommunicatorAsync();
+            Enabled = true;
+        }
 
         private void ConnectionManager_ConnectionLost(object sender, Online.EventArguments.ConnectionLostEventArgs e)
         {
@@ -587,7 +591,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public void Dispose()
         {
             Dispose(true);
-            GC.SuppressFinalize(this);
         }
 
         protected virtual void Dispose(bool disposing)
@@ -607,47 +610,32 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             if (!_v3CommunicatorInitialized)
                 return;
 
-            _globalCts.Cancel();
+            _v3CommunicatorInitialized = false;
 
             foreach (var tunnel in Tunnels.Where(t => t.V3Connection != null))
             {
                 tunnel.V3Connection.IsActive = false;
             }
 
-            // Cancel and close receive loops
-            var receiveTasks = Tunnels
-                .Where(t => t.V3Connection?.ReceiveTask != null)
-                .Select(t =>
-                {
-                    var conn = t.V3Connection;
-                    conn.ReceiveCts?.Cancel();
-                    return conn.ReceiveTask;
-                })
-                .ToArray();
-
-            try
-            {
-                Task.WaitAll(receiveTasks, TimeSpan.FromSeconds(2));
-            }
-            catch (AggregateException)
-            {
-                // Some tasks didn't complete - ignore
-            }
-
-            _globalCts.Dispose();
-
-            // Dispose sockets and CTS
             foreach (var tunnel in Tunnels.Where(t => t.V3Connection != null))
             {
                 var conn = tunnel.V3Connection;
-                conn.ReceiveCts?.Dispose();
-                conn.Client?.Close();
-                conn.Client?.Dispose();
+                try
+                {
+                    conn.ReceiveCts?.Cancel();
+                    conn.ReceiveCts?.Dispose();
+                    conn.Client?.Close();
+                    conn.Client?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Debug.Print($"Error disposing tunnel connection {tunnel.Name}: {ex.Message}");
+                }
                 tunnel.V3Connection = null;
             }
 
             _negotiationHandlers.Clear();
-            _v3CommunicatorInitialized = false;
+
             Debug.Print("V3 tunnel communicator disposed.");
         }
 
