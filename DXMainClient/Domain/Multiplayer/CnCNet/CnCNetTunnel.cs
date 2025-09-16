@@ -4,22 +4,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
-using System.Net.Sockets;
-using System.Threading.Tasks;
-using System.Threading;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet
 {
-    public class TunnelConnection
-    {
-        public CnCNetTunnel Tunnel { get; set; }
-        public UdpClient Client { get; set; }
-        public CancellationTokenSource ReceiveCts { get; set; }
-        public bool IsActive { get; set; } = true;
-        public DateTime LastRegistration { get; set; }
-        public Task ReceiveTask { get; set; }
-    }
-
     /// <summary>
     /// A CnCNet tunnel server.
     /// </summary>
@@ -82,7 +69,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
         }
 
-        public TunnelConnection V3Connection { get; set; }
         public string Address { get; protected set; }
         public int Port { get; protected set; }
         public string Country { get; protected set; }
@@ -118,7 +104,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         }
 
         /// <summary>
-        /// Gets a list of player ports to use from a specific tunnel server.
+        /// Gets a list of player ports to use from a specific V2 tunnel server.
         /// </summary>
         /// <returns>A list of player ports to use.</returns>
         public List<int> GetPlayerPortInfo(int playerCount)

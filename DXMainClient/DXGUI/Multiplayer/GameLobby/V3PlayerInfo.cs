@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Net.Sockets;
 using System.Threading.Tasks;
 using DTAClient.Domain.Multiplayer.CnCNet;
 
@@ -56,26 +55,23 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
     {
         public uint Id { get; set; }
         public string Name { get; set; }
-        public string IpAddress { get; set; }
-        public int Port { get; set; }
         public int PlayerIndex { get; set; }
         public ushort PlayerGameId { get; set; }
         public bool HasNegotiated { get; set; }
         public bool IsNegotiating { get; set; }
 
+        public CnCNetTunnel Tunnel { get; set; }
+
         public Dictionary<CnCNetTunnel, TunnelTestResult> TunnelResults { get; } = new Dictionary<CnCNetTunnel, TunnelTestResult>();
 
-        public V3PlayerInfo(uint id, string name, string ipAddress, int port, int playerIndex, ushort playerGameID)
+        public V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGameID, CnCNetTunnel tunnel = null)
         {
             Id = id;
             Name = name;
-            IpAddress = ipAddress;
-            Port = port;
             PlayerIndex = playerIndex;
             PlayerGameId = playerGameID;
+            Tunnel = tunnel;
         }
-
-        public UdpClient TunnelClient { get; set; }
 
         public void InitializeTunnelResults(List<CnCNetTunnel> tunnels)
         {
@@ -93,11 +89,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public CnCNetTunnel SelectBestTunnel(List<CnCNetTunnel> availableTunnels)
         {
-            return TunnelResults
+            var bestTunnel = TunnelResults
                 .Where(kvp => kvp.Value.PingResults.Any(p => p.RoundTripTime.HasValue))
                 .OrderBy(kvp => kvp.Value.AverageRtt + kvp.Value.PacketLoss * 10)
                 .Select(kvp => kvp.Key)
                 .FirstOrDefault();
+
+            if (bestTunnel != null)
+                Tunnel = bestTunnel;
+
+            return bestTunnel;
         }
 
         public double GetBestPing()
@@ -108,11 +109,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 .DefaultIfEmpty(double.NaN)
                 .Min();
             return bestPing;
-        }
-
-        public void ClearTunnelResults()
-        {
-            TunnelResults.Clear();
         }
     }
 }

@@ -420,8 +420,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             var v3PlayerInfo = v3PlayerInfos.FirstOrDefault(p => p.Id == e.PlayerId);
             if (v3PlayerInfo != null && e.ChosenTunnel != null)
             {
-                v3PlayerInfo.IpAddress = e.ChosenTunnel.Address;
-                v3PlayerInfo.Port = e.ChosenTunnel.Port;
+                v3PlayerInfo.Tunnel = e.ChosenTunnel;
             }
 
             CheckAllNegotiationsComplete();
@@ -1017,19 +1016,22 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 v3PlayerInfo.PlayerGameId = (ushort)port;
             }
 
-            string tunnelAddress = v3PlayerInfo?.IpAddress + ":" + v3PlayerInfo?.Port;
-            return (id, player.Name, tunnelAddress);
+            string address;
+            if (v3PlayerInfo.Tunnel == null)
+                address = IPAddress.Any + ":0";
+            else 
+                address = v3PlayerInfo.Tunnel.Address + ":" + v3PlayerInfo.Tunnel.Port;
+            return (id, player.Name, address);
         }
 
         private void SetPlayerTunnelInfo(V3PlayerInfo v3PlayerInfo)
         {
-            if (string.IsNullOrEmpty(v3PlayerInfo.IpAddress) || v3PlayerInfo.IpAddress == IPAddress.Any.ToString())
+            if (v3PlayerInfo == null)
             {
                 if (!useDynamicTunnels)
                 {
                     // for non-dynamic mode, all players use the host's tunnel
-                    v3PlayerInfo.IpAddress = tunnelHandler.CurrentTunnel?.Address ?? IPAddress.Any.ToString();
-                    v3PlayerInfo.Port = tunnelHandler.CurrentTunnel?.Port ?? 0;
+                    v3PlayerInfo.Tunnel = tunnelHandler.CurrentTunnel;
                 }
             }
         }
@@ -1061,10 +1063,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     v3PlayerInfos.Add(new V3PlayerInfo(
                         GeneratePlayerID(player.Name),
                         player.Name,
-                        IPAddress.Any.ToString(),
-                        0,
                         i,
-                        0 // PlayerGameId will be set at game start
+                        0,// PlayerGameId will be set at game start
+                        null //tunnel set in negotiation
                     ));
                 }
                 else
@@ -1869,8 +1870,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                     foreach (var v3Player in v3PlayerInfos)
                     {
-                        v3Player.IpAddress = IPAddress.Any.ToString();
-                        v3Player.Port = 0;
+                        v3Player.Tunnel = null;
                         v3Player.HasNegotiated = false;
                         v3Player.IsNegotiating = false;
                     }
@@ -2081,10 +2081,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 V3PlayerInfo v3PlayerInfo = v3PlayerInfos.Find(p => p.Name == pName);
                 if (v3PlayerInfo != null)
                 {
-                    if (!useDynamicTunnels)
+                    if (!useDynamicTunnels) // host set tunnel
                     {
-                        v3PlayerInfo.IpAddress = ipAndPort[0];
-                        v3PlayerInfo.Port = port;
+                        CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == ipAndPort[0] && t.Port == port);
+                        v3PlayerInfo.Tunnel = tunnel;
                     }
                     v3PlayerInfo.PlayerIndex = pInfo.Index;
                     v3PlayerInfo.PlayerGameId = (ushort)pInfo.Port;
@@ -2455,10 +2455,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             var v3PlayerInfo = v3PlayerInfos.FirstOrDefault(p => p.Name == sender);
             if (v3PlayerInfo != null)
-            {
-                v3PlayerInfo.IpAddress = tunnelAddress;
-                v3PlayerInfo.Port = tunnelPort;
-            }
+                v3PlayerInfo.Tunnel = tunnel;
         }
 
         private void AutoSelectBestTunnel()
@@ -2494,10 +2491,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (useLegacyTunnels == false && useDynamicTunnels == false) 
             {
                 foreach (var v3Player in v3PlayerInfos)
-                {
-                    v3Player.IpAddress = tunnel.Address;
-                    v3Player.Port = tunnel.Port;
-                }
+                    v3Player.Tunnel = tunnel;
             }
         }
 
