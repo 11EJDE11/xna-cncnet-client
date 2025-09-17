@@ -15,7 +15,18 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 {
     public class TunnelHandler : GameComponent, IDisposable
     {
+        /// <summary>
+        /// Determines the time between pinging the current tunnel (if it's set).
+        /// </summary>
         private const double CURRENT_TUNNEL_PING_INTERVAL = 20.0;
+
+        /// <summary>
+        /// A reciprocal to the value which determines how frequent the full tunnel
+        /// refresh would be done instead of just pinging the current tunnel (1/N of 
+        /// current tunnel ping refreshes would be substituted by a full list refresh).
+        /// Multiply by <see cref="CURRENT_TUNNEL_PING_INTERVAL"/> to get the interval 
+        /// between full list refreshes.
+        /// </summary>
         private const uint CYCLES_PER_TUNNEL_LIST_REFRESH = 6;
         private static readonly int[] SUPPORTED_TUNNEL_VERSIONS = { 2, 3 };
 
@@ -127,11 +138,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 var updatedTunnel = Tunnels.Find(t => t.Address == CurrentTunnel.Address && t.Port == CurrentTunnel.Port);
                 if (updatedTunnel != null)
                 {
+                    // don't re-ping if the tunnel still exists in list, just update the tunnel instance and
+                    // fire the event handler (the tunnel was already pinged when traversing the tunnel list)
                     CurrentTunnel = updatedTunnel;
                     DoCurrentTunnelPinged();
                 }
                 else
                 {
+                    // tunnel is not in the list anymore so it's not updated with a list instance and pinged
                     PingCurrentTunnelAsync();
                 }
             }
@@ -220,6 +234,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
             else
             {
+                // Don't fetch the latest tunnel list if it is explicitly disabled
+                // For example, the official CnCNet server might be unavailable/unstable in a country with Internet censorship,
+                // where players might either establish a substitute server or manually distribute the tunnel cache file
                 Logger.Log("Fetching tunnel server list online is disabled.");
             }
 
@@ -235,6 +252,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             return null;
         }
 
+        /// <summary>
+        /// Downloads and parses the list of CnCNet tunnels.
+        /// </summary>
+        /// <returns>A list of tunnel servers.</returns>
         private List<CnCNetTunnel> RefreshTunnels()
         {
             List<CnCNetTunnel> returnValue = new List<CnCNetTunnel>();
@@ -248,6 +269,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             string convertedData = Encoding.Default.GetString(data);
             string[] serverList = convertedData.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
+            // skip first header item ("address;country;countrycode;name;password;clients;maxclients;official;latitude;longitude;version;distance")
             foreach (string serverInfo in serverList.Skip(1))
             {
                 try
@@ -327,14 +349,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
         }
 
-        public void RegisterNegotiationHandler(uint localId, uint remoteId, PacketHandler handler)
+        public void RegisterV3PacketHandler(uint localId, uint remoteId, PacketHandler handler)
         {
-            _v3Communicator.RegisterNegotiationHandler(localId, remoteId, handler);
+            _v3Communicator.RegisterHandler(localId, remoteId, handler);
         }
 
-        public void UnregisterNegotiationHandler(uint localId, uint remoteId)
+        public void UnregisterV3PacketHandler(uint localId, uint remoteId)
         {
-            _v3Communicator.UnregisterNegotiationHandler(localId, remoteId);
+            _v3Communicator.UnregisterHandler(localId, remoteId);
         }
 
         public void SendRegistrationToAllTunnels(uint localId, List<CnCNetTunnel> tunnels = null)

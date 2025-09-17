@@ -92,7 +92,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             _remotePlayer.InitializeTunnelResults(tunnels);
 
-            _tunnelHandler.RegisterNegotiationHandler(_localPlayer.Id, _remotePlayer.Id, OnPacketReceived);
+            _tunnelHandler.RegisterV3PacketHandler(_localPlayer.Id, _remotePlayer.Id, OnPacketReceived);
         }
 
         public async Task<bool> NegotiateAsync()
@@ -502,7 +502,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             _negotiationCompletionSource?.TrySetCanceled();
 
             if (_tunnelHandler != null)
-                _tunnelHandler.UnregisterNegotiationHandler(_localPlayer.Id, _remotePlayer.Id);
+                _tunnelHandler.UnregisterV3PacketHandler(_localPlayer.Id, _remotePlayer.Id);
         }
     }
 

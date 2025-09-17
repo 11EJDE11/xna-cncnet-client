@@ -59,7 +59,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
             Debug.Print("=============================================");
 
-            _tunnelHandler.RegisterNegotiationHandler(_localId, 0, OnTunnelPacketReceived);
+            _tunnelHandler.RegisterV3PacketHandler(_localId, 0, OnTunnelPacketReceived);
 
             _isRunning = true;
             _bridgeThread.Start();
@@ -75,7 +75,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             _isRunning = false;
             _cts.Cancel();
-            _tunnelHandler?.UnregisterNegotiationHandler(_localId, 0);
+            _tunnelHandler?.UnregisterV3PacketHandler(_localId, 0);
             _localGameClient?.Close();
 
             if (_bridgeThread.IsAlive)

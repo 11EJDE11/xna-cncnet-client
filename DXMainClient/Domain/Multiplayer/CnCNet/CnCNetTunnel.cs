@@ -84,10 +84,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public int Version { get; protected set; }
         public double Distance { get; private set; }
         public int PingInMs { get; set; } = -1;
+
+        /// <summary>
+        /// Updates this tunnel's metadata from another tunnel instance, preserving Address, Port, and existing PingInMs.
+        /// </summary>
         internal void UpdateFrom(CnCNetTunnel updatedTunnel)
         {
-            // Preserve Address, Port, V3Connection, and existing PingInMs
-
             Country = updatedTunnel.Country;
             CountryCode = updatedTunnel.CountryCode;
             Name = updatedTunnel.Name;
