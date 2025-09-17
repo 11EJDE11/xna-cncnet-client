@@ -191,16 +191,35 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 throw new Exception("No viable tunnel");
             }
         }
+
         private async Task ProcessTunnelAsync(CnCNetTunnel tunnel, TunnelTestResult result, Action onComplete)
         {
             try
             {
-                await result.ConnectedTcs.Task.WaitAsync(DECIDER_CONNECTED_PHASE_TIMEOUT);
-                await result.PingsCompletedTcs.Task.WaitAsync(DECIDER_PING_PHASE_TIMEOUT);
+                using var timeoutCts = new CancellationTokenSource();
+
+                var connectedTask = result.ConnectedTcs.Task;
+                var connectedTimeoutTask = Task.Delay(DECIDER_CONNECTED_PHASE_TIMEOUT, timeoutCts.Token);
+
+                var completedTask = await Task.WhenAny(connectedTask, connectedTimeoutTask);
+                if (completedTask == connectedTask)
+                {
+                    // Connected phase completed successfully, cancel timeout
+                    timeoutCts.Cancel();
+
+                    // Now wait for pings
+                    using var pingTimeoutCts = new CancellationTokenSource();
+                    var pingsTask = result.PingsCompletedTcs.Task;
+                    var pingsTimeoutTask = Task.Delay(DECIDER_PING_PHASE_TIMEOUT, pingTimeoutCts.Token);
+
+                    var pingCompletedTask = await Task.WhenAny(pingsTask, pingsTimeoutTask);
+                    if (pingCompletedTask == pingsTask)
+                        pingTimeoutCts.Cancel();
+                }
             }
-            catch (TimeoutException)
+            catch (OperationCanceledException)
             {
-                // Expected
+                // expected when negotiation is cancelled
             }
             finally
             {
@@ -510,7 +529,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 .ToList();
         }
 
-        public async Task<bool> StartNegotiation(V3PlayerInfo player)
+        public bool StartNegotiation(V3PlayerInfo player)
         {
             if (player == _localPlayer)
                 return true;

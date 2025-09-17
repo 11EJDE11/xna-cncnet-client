@@ -19,7 +19,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private readonly CancellationTokenSource _cts = new();
         private readonly UdpClient _localGameClient; // game will connect to this
         private IPEndPoint _gameEndpoint;
-        private volatile bool _isRunning = false;
+        private volatile bool _isRunning = false; 
+        public bool IsRunning => _isRunning;
 
         public V3GameTunnelBridge(
             uint localId,

@@ -1532,21 +1532,19 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 string mapName = splitMessage[7];
                 string gameMode = splitMessage[8];
                 bool isDynamicTunnels = splitMessage[9] == "[DYN]";
-                string[] tunnelAddressAndPort;
-                string tunnelAddress;
-                int tunnelPort;
                 CnCNetTunnel tunnel = null;
                 if (isDynamicTunnels)
                 {
                     //nothing for now
                     //maybe display a dynamic icon for the ping
                     //or try connect to each player in the lobby (not ideal)
+                    tunnel = null;
                 }
                 else
                 {
-                    tunnelAddressAndPort = splitMessage[9].Split(':');
-                    tunnelAddress = tunnelAddressAndPort[0];
-                    tunnelPort = int.Parse(tunnelAddressAndPort[1]);
+                    string[] tunnelAddressAndPort = splitMessage[9].Split(':');
+                    string tunnelAddress = tunnelAddressAndPort[0];
+                    int tunnelPort = int.Parse(tunnelAddressAndPort[1]);
                     tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
                     if (tunnel == null)
                         return;

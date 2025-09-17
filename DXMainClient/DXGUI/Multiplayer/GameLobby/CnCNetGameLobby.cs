@@ -135,7 +135,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 "Toggle the tunnel negotiation status display",
                 false, ToggleNegotiationStatus));
             AddChatBoxCommand(new ChatBoxCommand("TUNNELMODE",
-                "Change tunnel mode (0=V3 static, 1=V3 dynamic, 2=V2 legacy) - game host only".L10N("Client:Main:TunnelModeCommand"),
+                "Change tunnel mode (0=V3 static, 1=V3 dynamic, 2=V2 legacy) (game host only)".L10N("Client:Main:TunnelModeCommand"),
                 false, HandleTunnelModeCommand));
 
         }
@@ -366,6 +366,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             else
                 tunnelHandler.CurrentTunnel = tunnel;
 
+            tunnelHandler.TunnelFailed += TunnelHandler_TunnelFailed;
             tunnelHandler.CurrentTunnelPinged += TunnelHandler_CurrentTunnelPinged;
             connectionManager.ConnectionLost += ConnectionManager_ConnectionLost;
             connectionManager.Disconnected += ConnectionManager_Disconnected;
@@ -427,6 +428,51 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         private void TunnelHandler_CurrentTunnelPinged(object sender, EventArgs e) => UpdatePing();
+
+        private void TunnelHandler_TunnelFailed(object sender, CnCNetTunnel failedTunnel)
+        {
+            if (!useDynamicTunnels || !IsHost || v3Bridge.IsRunning)
+                return;
+
+            var affectedPlayers = v3PlayerInfos
+                .Where(p => p.Tunnel?.Address == failedTunnel.Address &&
+                           p.Tunnel?.Port == failedTunnel.Port)
+                .ToList();
+
+            if (affectedPlayers.Count > 0)
+            {
+                AddNotice($"Tunnel {failedTunnel.Name} failed. Starting renegotiation for affected players...", Color.Orange);
+                RestartNegotiations(affectedPlayers);
+            }
+        }
+
+        private void RestartNegotiations(List<V3PlayerInfo> affectedPlayers)
+        {
+            foreach (var v3Player in affectedPlayers)
+            {
+                v3Player.Tunnel = null;
+                v3Player.HasNegotiated = false;
+                v3Player.IsNegotiating = false;
+
+                ClearNegotiationStatusForPlayer(v3Player.Name);
+
+                if (v3Player.Name != ProgramConstants.PLAYERNAME)
+                    StartTunnelNegotiationForPlayer(v3Player);
+            }
+
+            UpdateNegotiationUI();
+        }
+
+        private void ClearNegotiationStatusForPlayer(string playerName)
+        {
+            negotiationStatuses.TryRemove(playerName, out _);
+            playerPingMatrix.TryRemove(playerName, out _);
+
+            foreach (var status in negotiationStatuses.Values)
+                status.TryRemove(playerName, out _);
+            foreach (var pings in playerPingMatrix.Values)
+                pings.TryRemove(playerName, out _);
+        }
 
         private void GameHostInactiveChecker_CloseEvent(object sender, EventArgs e) => LeaveGameLobby();
 
@@ -592,6 +638,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             tbChatInput.Text = string.Empty;
 
             tunnelHandler.CurrentTunnel = null;
+            tunnelHandler.TunnelFailed -= TunnelHandler_TunnelFailed;
             tunnelHandler.CurrentTunnelPinged -= TunnelHandler_CurrentTunnelPinged;
 
             GameLeft?.Invoke(this, EventArgs.Empty);
@@ -773,7 +820,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
         }
 
-        private async void StartTunnelNegotiationForPlayer(V3PlayerInfo player)
+        private void StartTunnelNegotiationForPlayer(V3PlayerInfo player)
         {
             if (tunnelNegotiationManager == null)
                 InitializeTunnelNegotiationManager();
@@ -789,7 +836,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             try
             {
                 AddNotice($"Negotiating tunnel with {player.Name}...");
-                bool success = await tunnelNegotiationManager.StartNegotiation(player);
+                bool success = tunnelNegotiationManager.StartNegotiation(player);
 
                 if (!success)
                 {
