@@ -119,7 +119,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             try
             {
                 IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
-                while (_isRunning && !_cts.Token.IsCancellationRequested)
+                while (!_cts.Token.IsCancellationRequested)
                 {
                     try
                     {
@@ -168,7 +168,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public void Dispose()
         {
             Stop();
-            _localGameClient?.Close();
             _localGameClient?.Dispose();
             _cts?.Dispose();
         }

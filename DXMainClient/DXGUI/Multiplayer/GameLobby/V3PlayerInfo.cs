@@ -28,6 +28,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
     public class TunnelTestResult
     {
+
+        // How long the non-decider will keep sending Connected packets to a single tunnel
+        // while waiting for a Ping Request from the decider. After this, the tunnel is skipped.
+        // Note that the existing players in the lobby will begin negotiating when
+        // Channel_UserAdded is called, while the joining player will begin negotiation
+        // when ApplyPlayerOptions is sent by the host. The timeout should be long enough for
+        // the joining player to receive that IRC message + attempt connections to each tunnel.
         private const int CONNECTED_TIMEOUT_MS = 10000;
 
         public List<PingResult> PingResults { get; } = new List<PingResult>();

@@ -43,17 +43,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         // Non-deciders = set when tunnel choice is received from decider.
         private TaskCompletionSource<bool> _negotiationCompletionSource = new TaskCompletionSource<bool>();
 
-        // Something to differentiate game data from client data.
-        private static readonly byte[] MAGIC_DATA = { 0x45, 0x4A, 0x45, 0x4A, 0x45, 0x4A }; //EJEJEJ
-
-        // How long the non-decider will keep sending Connected packets to a single tunnel
-        // while waiting for a Ping Request from the decider. After this, the tunnel is skipped.
-        // Note that the existing players in the lobby will begin negotiating when
-        // Channel_UserAdded is called, while the joining player will begin negotiation
-        // when ApplyPlayerOptions is sent by the host. The timeout should be long enough for
-        // the joining player to receive that IRC message + attempt connections to each tunnel.
-        private const int NON_DECIDER_CONNECTED_TIMEOUT_MS = 10000;
-
         // How long the non-decider will keep sending Connected packets overall.
         private const int NON_DECIDER_TOTAL_TIMEOUT_MS = 20000;
 

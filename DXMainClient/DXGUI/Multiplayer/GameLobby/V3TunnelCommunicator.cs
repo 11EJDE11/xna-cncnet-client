@@ -97,6 +97,8 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         public byte[] CreatePacket(uint senderId, uint receiverId, TunnelPacketType packetType, byte[] payload = null)
         {
+            const int HeaderSize = 8;
+
             payload ??= Array.Empty<byte>();
 
             int headerLength = 8;
@@ -111,20 +113,20 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             var span = packet.AsSpan();
 
             BinaryPrimitives.WriteUInt32LittleEndian(span, senderId);
-            BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(4), receiverId);
+            BinaryPrimitives.WriteUInt32LittleEndian(span[4..], receiverId);
 
             if (packetType == TunnelPacketType.Register)
                 return packet;
 
             if (packetType != TunnelPacketType.GameData)
             {
-                MAGIC_BYTES.CopyTo(span.Slice(8));
-                span[8 + MAGIC_BYTES.Length] = (byte)packetType;
-                payload.CopyTo(span[(9 + MAGIC_BYTES.Length)..]);
+                MAGIC_BYTES.CopyTo(span[HeaderSize..]);
+                span[HeaderSize + MAGIC_BYTES.Length] = (byte)packetType;
+                payload.CopyTo(span[(HeaderSize + 1 + MAGIC_BYTES.Length)..]);
             }
             else
             {
-                payload.CopyTo(span[8..]);
+                payload.CopyTo(span[HeaderSize..]);
             }
 
             return packet;
@@ -184,16 +186,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 _endpointToTunnel.Clear();
                 foreach (var tunnel in tunnels)
                 {
-                    try
-                    {
-                        var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
-                        _endpointToTunnel[endpoint] = tunnel;
-                        Debug.Print($"Added tunnel mapping: {endpoint} -> {tunnel.Name}");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.Print($"Failed to add tunnel {tunnel.Name} to endpoint mapping: {ex.Message}");
-                    }
+                    var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
+                    _endpointToTunnel[endpoint] = tunnel;
+                    Debug.Print($"Added tunnel mapping: {endpoint} -> {tunnel.Name}");
                 }
 
                 _receiveCts = new CancellationTokenSource();
@@ -350,15 +345,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 _initialized = false;
                 _receiveCts?.Cancel();
 
-                try
-                {
-                    _udpClient?.Close();
-                    _udpClient?.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    Debug.Print($"Error disposing UDP client: {ex.Message}");
-                }
+                _udpClient?.Dispose();
 
                 if (_receiveThread != null && _receiveThread.IsAlive)
                     if (!_receiveThread.Join(2000))
