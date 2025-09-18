@@ -46,12 +46,15 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private Thread _receiveThread;
         private CancellationTokenSource _receiveCts;
         private readonly ConcurrentDictionary<IPEndPoint, CnCNetTunnel> _endpointToTunnel = new();
-        private readonly object _initLock = new object();
-
         private readonly ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler> _handlers = new();
+        private readonly object _initLock = new object();
 
         public bool IsInitialized => _initialized;
 
+        /// <summary>
+        /// Initializes the communicator with the provided V3-compatible tunnels,
+        /// sets up UDP socket, and starts the background receive thread.
+        /// </summary>
         public void Initialize(List<CnCNetTunnel> tunnels)
         {
             lock (_initLock)
@@ -69,39 +72,40 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                     return;
                 }
 
-                try
-                {
-                    InitializeConnection(v3Tunnels);
-                    _initialized = true;
-                    Logger.Log($"V3 tunnel communicator initialized with {v3Tunnels.Count} tunnels");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"Failed to initialize V3 tunnel communicator: {ex.Message}");
-                    throw;
-                }
+                InitializeConnection(v3Tunnels);
+                _initialized = true;
+                Logger.Log($"V3 tunnel communicator initialized with {v3Tunnels.Count} tunnels");
             }
         }
 
+        /// <summary>
+        /// Registers a handler for packets between the specified local and remote IDs.
+        /// Only one handler per ID pair is kept at a time.
+        /// </summary>
         public void RegisterHandler(uint localId, uint remoteId, PacketHandler handler)
         {
             _handlers[(localId, remoteId)] = handler;
             Debug.Print($"Registered handler for {localId} <-> {remoteId}");
         }
 
+        /// <summary>
+        /// Removes the handler for the specified local/remote ID pair.
+        /// </summary>
         public void UnregisterHandler(uint localId, uint remoteId)
         {
             _handlers.TryRemove((localId, remoteId), out _);
             Debug.Print($"Unregistered handler for {localId} <-> {remoteId}");
         }
 
+        /// <summary>
+        /// Builds a properly formatted packet for sending through a V3 tunnel.
+        /// </summary>
         public byte[] CreatePacket(uint senderId, uint receiverId, TunnelPacketType packetType, byte[] payload = null)
         {
             const int HeaderSize = 8;
 
             payload ??= Array.Empty<byte>();
 
-            int headerLength = 8;
             int extraLength = packetType switch
             {
                 TunnelPacketType.Register => 0,
@@ -109,7 +113,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 _ => MAGIC_BYTES.Length + 1
             };
 
-            var packet = new byte[headerLength + extraLength + payload.Length];
+            var packet = new byte[HeaderSize + extraLength + payload.Length];
             var span = packet.AsSpan();
 
             BinaryPrimitives.WriteUInt32LittleEndian(span, senderId);
@@ -122,7 +126,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             {
                 MAGIC_BYTES.CopyTo(span[HeaderSize..]);
                 span[HeaderSize + MAGIC_BYTES.Length] = (byte)packetType;
-                payload.CopyTo(span[(HeaderSize + 1 + MAGIC_BYTES.Length)..]);
+                payload.CopyTo(span[(HeaderSize + sizeof(TunnelPacketType) + MAGIC_BYTES.Length)..]);
             }
             else
             {
@@ -132,6 +136,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             return packet;
         }
 
+        /// <summary>
+        /// Sends a registration packet to all known V3 tunnels, 
+        /// or to a provided subset of tunnels.
+        /// </summary>
         public void SendRegistrationToAllTunnels(uint localId, List<CnCNetTunnel> tunnels = null)
         {
             if (!_initialized)
@@ -155,6 +163,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
         }
 
+        /// <summary>
+        /// Sends a packet to the specified tunnel. 
+        /// </summary>
         public void SendPacket(CnCNetTunnel tunnel, uint senderId, uint receiverId,
             TunnelPacketType packetType, byte[] payload = null)
         {
@@ -208,36 +219,26 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
         }
 
-        private void ProcessPacket(byte[] data, long receivedTime, CnCNetTunnel tunnel)
+        private void ProcessReceivedPacket(byte[] data, long receivedTime, CnCNetTunnel tunnel)
         {
             try
             {
                 var parsed = ParsePacket(data.AsSpan());
+                if (parsed.Payload.Length == 0 && !parsed.NegotiationType.HasValue)
+                    return;
 
-                PacketHandler handler = null;
-                TunnelPacketType type = TunnelPacketType.GameData;
+                PacketHandler? handler = null;
 
                 if (parsed.NegotiationType.HasValue)
-                {
                     _handlers.TryGetValue((parsed.ReceiverId, parsed.SenderId), out handler);
-                    type = parsed.NegotiationType.Value;
-                }
                 else if (parsed.Payload.Length > 0)
-                {
                     _handlers.TryGetValue((parsed.ReceiverId, 0), out handler);
-                }
 
                 if (handler != null)
                 {
-                    try
-                    {
-                        handler(parsed.SenderId, parsed.ReceiverId, type,
-                            parsed.Payload.ToArray(), receivedTime, tunnel);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.Print($"{type} packet handler error: {ex.Message}");
-                    }
+                    handler(parsed.SenderId, parsed.ReceiverId,
+                        parsed.NegotiationType ?? TunnelPacketType.GameData,
+                        parsed.Payload.ToArray(), receivedTime, tunnel);
                 }
             }
             catch (Exception ex)
@@ -246,19 +247,25 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
         }
 
+        /// <summary>
+        /// Parses an incoming raw UDP packet into a <see cref="ParsedPacket"/>.
+        /// Detects negotiation vs. game data based on presence of magic bytes.
+        /// </summary>
         private ParsedPacket ParsePacket(ReadOnlySpan<byte> data)
         {
-            if (data.Length < 8)
+            const int HeaderSize = 8;
+
+            if (data.Length < HeaderSize)
                 return new ParsedPacket();
 
             uint senderId = BinaryPrimitives.ReadUInt32LittleEndian(data);
             uint receiverId = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4));
 
-            if (data.Length >= 8 + MAGIC_BYTES.Length + 1 &&
-                data.Slice(8, MAGIC_BYTES.Length).SequenceEqual(MAGIC_BYTES))
+            if (data.Length >= HeaderSize + MAGIC_BYTES.Length + sizeof(TunnelPacketType) &&
+                data.Slice(HeaderSize, MAGIC_BYTES.Length).SequenceEqual(MAGIC_BYTES))
             {
-                var negotiationType = (TunnelPacketType)data[8 + MAGIC_BYTES.Length];
-                var payload = data[(9 + MAGIC_BYTES.Length)..];
+                var negotiationType = (TunnelPacketType)data[HeaderSize + MAGIC_BYTES.Length];
+                var payload = data[(HeaderSize + sizeof(TunnelPacketType) + MAGIC_BYTES.Length)..];
                 return new ParsedPacket
                 {
                     SenderId = senderId,
@@ -268,7 +275,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 };
             }
 
-            var gamePayload = data.Length > 8 ? data[8..] : ReadOnlySpan<byte>.Empty;
+            var gamePayload = data.Length > HeaderSize ? data[HeaderSize..] : ReadOnlySpan<byte>.Empty;
             return new ParsedPacket
             {
                 SenderId = senderId,
@@ -278,22 +285,27 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             };
         }
 
+        /// <summary>
+        /// Main loop for receiving packets on the UDP socket.
+        /// Dispatches packets to the correct handler based on endpoint.
+        /// Runs on a background thread.
+        /// </summary>
         private void ReceivePackets()
         {
             try
             {
+                IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Any, 0);
                 while (!_receiveCts.Token.IsCancellationRequested)
                 {
                     try
                     {
-                        IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Any, 0);
                         byte[] data = _udpClient.Receive(ref remoteEndpoint);
                         var receivedTime = Stopwatch.GetTimestamp();
 
                         if (_endpointToTunnel.TryGetValue(remoteEndpoint, out var tunnel))
-                            ProcessPacket(data, receivedTime, tunnel);
+                            ProcessReceivedPacket(data, receivedTime, tunnel);
                         else
-                            Debug.Print($"[RECV] Got packet from unknown endpoint: {remoteEndpoint.Address}:{remoteEndpoint.Port}");
+                            Debug.Print($"[RECV] Got packet from unknown endpoint: {remoteEndpoint}");
                     }
                     catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
                     {

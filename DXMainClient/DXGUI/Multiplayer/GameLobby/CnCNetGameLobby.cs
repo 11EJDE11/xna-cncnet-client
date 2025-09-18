@@ -55,7 +55,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private const string NEGOTIATION_STATUS_MESSAGE = "NEGSTAT";
         private const string NEGOTIATION_PING_INFO_MESSAGE = "NEGPING";
-        private const string NEGOTIATION_FAILED_MESSAGE = "NEGFAIL";
 
         public CnCNetGameLobby(
             WindowManager windowManager, 
@@ -114,8 +113,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(CHANGE_TUNNEL_SERVER_MESSAGE, HandleTunnelServerChangeMessage),
                 new StringCommandHandler(PLAYER_TUNNEL_MESSAGE, HandlePlayerTunnelMessage),
                 new StringCommandHandler(NEGOTIATION_STATUS_MESSAGE, HandleNegotiationStatusMessage),
-                new StringCommandHandler(NEGOTIATION_PING_INFO_MESSAGE, HandleNegotiationPingInfoMessage),
-                new StringCommandHandler(NEGOTIATION_FAILED_MESSAGE, HandleNegotiationFailedMessage)
+                new StringCommandHandler(NEGOTIATION_PING_INFO_MESSAGE, HandleNegotiationPingInfoMessage)
             };
 
             MapSharer.MapDownloadFailed += MapSharer_MapDownloadFailed;
@@ -412,19 +410,18 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
                 else
                 {
-                    AddNotice($"Failed to negotiate tunnel with {e.PlayerName}", Color.Yellow);
+                    string failureMessage = $"Failed to negotiate tunnel with {e.PlayerName}";
+                    if (!string.IsNullOrEmpty(e.FailureReason))
+                        failureMessage += $": {e.FailureReason}";
+                    AddNotice(failureMessage, Color.Yellow);
+
                     BroadcastNegotiationStatus(e.PlayerName, NegotiationStatus.Failed);
-                    BroadcastNegotiationFailed(e.PlayerName);
                 }
             }
 
             var v3PlayerInfo = v3PlayerInfos.FirstOrDefault(p => p.Id == e.PlayerId);
             if (v3PlayerInfo != null && e.ChosenTunnel != null)
-            {
                 v3PlayerInfo.Tunnel = e.ChosenTunnel;
-            }
-
-            CheckAllNegotiationsComplete();
         }
 
         private void TunnelHandler_CurrentTunnelPinged(object sender, EventArgs e) => UpdatePing();
@@ -837,22 +834,17 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 AddNotice($"Negotiating tunnel with {player.Name}...");
                 bool success = tunnelNegotiationManager.StartNegotiation(player);
-
                 if (!success)
                 {
                     AddNotice($"Failed to negotiate tunnel with {player.Name}", Color.Yellow);
                     BroadcastNegotiationStatus(player.Name, NegotiationStatus.Failed);
-                    BroadcastNegotiationFailed(player.Name);
                 }
-
-                //success is handled in _TunnelChosen
             }
             catch (Exception ex)
             {
                 Debug.Print($"Error negotiating with player {player.Name}: {ex.Message}");
                 AddNotice($"Error negotiating tunnel with {player.Name}", Color.Red);
                 BroadcastNegotiationStatus(player.Name, NegotiationStatus.Failed);
-                BroadcastNegotiationFailed(player.Name);
             }
         }
 
@@ -957,19 +949,25 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         protected override void HostLaunchGame()
         {
-            if (useDynamicTunnels && !AreAllNegotiationsComplete())
+            if (useDynamicTunnels && !AreAllNegotiationsSuccessful())
             {
-                AddNotice("Cannot start game as tunnel negotiations are still in progress.", Color.Yellow);
+                var (incomplete, failed) = GetNegotiationStatusCounts();
 
-                var incompleteNegotiations = GetIncompleteNegotiations();
-                if (incompleteNegotiations.Count > 0)
+                if (failed > 0)
                 {
+                    AddNotice("Cannot start game: Some tunnel negotiations have failed.", Color.Red);
+                    ShowFailedNegotiations();
+                    return;
+                }
+
+                if (incomplete > 0)
+                {
+                    var incompleteNegotiations = GetIncompleteNegotiations();
                     AddNotice("Waiting for negotiations between:", Color.Yellow);
                     foreach (var (p1, p2, status) in incompleteNegotiations)
                         AddNotice($"  {p1} <-> {p2} ({status})", Color.Yellow);
+                    return;
                 }
-
-                return;
             }
 
             if (Players.Count > 1)
@@ -1153,6 +1151,63 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
 
             return incomplete;
+        }
+        private bool AreAllNegotiationsSuccessful()
+        {
+            if (!useDynamicTunnels || Players.Count <= 1)
+                return true;
+
+            for (int i = 0; i < Players.Count; i++)
+            {
+                for (int j = i + 1; j < Players.Count; j++)
+                {
+                    var status = GetNegotiationStatus(Players[i].Name, Players[j].Name);
+                    if (status != NegotiationStatus.Succeeded)
+                        return false;
+                }
+            }
+            return true;
+        }
+
+        private (int incomplete, int failed) GetNegotiationStatusCounts()
+        {
+            int incomplete = 0, failed = 0;
+
+            for (int i = 0; i < Players.Count; i++)
+            {
+                for (int j = i + 1; j < Players.Count; j++)
+                {
+                    var status = GetNegotiationStatus(Players[i].Name, Players[j].Name);
+                    if (status == NegotiationStatus.NotStarted || status == NegotiationStatus.InProgress)
+                        incomplete++;
+                    else if (status == NegotiationStatus.Failed)
+                        failed++;
+                }
+            }
+            return (incomplete, failed);
+        }
+
+        private void ShowFailedNegotiations()
+        {
+            var failedPairs = new List<(string, string)>();
+
+            for (int i = 0; i < Players.Count; i++)
+            {
+                for (int j = i + 1; j < Players.Count; j++)
+                {
+                    var status = GetNegotiationStatus(Players[i].Name, Players[j].Name);
+                    if (status == NegotiationStatus.Failed)
+                        failedPairs.Add((Players[i].Name, Players[j].Name));
+                }
+            }
+
+            if (failedPairs.Count > 0)
+            {
+                AddNotice("Failed negotiations between:", Color.Red);
+                foreach (var (p1, p2) in failedPairs)
+                    AddNotice($" {p1} <-> {p2}", Color.Red);
+                AddNotice("Consider changing tunnel mode or having affected players rejoin.", Color.Yellow);
+            }
         }
 
         protected override void RequestPlayerOptions(int side, int color, int start, int team)
@@ -1531,24 +1586,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             UpdateNegotiationUI();
         }
 
-        private void HandleNegotiationFailedMessage(string sender, string message)
-        {
-            //NEGFAIL targetPlayer
-            AddNotice($"Tunnel negotiation between {sender} and {message} failed", Color.Yellow);
-
-            var senderStatuses = negotiationStatuses.GetOrAdd(sender,
-                _ => new ConcurrentDictionary<string, NegotiationStatus>());
-            var targetStatuses = negotiationStatuses.GetOrAdd(message,
-                _ => new ConcurrentDictionary<string, NegotiationStatus>());
-
-            // Update both directions
-            senderStatuses[message] = NegotiationStatus.Failed;
-            targetStatuses[sender] = NegotiationStatus.Failed;
-
-            UpdateNegotiationUI();
-            CheckAllNegotiationsComplete();
-        }
-
         private void BroadcastNegotiationStatus(string targetPlayer, NegotiationStatus status)
         {
             channel.SendCTCPMessage($"{NEGOTIATION_STATUS_MESSAGE} {targetPlayer};{status}",
@@ -1558,12 +1595,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private void BroadcastNegotiationPingInfo(string targetPlayer, double ping)
         {
             channel.SendCTCPMessage($"{NEGOTIATION_PING_INFO_MESSAGE} {targetPlayer};{(int)Math.Round(ping)}",
-                QueuedMessageType.SYSTEM_MESSAGE, 10);
-        }
-
-        private void BroadcastNegotiationFailed(string targetPlayer)
-        {
-            channel.SendCTCPMessage($"{NEGOTIATION_FAILED_MESSAGE} {targetPlayer}",
                 QueuedMessageType.SYSTEM_MESSAGE, 10);
         }
 
@@ -2545,28 +2576,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         protected override bool UpdateLaunchGameButtonStatus()
         {
             bool baseStatus = base.UpdateLaunchGameButtonStatus();
-
-            if (!baseStatus)
-                return false;
-
-            // Ensure negotiations are complete
-            if (useDynamicTunnels && IsHost)
-            {
-                for (int i = 0; i < Players.Count; i++)
-                {
-                    for (int j = i + 1; j < Players.Count; j++)
-                    {
-                        var status = GetNegotiationStatus(Players[i].Name, Players[j].Name);
-                        if (status == NegotiationStatus.NotStarted || status == NegotiationStatus.InProgress)
-                        {
-                            btnLaunchGame.Enabled = false;
-                            return false;
-                        }
-                    }
-                }
-            }
-
-            return true;
+            return baseStatus;
         }
 
         #region CnCNet map sharing
