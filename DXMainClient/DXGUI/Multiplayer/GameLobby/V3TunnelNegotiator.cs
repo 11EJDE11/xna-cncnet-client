@@ -479,15 +479,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
     public class V3TunnelNegotiationManager : IDisposable
     {
+        private readonly List<V3PlayerInfo> _players;
         private readonly V3PlayerInfo _localPlayer;
         private readonly TunnelHandler _tunnelHandler;
-        private readonly Dictionary<uint, V3PlayerNegotiator> _negotiators = new Dictionary<uint, V3PlayerNegotiator>(); //todo double check dict use
-        private readonly object _lock = new object();
 
         public event EventHandler<TunnelChosenEventArgs> TunnelChosen;
 
-        public V3TunnelNegotiationManager(V3PlayerInfo localPlayer, TunnelHandler tunnelHandler)
+        public V3TunnelNegotiationManager(V3PlayerInfo localPlayer, TunnelHandler tunnelHandler, List<V3PlayerInfo> players)
         {
+            _players = players;
             _localPlayer = localPlayer;
             _tunnelHandler = tunnelHandler;
         }
@@ -510,11 +510,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             Debug.Print($"[ADD PLAYER] Adding player {player.Name} (ID: {player.Id})");
 
-            lock (_lock)
-            {
-                if (_negotiators.ContainsKey(player.Id))
-                    return true;
-            }
+            if (player.Negotiator != null)
+                return true;
 
             var availableTunnels = GetAvailableTunnels();
             if (availableTunnels.Count == 0)
@@ -529,10 +526,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             negotiator.NegotiationResult += OnNegotiationResult;
             negotiator.NegotiationComplete += OnNegotiationComplete;
 
-            lock (_lock)
-            {
-                _negotiators[player.Id] = negotiator;
-            }
+            player.SetNegotiator(negotiator);
 
             var negotiationTask = Task.Run(() => NegotiationWorkerAsync(negotiator, player), CancellationToken.None);
 
@@ -549,35 +543,29 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 if (!success)
                 {
                     Debug.Print($"[NEGOTIATION FAILED] For player {player.Name}, cleaning up.");
-                    await Task.Yield(); // allow state to settle (optional)
-                    StopNegotiation(player.Id);
+                    await Task.Yield();
+                    StopNegotiation(player);
                 }
             }
             catch (Exception ex)
             {
                 Debug.Print($"[NEGOTIATION ERROR] For player {player.Name}: {ex.Message}");
-                StopNegotiation(player.Id);
+                StopNegotiation(player);
             }
 
             Debug.Print($"Negotiation task finished for {player.Name}");
         }
 
-        public void StopNegotiation(uint playerId)
+        public void StopNegotiation(V3PlayerInfo player)
         {
-            V3PlayerNegotiator negotiator;
-            lock (_lock)
-            {
-                if (!_negotiators.TryGetValue(playerId, out negotiator))
-                    return;
-                _negotiators.Remove(playerId);
-            }
+            if (player?.Negotiator == null)
+                return;
 
-            if (negotiator != null)
-            {
-                negotiator.NegotiationResult -= OnNegotiationResult;
-                negotiator.NegotiationComplete -= OnNegotiationComplete;
-                negotiator.Dispose();
-            }
+            var negotiator = player.Negotiator;
+            negotiator.NegotiationResult -= OnNegotiationResult;
+            negotiator.NegotiationComplete -= OnNegotiationComplete;
+
+            player.StopNegotiation();
         }
 
         private void FinalizeNegotiation(V3PlayerInfo player, CnCNetTunnel tunnel, bool isLocalDecision)
@@ -593,7 +581,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 IsLocalDecision = isLocalDecision
             });
 
-            StopNegotiation(player.Id);
+            StopNegotiation(player);
         }
 
         private void OnNegotiationResult(object sender, TunnelChosenEventArgs e)
@@ -604,13 +592,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (e.ChosenTunnel != null)
             {
-                // Success case
+                // Success
                 Debug.Print($"[TUNNEL CHOSEN] Player {player.Name} chose tunnel {e.ChosenTunnel.Name}");
                 FinalizeNegotiation(player, e.ChosenTunnel, _localPlayer.Id < player.Id);
             }
             else
             {
-                // Failure case
+                // Failure
                 Debug.Print($"[NEGOTIATION FAILED] Player {player.Name}");
                 FinalizeNegotiation(player, null, false);
             }
@@ -631,15 +619,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public void Dispose()
         {
-            List<V3PlayerNegotiator> negotiators;
-            lock (_lock)
-            {
-                negotiators = _negotiators.Values.ToList();
-                _negotiators.Clear();
-            }
-
-            foreach (var negotiator in negotiators)
-                negotiator?.Dispose();
+             foreach (var player in _players)
+                 player.StopNegotiation();
         }
     }
 }

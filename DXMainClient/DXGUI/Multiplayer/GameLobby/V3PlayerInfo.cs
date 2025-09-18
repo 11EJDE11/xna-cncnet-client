@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+
 using DTAClient.Domain.Multiplayer.CnCNet;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
@@ -28,7 +29,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
     public class TunnelTestResult
     {
-
         // How long the non-decider will keep sending Connected packets to a single tunnel
         // while waiting for a Ping Request from the decider. After this, the tunnel is skipped.
         // Note that the existing players in the lobby will begin negotiating when
@@ -68,6 +68,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public bool IsNegotiating { get; set; }
 
         public CnCNetTunnel Tunnel { get; set; }
+        public V3PlayerNegotiator Negotiator { get; set; }
 
         public Dictionary<CnCNetTunnel, TunnelTestResult> TunnelResults { get; } = new Dictionary<CnCNetTunnel, TunnelTestResult>();
 
@@ -116,6 +117,21 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 .DefaultIfEmpty(double.NaN)
                 .Min();
             return bestPing;
+        }
+
+        public void SetNegotiator(V3PlayerNegotiator negotiator)
+        {
+            StopNegotiation();
+            Negotiator = negotiator;
+        }
+
+        public void StopNegotiation()
+        {
+            if (Negotiator != null)
+            {
+                Negotiator.Dispose();
+                Negotiator = null;
+            }
         }
     }
 }

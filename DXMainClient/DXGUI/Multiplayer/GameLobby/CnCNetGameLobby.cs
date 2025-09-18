@@ -386,7 +386,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (localV3Player == null)
                 return;
 
-            tunnelNegotiationManager = new V3TunnelNegotiationManager(localV3Player, tunnelHandler);
+            tunnelNegotiationManager = new V3TunnelNegotiationManager(localV3Player, tunnelHandler, v3PlayerInfos);
             tunnelNegotiationManager.TunnelChosen += TunnelNegotiationManager_TunnelChosen;
         }
 
@@ -862,7 +862,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     if (useDynamicTunnels && tunnelNegotiationManager != null)
                     {
                         Debug.Print($"Removing player {playerName} from tunnel negotiation");
-                        tunnelNegotiationManager.StopNegotiation(v3Player.Id);
+                        tunnelNegotiationManager.StopNegotiation(v3Player);
                     }
                 }
 
