@@ -10,6 +10,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using DTAClient.DXGUI.Multiplayer.GameLobby;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet
 {
@@ -47,6 +48,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public List<CnCNetTunnel> Tunnels { get; private set; } = new List<CnCNetTunnel>();
         public CnCNetTunnel CurrentTunnel { get; set; } = null;
         public V3TunnelCommunicator V3Communicator => _v3Communicator;
+        public V3GameTunnelBridge GameTunnelBridge;
 
         public event EventHandler TunnelsRefreshed;
         public event EventHandler CurrentTunnelPinged;
@@ -81,13 +83,11 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private void ConnectionManager_ConnectionLost(object sender, Online.EventArguments.ConnectionLostEventArgs e)
         {
             Enabled = false;
-            _v3Communicator.Dispose();
         }
 
         private void ConnectionManager_Disconnected(object sender, EventArgs e)
         {
             Enabled = false;
-            _v3Communicator.Dispose();
         }
 
         private void RefreshTunnelsAsync()
@@ -341,6 +341,40 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         #region V3 Tunnel Communication Methods
 
+        public V3GameTunnelBridge StartGameBridge(uint localId, int localPort, List<V3PlayerInfo> allPlayers)
+        {
+            if (GameTunnelBridge != null)
+            {
+                Logger.Log("TunnelHandler: Stopping existing bridge before starting new one");
+                StopGameBridge();
+            }
+
+            Logger.Log($"TunnelHandler: Starting game bridge for localId={localId}, port={localPort}");
+
+            GameTunnelBridge = new V3GameTunnelBridge(localId, localPort, allPlayers, this);
+            GameTunnelBridge.Start();
+
+            Logger.Log("TunnelHandler: Game bridge started successfully");
+
+            return GameTunnelBridge;
+        }
+
+        public void StopGameBridge()
+        {
+            if (GameTunnelBridge != null)
+            {
+                Logger.Log("TunnelHandler: Stopping game bridge");
+
+                var bridge = GameTunnelBridge;
+                GameTunnelBridge = null;
+
+                bridge.Stop();
+                bridge.Dispose();
+
+                Logger.Log("TunnelHandler: Game bridge stopped");
+            }
+        }
+
         public void InitializeV3Communicator()
         {
             if (!_v3Communicator.IsInitialized && Tunnels.Count > 0)
@@ -371,5 +405,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         }
 
         #endregion
+
+        protected override void Dispose(bool disposing)
+        {
+            StopGameBridge();
+            _v3Communicator?.Dispose();
+        }
+
     }
 }

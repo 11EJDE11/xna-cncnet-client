@@ -181,7 +181,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private Random random;
 
         private readonly List<V3PlayerInfo> v3PlayerInfos = new();
-        private V3GameTunnelBridge v3Bridge;
         private V3TunnelNegotiationManager tunnelNegotiationManager;
         private bool useLegacyTunnels; //uses global setting, can be toggled per game by host
         private bool useDynamicTunnels; //uses global setting, can be toggled per game by host
@@ -428,7 +427,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void TunnelHandler_TunnelFailed(object sender, CnCNetTunnel failedTunnel)
         {
-            if (!useDynamicTunnels || !IsHost || v3Bridge.IsRunning)
+            if (!useDynamicTunnels || tunnelHandler.GameTunnelBridge.IsRunning)
+                return;
+
+
+            if (!useDynamicTunnels || !IsHost)
                 return;
 
             var affectedPlayers = v3PlayerInfos
@@ -594,12 +597,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 tunnelNegotiationManager.TunnelChosen -= TunnelNegotiationManager_TunnelChosen;
                 tunnelNegotiationManager.Dispose();
                 tunnelNegotiationManager = null;
-            }
-
-            if (v3Bridge != null)
-            {
-                v3Bridge.Stop();
-                v3Bridge = null;
             }
 
             v3PlayerInfos.Clear();
@@ -2037,8 +2034,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             base.GameProcessExited();
 
-            v3Bridge?.Stop();
-            v3Bridge = null;
+            tunnelHandler.StopGameBridge();
 
             channel.SendCTCPMessage("RETURN", QueuedMessageType.SYSTEM_MESSAGE, 20);
             ReturnNotification(ProgramConstants.PLAYERNAME);
@@ -2192,7 +2188,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             channel.SendCTCPMessage("STRTD", QueuedMessageType.SYSTEM_MESSAGE, 20);
 
-            // if it's version 3, we need to start the bridge between game+tunnel
             if (useDynamicTunnels || tunnelHandler.CurrentTunnel.Version == 3)
             {
                 PlayerInfo localPlayer = FindLocalPlayer();
@@ -2209,17 +2204,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     return;
                 }
 
-                Logger.Log($"Starting V3 tunnel bridge.");
+                Logger.Log($"Starting V3 tunnel bridge via TunnelHandler.");
 
-                v3Bridge = new V3GameTunnelBridge(
-                    localId: localV3Player.Id,
-                    localPort: localV3Player.PlayerGameId,
-                    allPlayers: v3PlayerInfos,
-                    tunnelHandler: tunnelHandler);
-
-                v3Bridge.Start();
-
-                Logger.Log("V3 tunnel bridge started successfully");
+                tunnelHandler.StartGameBridge(
+                    localV3Player.Id,
+                    localV3Player.PlayerGameId,
+                    v3PlayerInfos);
             }
 
             base.StartGame();
