@@ -217,7 +217,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 if (parsed.Payload.Length == 0 && !parsed.NegotiationType.HasValue)
                     return;
 
-                PacketHandler? handler = null;
+                PacketHandler handler = null;
 
                 if (parsed.NegotiationType.HasValue)
                     _handlers.TryGetValue((parsed.ReceiverId, parsed.SenderId), out handler);

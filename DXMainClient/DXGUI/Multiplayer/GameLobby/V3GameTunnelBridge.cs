@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Diagnostics;
 using DTAClient.Domain.Multiplayer.CnCNet;
+using System.Buffers.Binary;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
@@ -120,9 +121,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         byte[] gameData = _localGameClient.Receive(ref remoteEndPoint);
                         _gameEndpoint = remoteEndPoint;
 
-                        if (gameData.Length >= 8)
-                        {
-                            ushort receiverId = SwapBytes(BitConverter.ToUInt16(gameData, 2));
+                            ushort receiverId = BinaryPrimitives.ReadUInt16BigEndian(gameData.AsSpan(2));
                             var recipient = _otherPlayers.FirstOrDefault(p => p.PlayerGameId == receiverId);
 
                             if (recipient != null)
@@ -130,11 +129,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                                     TunnelPacketType.GameData, gameData);
                             else
                                 Debug.Print($"V3GameTunnelBridge: No matching recipient found for receiverId={receiverId}");
-                        }
-                        else
-                        {
-                            Debug.Print("V3GameTunnelBridge: Received too-short packet from game");
-                        }
                     }
                     catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
                     {
@@ -157,8 +151,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             Debug.Print("V3GameTunnelBridge: Bridge worker thread stopped");
         }
-
-        private static ushort SwapBytes(ushort val) => (ushort)((val << 8) | (val >> 8));
+        
         public void Dispose()
         {
             Stop();
