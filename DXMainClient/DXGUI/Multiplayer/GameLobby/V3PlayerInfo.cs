@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 using DTAClient.Domain.Multiplayer.CnCNet;
@@ -129,6 +130,58 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 Negotiator.Dispose();
                 Negotiator = null;
             }
+        }
+
+        public bool StartNegotiation(V3PlayerInfo localPlayer, TunnelHandler tunnelHandler, List<CnCNetTunnel> availableTunnels)
+        {
+            if (this == localPlayer)
+                return true;
+
+            HasNegotiated = false;
+            IsNegotiating = true;
+
+            Debug.Print($"[ADD PLAYER] Adding player {Name} (ID: {Id})");
+
+            if (Negotiator != null)
+                return true;
+
+            if (availableTunnels.Count == 0)
+            {
+                Debug.Print($"[ADD PLAYER] No available V3 tunnels for negotiation with {Name}");
+                HasNegotiated = true;
+                IsNegotiating = false;
+                return false;
+            }
+
+            var negotiator = new V3PlayerNegotiator(localPlayer, this, availableTunnels, tunnelHandler);
+            SetNegotiator(negotiator);
+
+            var negotiationTask = Task.Run(() => NegotiationWorkerAsync(negotiator), CancellationToken.None);
+
+            return true;
+        }
+
+        private async Task NegotiationWorkerAsync(V3PlayerNegotiator negotiator)
+        {
+            Debug.Print($"Negotiation task started for {Name}");
+
+            try
+            {
+                bool success = await negotiator.NegotiateAsync().ConfigureAwait(false);
+                if (!success)
+                {
+                    Debug.Print($"[NEGOTIATION FAILED] For player {Name}, cleaning up.");
+                    await Task.Yield();
+                    StopNegotiation();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"[NEGOTIATION ERROR] For player {Name}: {ex.Message}");
+                StopNegotiation();
+            }
+
+            Debug.Print($"Negotiation task finished for {Name}");
         }
     }
 }
