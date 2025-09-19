@@ -161,7 +161,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 int previousPing = tunnel.PingInMs;
                 tunnel.UpdatePing();
 
-                // Check for tunnel failure
                 if (previousPing > 0 && (tunnel.PingInMs <= 0 || tunnel.PingInMs > 2000))
                     TunnelFailed?.Invoke(this, tunnel);
 
@@ -365,11 +364,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             {
                 Logger.Log("TunnelHandler: Stopping game bridge");
 
-                var bridge = GameTunnelBridge;
+                GameTunnelBridge.Stop();
+                GameTunnelBridge.Dispose();
                 GameTunnelBridge = null;
-
-                bridge.Stop();
-                bridge.Dispose();
 
                 Logger.Log("TunnelHandler: Game bridge stopped");
             }
@@ -378,31 +375,18 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public void InitializeV3Communicator()
         {
             if (!_v3Communicator.IsInitialized && Tunnels.Count > 0)
-            {
                 _v3Communicator.Initialize(Tunnels);
-            }
         }
 
-        public void RegisterV3PacketHandler(uint localId, uint remoteId, PacketHandler handler)
-        {
-            _v3Communicator.RegisterHandler(localId, remoteId, handler);
-        }
+        public void RegisterV3PacketHandler(uint localId, uint remoteId, PacketHandler handler) => _v3Communicator.RegisterHandler(localId, remoteId, handler);
 
-        public void UnregisterV3PacketHandler(uint localId, uint remoteId)
-        {
-            _v3Communicator.UnregisterHandler(localId, remoteId);
-        }
+        public void UnregisterV3PacketHandler(uint localId, uint remoteId) => _v3Communicator.UnregisterHandler(localId, remoteId);
 
-        public void SendRegistrationToAllTunnels(uint localId, List<CnCNetTunnel> tunnels = null)
-        {
-            _v3Communicator.SendRegistrationToAllTunnels(localId, tunnels);
-        }
+        public void SendRegistrationToAllTunnels(uint localId, List<CnCNetTunnel> tunnels = null) => _v3Communicator.SendRegistrationToAllTunnels(localId, tunnels);
 
         public void SendPacket(CnCNetTunnel tunnel, uint senderId, uint receiverId,
             TunnelPacketType packetType, byte[] payload = null)
-        {
-            _v3Communicator.SendPacket(tunnel, senderId, receiverId, packetType, payload);
-        }
+        => _v3Communicator.SendPacket(tunnel, senderId, receiverId, packetType, payload);
 
         #endregion
 

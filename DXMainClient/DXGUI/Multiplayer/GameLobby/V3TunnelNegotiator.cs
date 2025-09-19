@@ -469,11 +469,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public void Dispose()
         {
-            _negotiationCts.Cancel();
             _negotiationCts.Dispose();
             _tunnelAckReceived.TrySetCanceled();
             _negotiationCompletionSource.TrySetCanceled();
-            _tunnelHandler?.UnregisterV3PacketHandler(_localPlayer.Id, _remotePlayer.Id);
+            _tunnelHandler.UnregisterV3PacketHandler(_localPlayer.Id, _remotePlayer.Id);
         }
     }
 

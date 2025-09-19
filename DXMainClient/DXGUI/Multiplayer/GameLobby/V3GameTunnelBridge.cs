@@ -63,7 +63,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             _isRunning = true;
             _bridgeThread.Start();
-            Debug.Print("V3GameTunnelBridge: Started successfully using TunnelHandler");
+            Debug.Print("V3GameTunnelBridge: Started successfully");
         }
 
         public void Stop()
@@ -77,12 +77,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             _cts.Cancel();
             _tunnelHandler?.UnregisterV3PacketHandler(_localId, 0);
             _localGameClient?.Close();
-
-            if (_bridgeThread.IsAlive)
-            {
-                if (!_bridgeThread.Join(TimeSpan.FromSeconds(5)))
-                    Debug.Print("V3GameTunnelBridge: Bridge thread did not stop.");
-            }
 
             Debug.Print("V3GameTunnelBridge: Stopped");
         }
@@ -128,7 +122,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                         if (gameData.Length >= 8)
                         {
-                            ushort receiverId = SwapBytes(BitConverter.ToUInt16(gameData, 2)); // [senderId][receiverId][payload]
+                            ushort receiverId = SwapBytes(BitConverter.ToUInt16(gameData, 2));
                             var recipient = _otherPlayers.FirstOrDefault(p => p.PlayerGameId == receiverId);
 
                             if (recipient != null)

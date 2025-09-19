@@ -90,10 +90,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
         }
 
-        public TunnelTestResult GetTunnelResult(CnCNetTunnel tunnel)
-        {
-            return TunnelResults.TryGetValue(tunnel, out var result) ? result : null;
-        }
+        public TunnelTestResult GetTunnelResult(CnCNetTunnel tunnel) =>  TunnelResults.TryGetValue(tunnel, out var result) ? result : null;
 
         public CnCNetTunnel SelectBestTunnel(List<CnCNetTunnel> availableTunnels)
         {

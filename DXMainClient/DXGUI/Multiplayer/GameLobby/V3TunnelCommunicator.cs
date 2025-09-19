@@ -41,15 +41,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
     {
         private static readonly byte[] MAGIC_BYTES = { 0x45, 0x4A, 0x45, 0x4A, 0x45, 0x4A }; //EJEJEJ
 
-        private bool _initialized = false;
         private UdpClient _udpClient;
         private Thread _receiveThread;
         private CancellationTokenSource _receiveCts;
         private readonly ConcurrentDictionary<IPEndPoint, CnCNetTunnel> _endpointToTunnel = new();
         private readonly ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler> _handlers = new();
-        private readonly object _initLock = new object();
+        private readonly object _initLock = new();
 
-        public bool IsInitialized => _initialized;
+        public bool IsInitialized => _udpClient != null;
 
         /// <summary>
         /// Initializes the communicator with the provided V3-compatible tunnels,
@@ -59,7 +58,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         {
             lock (_initLock)
             {
-                if (_initialized)
+                if (IsInitialized)
                     return;
 
                 var v3Tunnels = tunnels.Where(t => t.Version == 3 &&
@@ -73,7 +72,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 }
 
                 InitializeConnection(v3Tunnels);
-                _initialized = true;
                 Logger.Log($"V3 tunnel communicator initialized with {v3Tunnels.Count} tunnels");
             }
         }
@@ -142,7 +140,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// </summary>
         public void SendRegistrationToAllTunnels(uint localId, List<CnCNetTunnel> tunnels = null)
         {
-            if (!_initialized)
+            if (!IsInitialized)
                 return;
 
             var targetTunnels = tunnels?.Where(t => t.Version == 3).ToList() ??
@@ -169,7 +167,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public void SendPacket(CnCNetTunnel tunnel, uint senderId, uint receiverId,
             TunnelPacketType packetType, byte[] payload = null)
         {
-            if (!_initialized || tunnel == null)
+            if (!IsInitialized || tunnel == null)
             {
                 Debug.Print($"[SEND ERROR] Cannot send packet - communicator not initialized or tunnel is null");
                 return;
@@ -188,35 +186,27 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         private void InitializeConnection(List<CnCNetTunnel> tunnels)
         {
-            try
+            _udpClient = new UdpClient(0);
+            _udpClient.Client.ReceiveBufferSize = 65536;
+            _udpClient.Client.SendBufferSize = 65536;
+
+            _endpointToTunnel.Clear();
+            foreach (var tunnel in tunnels)
             {
-                _udpClient = new UdpClient(0);
-                _udpClient.Client.ReceiveBufferSize = 65536;
-                _udpClient.Client.SendBufferSize = 65536;
-
-                _endpointToTunnel.Clear();
-                foreach (var tunnel in tunnels)
-                {
-                    var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
-                    _endpointToTunnel[endpoint] = tunnel;
-                    Debug.Print($"Added tunnel mapping: {endpoint} -> {tunnel.Name}");
-                }
-
-                _receiveCts = new CancellationTokenSource();
-                _receiveThread = new Thread(ReceivePackets)
-                {
-                    IsBackground = true,
-                    Name = "V3TunnelReceive"
-                };
-                _receiveThread.Start();
-
-                Debug.Print($"Initialized V3 tunnel connection with {_endpointToTunnel.Count} tunnels on local port {((IPEndPoint)_udpClient.Client.LocalEndPoint).Port}");
+                var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
+                _endpointToTunnel[endpoint] = tunnel;
+                Debug.Print($"Added tunnel mapping: {endpoint} -> {tunnel.Name}");
             }
-            catch (Exception ex)
+
+            _receiveCts = new CancellationTokenSource();
+            _receiveThread = new Thread(ReceivePackets)
             {
-                Debug.Print($"Failed to initialize V3 connection: {ex.Message}");
-                throw;
-            }
+                IsBackground = true,
+                Name = "V3TunnelReceive"
+            };
+            _receiveThread.Start();
+
+            Debug.Print($"Initialized V3 tunnel connection with {_endpointToTunnel.Count} tunnels on local port {((IPEndPoint)_udpClient.Client.LocalEndPoint).Port}");
         }
 
         private void ProcessReceivedPacket(byte[] data, long receivedTime, CnCNetTunnel tunnel)
@@ -351,17 +341,11 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
             lock (_initLock)
             {
-                if (!_initialized)
+                if (!IsInitialized)
                     return;
 
-                _initialized = false;
                 _receiveCts?.Cancel();
-
                 _udpClient?.Dispose();
-
-                if (_receiveThread != null && _receiveThread.IsAlive)
-                    if (!_receiveThread.Join(2000))
-                        Debug.Print("V3 receive thread did not terminate gracefully");
 
                 _endpointToTunnel.Clear();
                 _handlers.Clear();
