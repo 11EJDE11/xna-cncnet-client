@@ -39,6 +39,7 @@ namespace DTAConfig.OptionPanels
 
         XNAClientCheckBox chkUseLegacyTunnels;
         XNAClientCheckBox chkUseDynamicTunnels;
+        XNAClientCheckBox chkUseP2P;
 
         GameCollection gameCollection;
 
@@ -121,7 +122,7 @@ namespace DTAConfig.OptionPanels
             chkPersistentMode.Name = nameof(chkPersistentMode);
             chkPersistentMode.ClientRectangle = new Rectangle(
                 chkSkipLoginWindow.X,
-                chkSkipLoginWindow.Bottom + 12, 0, 0);
+                chkSkipLoginWindow.Bottom + 9, 0, 0);
             chkPersistentMode.Text = "Stay connected outside of the CnCNet lobby".L10N("Client:DTAConfig:StayConnect");
             chkPersistentMode.CheckedChanged += ChkPersistentMode_CheckedChanged;
 
@@ -131,7 +132,7 @@ namespace DTAConfig.OptionPanels
             chkConnectOnStartup.Name = nameof(chkConnectOnStartup);
             chkConnectOnStartup.ClientRectangle = new Rectangle(
                 chkSkipLoginWindow.X,
-                chkPersistentMode.Bottom + 12, 0, 0);
+                chkPersistentMode.Bottom + 9, 0, 0);
             chkConnectOnStartup.Text = "Connect automatically on client startup".L10N("Client:DTAConfig:ConnectOnStart");
             chkConnectOnStartup.AllowChecking = false;
 
@@ -141,7 +142,7 @@ namespace DTAConfig.OptionPanels
             chkDiscordIntegration.Name = nameof(chkDiscordIntegration);
             chkDiscordIntegration.ClientRectangle = new Rectangle(
                 chkSkipLoginWindow.X,
-                chkConnectOnStartup.Bottom + 12, 0, 0);
+                chkConnectOnStartup.Bottom + 9, 0, 0);
             chkDiscordIntegration.Text = "Show detailed game info in Discord status".L10N("Client:DTAConfig:DiscordStatus");
 
             if (ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled)
@@ -160,7 +161,7 @@ namespace DTAConfig.OptionPanels
             chkAllowGameInvitesFromFriendsOnly.Name = nameof(chkAllowGameInvitesFromFriendsOnly);
             chkAllowGameInvitesFromFriendsOnly.ClientRectangle = new Rectangle(
                 chkDiscordIntegration.X,
-                chkDiscordIntegration.Bottom + 12, 0, 0);
+                chkDiscordIntegration.Bottom + 9, 0, 0);
             chkAllowGameInvitesFromFriendsOnly.Text = "Only receive game invitations from friends".L10N("Client:DTAConfig:FriendsOnly");
 
             AddChild(chkAllowGameInvitesFromFriendsOnly);
@@ -170,7 +171,7 @@ namespace DTAConfig.OptionPanels
             chkSteamIntegration.Name = nameof(chkSteamIntegration);
             chkSteamIntegration.ClientRectangle = new Rectangle(
                 chkAllowGameInvitesFromFriendsOnly.X,
-                chkAllowGameInvitesFromFriendsOnly.Bottom + 12, 0, 0);
+                chkAllowGameInvitesFromFriendsOnly.Bottom + 9, 0, 0);
             chkSteamIntegration.Text = "Show the game being played in Steam".L10N("Client:DTAConfig:SteamStatus");
 
             AddChild(chkSteamIntegration);
@@ -179,7 +180,7 @@ namespace DTAConfig.OptionPanels
             chkUseLegacyTunnels.Name = nameof(chkUseLegacyTunnels);
             chkUseLegacyTunnels.ClientRectangle = new Rectangle(
                 chkSteamIntegration.X,
-                chkSteamIntegration.Bottom + 12, 0, 0);
+                chkSteamIntegration.Bottom + 9, 0, 0);
             chkUseLegacyTunnels.Text = "Use legacy tunnels when hosting".L10N("Client:DTAConfig:LegacyTunnels");
             chkUseLegacyTunnels.CheckedChanged += ChkUseLegacyTunnels_CheckedChanged;
 
@@ -189,10 +190,18 @@ namespace DTAConfig.OptionPanels
             chkUseDynamicTunnels.Name = nameof(chkUseDynamicTunnels);
             chkUseDynamicTunnels.ClientRectangle = new Rectangle(
                 chkUseLegacyTunnels.X,
-                chkUseLegacyTunnels.Bottom + 12, 0, 0);
+                chkUseLegacyTunnels.Bottom + 9, 0, 0);
             chkUseDynamicTunnels.Text = "Use dynamic tunnels when hosting".L10N("Client:DTAConfig:DynamicTunnels");
-
             AddChild(chkUseDynamicTunnels);
+
+            chkUseP2P = new XNAClientCheckBox(WindowManager);
+            chkUseP2P.Name = nameof(chkUseP2P);
+            chkUseP2P.ClientRectangle = new Rectangle(
+                chkUseDynamicTunnels.X,
+                chkUseDynamicTunnels.Bottom + 9, 0, 0);
+            chkUseP2P.Text = "Use P2P when applicable".L10N("Client:DTAConfig:UseP2P");
+            chkUseP2P.CheckedChanged += ChkUseP2P_CheckedChanged;
+            AddChild(chkUseP2P);
         }
 
         private void InitAllowPrivateMessagesFromDropdown()
@@ -319,6 +328,25 @@ namespace DTAConfig.OptionPanels
             chkUseDynamicTunnels.AllowChecking = !chkUseLegacyTunnels.Checked;
         }
 
+        private void ChkUseP2P_CheckedChanged(object sender, EventArgs e)
+        {
+            if (chkUseP2P.Checked)
+            {
+                var msgBox = XNAMessageBox.ShowYesNoDialog(WindowManager,
+                    "Enable P2P?",
+                    "Peer-to-Peer mode will expose your IP to other players.\n\n" +
+                    "Risks:\n" +
+                    "    [-] Location exposure\n" +
+                    "    [-] DDoS attacks\n" +
+                    "Do you still want to enable it?");
+
+                msgBox.NoClickedAction = _ =>
+                {
+                    chkUseP2P.Checked = false;
+                };
+            }
+        }
+
         private void ChkSkipLoginWindow_CheckedChanged(object sender, EventArgs e)
         {
             CheckConnectOnStartupAllowance();
@@ -357,6 +385,7 @@ namespace DTAConfig.OptionPanels
             chkSteamIntegration.Checked = IniSettings.SteamIntegration;
             chkUseLegacyTunnels.Checked = IniSettings.UseLegacyTunnels;
             chkUseDynamicTunnels.Checked = IniSettings.UseDynamicTunnels;
+            chkUseP2P.Checked = IniSettings.UseP2P;
 
             chkDiscordIntegration.Checked = !ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled
                 && IniSettings.DiscordIntegration;
@@ -395,13 +424,9 @@ namespace DTAConfig.OptionPanels
             IniSettings.SkipConnectDialog.Value = chkSkipLoginWindow.Checked;
             IniSettings.PersistentMode.Value = chkPersistentMode.Checked;
             IniSettings.SteamIntegration.Value = chkSteamIntegration.Checked;
-
             IniSettings.UseLegacyTunnels.Value = chkUseLegacyTunnels.Checked;
-
-            if (IniSettings.UseDynamicTunnels.Value != chkUseDynamicTunnels.Checked)
-            {
-                IniSettings.UseDynamicTunnels.Value = chkUseDynamicTunnels.Checked;
-            }
+            IniSettings.UseDynamicTunnels.Value = chkUseDynamicTunnels.Checked;
+            IniSettings.UseP2P.Value = chkUseP2P.Checked;
 
             if (!ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled)
             {

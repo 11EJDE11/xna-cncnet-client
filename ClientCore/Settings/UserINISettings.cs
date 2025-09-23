@@ -108,6 +108,7 @@ namespace ClientCore
 
             UseLegacyTunnels = new BoolSetting(iniFile, MULTIPLAYER, "UseLegacyTunnels", false);
             UseDynamicTunnels = new BoolSetting(iniFile, MULTIPLAYER, "UseDynamicTunnels", true);
+            UseP2P = new BoolSetting(iniFile, MULTIPLAYER, "UseP2P", false);
 
             CheckForUpdates = new BoolSetting(iniFile, OPTIONS, "CheckforUpdates", true);
 
@@ -208,6 +209,7 @@ namespace ClientCore
 
         public BoolSetting UseLegacyTunnels { get; private set; }
         public BoolSetting UseDynamicTunnels { get; private set; }
+        public BoolSetting UseP2P { get; private set; }
 
         public BoolSetting NotifyOnUserListChange { get; private set; }
 
@@ -362,7 +364,7 @@ namespace ClientCore
         public bool IsGameFiltersApplied()
             => ShowFriendGamesOnly.Value != DEFAULT_SHOW_FRIENDS_ONLY_GAMES
                || HideLockedGames.Value != DEFAULT_HIDE_LOCKED_GAMES
-               || HidePasswordedGames.Value != DEFAULT_HIDE_PASSWORDED_GAMES 
+               || HidePasswordedGames.Value != DEFAULT_HIDE_PASSWORDED_GAMES
                || HideIncompatibleGames.Value != DEFAULT_HIDE_INCOMPATIBLE_GAMES
                || MaxPlayerCount.Value != DEFAULT_MAX_PLAYER_COUNT;
 
