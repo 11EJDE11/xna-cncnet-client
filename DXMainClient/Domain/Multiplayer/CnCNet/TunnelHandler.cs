@@ -388,6 +388,11 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             TunnelPacketType packetType, byte[] payload = null)
         => _v3Communicator.SendPacket(tunnel, senderId, receiverId, packetType, payload);
 
+        public async Task<IPEndPoint> InitializeP2PConnectionAsync(int timeoutMs = 5000)
+        {
+            return await _v3Communicator.InitializeP2PConnectionAsync(timeoutMs);
+        }
+
         #endregion
 
         protected override void Dispose(bool disposing)

@@ -11,6 +11,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet
 {
@@ -31,7 +32,8 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         TunnelAck = 0x05,
         NegotiationFailed = 0x06,
         Register = 0x07,
-        GameData = 0x08
+        GameData = 0x08,
+        P2PEndpointExchange = 0x09
     }
 
     public delegate void PacketHandler(uint senderId, uint receiverId,
@@ -47,7 +49,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private readonly ConcurrentDictionary<IPEndPoint, CnCNetTunnel> _endpointToTunnel = new();
         private readonly ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler> _handlers = new();
         private readonly object _initLock = new();
-
+        private UdpClient _p2pClient;
+        private Thread _p2pReceiveThread;
+        private CancellationTokenSource _p2pReceiveCts;
+        private TaskCompletionSource<IPEndPoint> _stunTcs;
         public bool IsInitialized => _udpClient != null;
 
         /// <summary>
@@ -328,6 +333,195 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
         }
 
+        public async Task<IPEndPoint> InitializeP2PConnectionAsync(int timeoutMs = 5000)
+        {
+            var officialTunnels = _endpointToTunnel.Values
+                .Where(t => t.Official && t.Version == 3)
+                .ToList();
+
+            if (officialTunnels.Count == 0)
+                return null;
+
+            if (_p2pClient == null)
+                InitializeP2PClient();
+
+            const int STUN_ID = 26262;
+            var stunPacket = new byte[48];
+            new Random().NextBytes(stunPacket);
+
+            // STUN ID at offset 6
+            var stunIdBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder((short)STUN_ID));
+            Array.Copy(stunIdBytes, 0, stunPacket, 0, 2);
+
+            _stunTcs = new TaskCompletionSource<IPEndPoint>();
+
+            try
+            {
+                foreach (var tunnel in officialTunnels)
+                {
+                    try
+                    {
+                        await _p2pClient.SendAsync(stunPacket, stunPacket.Length, tunnel.Address, 8054);
+                        Debug.Print($"[STUN] Sent request to {tunnel.Name}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.Print($"[STUN] Failed to send to {tunnel.Name}: {ex.Message}");
+                    }
+                }
+
+                using var cts = new CancellationTokenSource(timeoutMs);
+                try
+                {
+                    cts.Token.Register(() => _stunTcs.TrySetResult(null));
+                    return await _stunTcs.Task;
+                }
+                catch (OperationCanceledException)
+                {
+                    Debug.Print("[STUN] Request timed out");
+                    return null;
+                }
+            }
+            finally
+            {
+                _stunTcs = null;
+            }
+        }
+
+        private void InitializeP2PClient()
+        {
+            if (_p2pClient != null)
+                return;
+
+            _p2pClient = new UdpClient(0);
+            _p2pClient.Client.ReceiveBufferSize = 65536;
+            _p2pClient.Client.SendBufferSize = 65536;
+
+            _p2pReceiveCts = new CancellationTokenSource();
+            _p2pReceiveThread = new Thread(P2PReceivePackets)
+            {
+                IsBackground = true,
+                Name = "P2PReceive"
+            };
+            _p2pReceiveThread.Start();
+
+            var localPort = ((IPEndPoint)_p2pClient.Client.LocalEndPoint).Port;
+            Debug.Print($"[P2P] Initialized P2P client on local port {localPort}");
+        }
+
+        private void P2PReceivePackets()
+        {
+            try
+            {
+                IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Any, 0);
+                while (!_p2pReceiveCts.Token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        byte[] data = _p2pClient.Receive(ref remoteEndpoint);
+                        ProcessP2PPacket(data, remoteEndpoint);
+                    }
+                    catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
+                    {
+                        continue;
+                    }
+                    catch (SocketException ex) when (ex.SocketErrorCode == SocketError.Interrupted ||
+                                                   ex.SocketErrorCode == SocketError.OperationAborted)
+                    {
+                        Debug.Print("[P2P] Socket closed, exiting receive thread");
+                        break;
+                    }
+                    catch (SocketException ex)
+                    {
+                        Debug.Print($"[P2P] Socket error: {ex.SocketErrorCode} - {ex.Message}");
+                    }
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                Debug.Print("[P2P] Socket disposed");
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"[P2P] Unexpected error in receive thread: {ex.Message}");
+            }
+            finally
+            {
+                Debug.Print("[P2P] Receive thread exiting");
+            }
+        }
+
+        private void ProcessP2PPacket(byte[] data, IPEndPoint remoteEndpoint)
+        {
+            try
+            {
+                if (data.Length == 40 && _stunTcs != null)
+                {
+                    var tunnel = FindTunnelByAddress(remoteEndpoint.Address);
+                    if (tunnel != null)
+                    {
+                        var result = ParseStunResponse(data);
+                        if (result != null)
+                        {
+                            Debug.Print($"[STUN] Got response from {tunnel.Name}: {result}");
+                            _stunTcs?.TrySetResult(result);
+                            return;
+                        }
+                    }
+                }
+
+                // we wil handle other P2P packets here in future
+
+
+                Debug.Print($"[P2P] Received {data.Length} bytes from {remoteEndpoint}");
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"[P2P] Error processing packet from {remoteEndpoint}: {ex.Message}");
+            }
+        }
+
+        private IPEndPoint ParseStunResponse(byte[] response)
+        {
+            if (response == null || response.Length != 40)
+                return null;
+
+            try
+            {
+                // Deobfuscate
+                byte b0 = (byte)(response[0] ^ 0x20);
+                byte b1 = (byte)(response[1] ^ 0x20);
+                byte b2 = (byte)(response[2] ^ 0x20);
+                byte b3 = (byte)(response[3] ^ 0x20);
+                byte p0 = (byte)(response[4] ^ 0x20);
+                byte p1 = (byte)(response[5] ^ 0x20);
+
+                // IP address
+                var ip = new IPAddress(new byte[] { b0, b1, b2, b3 });
+
+                // port (unsigned big-endian)
+                int port = (p0 << 8) | p1;
+
+                return new IPEndPoint(ip, port);
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"[STUN] Failed to parse response: {ex.Message}");
+                return null;
+            }
+        }
+
+        private CnCNetTunnel FindTunnelByAddress(IPAddress address)
+        {
+            return _endpointToTunnel.Values.FirstOrDefault(tunnel =>
+                IPAddress.Parse(tunnel.Address).Equals(address));
+        }
+
+        public IPEndPoint GetP2PLocalEndPoint()
+        {
+            return _p2pClient?.Client?.LocalEndPoint as IPEndPoint;
+        }
+
         public void Dispose()
         {
             Dispose(true);
@@ -355,6 +549,15 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 _receiveThread = null;
                 _receiveCts = null;
 
+                if (_p2pClient != null)
+                {
+                    _p2pReceiveCts?.Cancel();
+                    _p2pClient?.Dispose();
+                    _p2pReceiveCts?.Dispose();
+                    _p2pClient = null;
+                    _p2pReceiveThread = null;
+                    _p2pReceiveCts = null;
+                }
                 Debug.Print("V3 tunnel communicator disposed.");
             }
         }

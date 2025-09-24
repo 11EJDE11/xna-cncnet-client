@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -67,7 +68,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public ushort PlayerGameId { get; set; }
         public bool HasNegotiated { get; set; }
         public bool IsNegotiating { get; set; }
-
+        public bool P2PEnabled { get; set; }
+        public IPEndPoint P2PEndpoint { get; set; }
         public CnCNetTunnel Tunnel { get; set; }
         public V3PlayerNegotiator Negotiator { get; set; }
 

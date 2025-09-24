@@ -134,7 +134,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 false, ToggleNegotiationStatus));
             AddChatBoxCommand(new ChatBoxCommand("TUNNELMODE",
                 "Change tunnel mode (0=V3 static, 1=V3 dynamic, 2=V2 legacy) (game host only)".L10N("Client:Main:TunnelModeCommand"),
-                false, HandleTunnelModeCommand));
+                true, HandleTunnelModeCommand));
+            AddChatBoxCommand(new ChatBoxCommand("P2P",
+                "Enables or disables P2P".L10N("Client:Main:P2PEnableDisable"),
+                false, HandleP2PCommand));
 
         }
 
@@ -183,6 +186,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private readonly List<V3PlayerInfo> v3PlayerInfos = new();
         private bool useLegacyTunnels; //uses global setting, can be toggled per game by host
         private bool useDynamicTunnels; //uses global setting, can be toggled per game by host
+        private bool useP2P;
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, NegotiationStatus>> negotiationStatuses = new();
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, int>> playerPingMatrix = new();
         private TunnelNegotiationStatusPanel negotiationStatusPanel;
@@ -354,6 +358,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 channel.ChannelModesChanged += Channel_ChannelModesChanged;
                 AIPlayers.Clear();
             }
+            this.useP2P = UserINISettings.Instance.UseP2P;
 
             var localV3Player = v3PlayerInfos.FirstOrDefault(p => p.Name == ProgramConstants.PLAYERNAME);
 
@@ -1154,7 +1159,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     ));
                 }
                 else
+                {
                     v3Player.PlayerIndex = i;
+                    if (v3Player.Name == ProgramConstants.PLAYERNAME)
+                        v3Player.P2PEnabled = useP2P;
+                }
             }
         }
 
@@ -1553,6 +1562,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (useDynamicTunnels && Players.Count > 1)
                 foreach (var v3Player in v3PlayerInfos.Where(p => p.Name != ProgramConstants.PLAYERNAME && p.HasNegotiated == false && p.IsNegotiating == false))
                     StartTunnelNegotiationForPlayer(v3Player);
+        }
+
+        private void HandleP2PCommand(string args)
+        {
+            useP2P = !useP2P;
+            AddNotice($"P2P status: {(useP2P ? "enabled" : "disabled")}");
+            //todo: reneg
         }
 
         private void HandleTunnelModeCommand(string args)

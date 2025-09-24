@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using ClientCore;
 using Rampastring.Tools;
+using System.Net;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
@@ -86,6 +87,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             try
             {
                 Debug.Print($"Starting negotiation with player {_remotePlayer.Name} (ID: {_remotePlayer.Id}, Decider: {_isDecider})");
+
+                //returns our local endpoint from the STUN request
+                _localPlayer.P2PEndpoint = await _tunnelHandler.InitializeP2PConnectionAsync();
 
                 _negotiationCompletionSource = new TaskCompletionSource<bool>();
                 _tunnelAckReceived = new TaskCompletionSource<bool>();
@@ -248,7 +252,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         continue;
 
                     _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
-                        TunnelPacketType.Connected);
+                        TunnelPacketType.Connected, BitConverter.GetBytes(_localPlayer.P2PEnabled));
 
                     if (!result.FirstConnectedSentTime.HasValue)
                         result.FirstConnectedSentTime = DateTime.UtcNow;
@@ -267,8 +271,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                 result.PingResults.Add(ping);
 
-                _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
-                    TunnelPacketType.PingRequest, BitConverter.GetBytes(i));
+                _tunnelHandler.SendPacket(
+                    tunnel,
+                    _localPlayer.Id,
+                    _remotePlayer.Id,
+                    TunnelPacketType.PingRequest,
+                    BitConverter.GetBytes(i)
+                        .Concat(new[] { _localPlayer.P2PEnabled ? (byte)1 : (byte)0 })
+                        .ToArray()
+                );
 
                 //Debug.Print($"[PING REQUEST] ID {i} sent to {_remotePlayer.Name} on {tunnel.Name}");
 
@@ -306,8 +317,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     //if we receive a connected packet, move on to the pinging phase.
                     if (_isDecider && !result.ConnectedReceived)
                     {
+                        _remotePlayer.P2PEnabled = BitConverter.ToBoolean(payload,0);
                         result.ConnectedReceived = true;
                         result.ConnectedTcs.TrySetResult(true);
+                        TryInitiateP2PEndpointExchange(tunnel);
                         _ = PerformPingsAsync(tunnel, result);
                     }
                     break;
@@ -316,9 +329,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     //if we receive a ping request, reply with a ping response that contains the ping ID.
                     if (!_isDecider)
                     {
+                        _remotePlayer.P2PEnabled = BitConverter.ToBoolean(payload, 4);
                         var tunnelResult = _remotePlayer.GetTunnelResult(tunnel);
                         if (tunnelResult != null)
                             tunnelResult.PingRequestReceived = true;
+
+                        TryInitiateP2PEndpointExchange(tunnel);
 
                         _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
                             TunnelPacketType.PingResponse, payload);
@@ -368,6 +384,43 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     _negotiationCompletionSource.TrySetResult(false);
                     RaiseNegotiationResult(null, "Remote player reported negotiation failure");
                     break;
+
+                case TunnelPacketType.P2PEndpointExchange:
+                    HandleP2PEndpointExchange(payload, tunnel);
+                    break;
+            }
+        }
+
+        private void HandleP2PEndpointExchange(byte[] payload, CnCNetTunnel tunnel)
+        {
+            var receivedEndpoint = DeserializeIPEndPoint(payload);
+            if (receivedEndpoint != null)
+            {
+                _remotePlayer.P2PEndpoint = receivedEndpoint;
+                Debug.Print($"[P2P ENDPOINT] Received endpoint from {_remotePlayer.Name}: {receivedEndpoint}");
+
+                if (!_isDecider && _localPlayer.P2PEndpoint != null)
+                {
+                    var localEndpointData = SerializeIPEndPoint(_localPlayer.P2PEndpoint);
+                    _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
+                        TunnelPacketType.P2PEndpointExchange, localEndpointData);
+                    Debug.Print($"[P2P ENDPOINT] Sent local endpoint to {_remotePlayer.Name}: {_localPlayer.P2PEndpoint}");
+                }
+            }
+        }
+
+        private void TryInitiateP2PEndpointExchange(CnCNetTunnel tunnel)
+        {
+            if (_localPlayer.P2PEnabled && _remotePlayer.P2PEnabled &&
+                _localPlayer.P2PEndpoint != null && _remotePlayer.P2PEndpoint == null)
+            {
+                if (_isDecider)
+                {
+                    var localEndpointData = SerializeIPEndPoint(_localPlayer.P2PEndpoint);
+                    _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
+                        TunnelPacketType.P2PEndpointExchange, localEndpointData);
+                    Debug.Print($"[P2P ENDPOINT] Decider sent local endpoint to {_remotePlayer.Name}: {_localPlayer.P2PEndpoint}");
+                }
             }
         }
 
@@ -465,6 +518,39 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             Debug.Print($"=== End Results for {_remotePlayer.Name} ===");
             Logger.Log($"=== End Results for {_remotePlayer.Name} ===");
+        }
+
+        private static byte[] SerializeIPEndPoint(IPEndPoint endpoint)
+        {
+            if (endpoint == null)
+                return new byte[6];
+
+            var addressBytes = endpoint.Address.GetAddressBytes();
+            if (addressBytes.Length != 4)
+                return new byte[6];
+
+            var result = new byte[6];
+            Array.Copy(addressBytes, 0, result, 0, 4);
+            result[4] = (byte)(endpoint.Port & 0xFF);
+            result[5] = (byte)((endpoint.Port >> 8) & 0xFF);
+            return result;
+        }
+
+        private static IPEndPoint DeserializeIPEndPoint(byte[] data)
+        {
+            if (data == null || data.Length != 6)
+                return null;
+
+            try
+            {
+                var address = new IPAddress(new byte[] { data[0], data[1], data[2], data[3] });
+                var port = data[4] | (data[5] << 8);
+                return new IPEndPoint(address, port);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public void Dispose()
