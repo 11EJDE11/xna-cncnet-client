@@ -31,6 +31,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private const uint CYCLES_PER_TUNNEL_LIST_REFRESH = 6;
         private static readonly int[] SUPPORTED_TUNNEL_VERSIONS = { 2, 3 };
 
+        private readonly object _refreshLock = new object();
+        private bool _refreshInProgress = false;
+
         public TunnelHandler(WindowManager wm, CnCNetManager connectionManager) : base(wm.Game)
         {
             this.wm = wm;
@@ -92,10 +95,27 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         private void RefreshTunnelsAsync()
         {
+            lock (_refreshLock)
+            {
+                if (_refreshInProgress)
+                    return;
+                _refreshInProgress = true;
+            }
+
             Task.Factory.StartNew(() =>
             {
+                try
+                {
                 List<CnCNetTunnel> tunnels = RefreshTunnels();
                 wm.AddCallback(new Action<List<CnCNetTunnel>>(HandleRefreshedTunnels), tunnels);
+                }
+                finally
+                {
+                    lock (_refreshLock)
+                    {
+                        _refreshInProgress = false;
+                    }
+                }
             });
         }
 
