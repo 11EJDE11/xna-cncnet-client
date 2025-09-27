@@ -37,6 +37,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private XNALabel lblPassword;
 
         private XNALabel lblTunnelServer;
+        private XNALabel lblDynamicTunnels;
         private TunnelListBox lbTunnelList;
 
         private XNAClientButton btnCreateGame;
@@ -52,6 +53,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         {
             lbTunnelList = new TunnelListBox(WindowManager, tunnelHandler);
             lbTunnelList.Name = nameof(lbTunnelList);
+
+            lbTunnelList.TargetVersion = UserINISettings.Instance.UseLegacyTunnels ? 2 : 3;
 
             SkillLevelOptions = ClientConfiguration.Instance.SkillLevelOptions.Split(',');
 
@@ -136,6 +139,14 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             lblTunnelServer.Enabled = false;
             lblTunnelServer.Visible = false;
 
+            lblDynamicTunnels = new XNALabel(WindowManager);
+            lblDynamicTunnels.Name = nameof(lblDynamicTunnels);
+            lblDynamicTunnels.ClientRectangle = new Rectangle(UIDesignConstants.EMPTY_SPACE_SIDES +
+                UIDesignConstants.CONTROL_HORIZONTAL_MARGIN, lblTunnelServer.Y, 0, 0);
+            lblDynamicTunnels.Text = "Dynamic tunnels enabled".L10N("Client:Main:DynamicTunnelsInfo");
+            lblDynamicTunnels.Enabled = false;
+            lblDynamicTunnels.Visible = false;
+
             lbTunnelList.X = UIDesignConstants.EMPTY_SPACE_SIDES +
                 UIDesignConstants.CONTROL_HORIZONTAL_MARGIN;
             lbTunnelList.Y = lblTunnelServer.Bottom + UIDesignConstants.CONTROL_VERTICAL_MARGIN;
@@ -174,11 +185,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             AddChild(tbPassword);
             AddChild(lblPassword);
             AddChild(btnDisplayAdvancedOptions);
-            if (!UserINISettings.Instance.UseDynamicTunnels)
-            {
-                AddChild(lblTunnelServer);
-                AddChild(lbTunnelList);
-            }
+            AddChild(lblDynamicTunnels);
+            AddChild(lblTunnelServer);
+            AddChild(lbTunnelList);
             AddChild(btnCreateGame);
             if (!ClientConfiguration.Instance.DisableMultiplayerGameLoading)
                 AddChild(btnLoadMPGame);
@@ -299,6 +308,22 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         public void Refresh()
         {
+            if (UserINISettings.Instance.UseDynamicTunnels && !UserINISettings.Instance.UseLegacyTunnels)
+            {
+                lblDynamicTunnels.Visible = true;
+                lbTunnelList.Visible = false;
+                lblTunnelServer.Visible = false;
+                btnDisplayAdvancedOptions.Visible = false;
+            }
+            else
+            {
+                lblDynamicTunnels.Visible = false;
+                lbTunnelList.Visible = true;
+                lblTunnelServer.Visible = true;
+                btnDisplayAdvancedOptions.Visible = !(Name == "GameCreationWindow_Advanced");
+            }
+            lblDynamicTunnels.Visible = UserINISettings.Instance.UseDynamicTunnels && !UserINISettings.Instance.UseLegacyTunnels;
+            lbTunnelList.TargetVersion = UserINISettings.Instance.UseLegacyTunnels ? 2 : 3;
             btnLoadMPGame.AllowClick = AllowLoadingGame();
         }
 
