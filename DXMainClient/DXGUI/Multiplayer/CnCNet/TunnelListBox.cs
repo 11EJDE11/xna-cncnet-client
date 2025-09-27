@@ -39,6 +39,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             AllowKeyboardInput = true;
         }
 
+        public int? TargetVersion { get; set; }
         public event EventHandler ListRefreshed;
 
         private readonly TunnelHandler tunnelHandler;
@@ -54,8 +55,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         /// </summary>
         private List<CnCNetTunnel> GetFilteredTunnels()
         {
-            int targetVersion = UserINISettings.Instance.UseLegacyTunnels ? 2 : 3;
-
+            int targetVersion = TargetVersion ?? (UserINISettings.Instance.UseLegacyTunnels ? 2 : 3);
             return tunnelHandler.Tunnels.Where(tunnel => tunnel.Version == targetVersion).ToList();
         }
 

@@ -584,16 +584,23 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
             else
             {
-                AddNotice(string.Format("Current tunnel server: {0} {1} (Players: {2}/{3}) (Official: {4})".L10N("Client:Main:TunnelInfo"),
-                        tunnelHandler.CurrentTunnel.Name, tunnelHandler.CurrentTunnel.Country, tunnelHandler.CurrentTunnel.Clients, tunnelHandler.CurrentTunnel.MaxClients, tunnelHandler.CurrentTunnel.Official
+                AddNotice(string.Format("Current tunnel server: {0} {1} (Players: {2}/{3}) (Official: {4}) Version: {5}".L10N("Client:Main:TunnelInfo"),
+                        tunnelHandler.CurrentTunnel.Name, tunnelHandler.CurrentTunnel.Country, tunnelHandler.CurrentTunnel.Clients, tunnelHandler.CurrentTunnel.MaxClients, tunnelHandler.CurrentTunnel.Official, tunnelHandler.CurrentTunnel.Version.ToString()
                     ));
             }
         }
 
         private void ShowTunnelSelectionWindow(string description)
         {
+            if (useDynamicTunnels)
+            {
+                AddNotice("Cannot manually select tunnel when using dynamic tunnels.", Color.Yellow);
+                return;
+            }
+
             tunnelSelectionWindow.Open(description,
-                tunnelHandler.CurrentTunnel?.Address);
+                tunnelHandler.CurrentTunnel?.Address,
+                useLegacyTunnels ? 2 : 3);
         }
 
         private void TunnelSelectionWindow_TunnelSelected(object sender, TunnelEventArgs e)
@@ -1102,7 +1109,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 v3PlayerInfo.Id = id;
                 v3PlayerInfo.PlayerIndex = playerIndex;
 
-                SetPlayerTunnelInfo(v3PlayerInfo);
+                if (!useLegacyTunnels && !useDynamicTunnels)
+                    v3PlayerInfo.Tunnel = tunnelHandler.CurrentTunnel;
                 v3PlayerInfo.PlayerGameId = (ushort)port;
             }
 
@@ -1112,18 +1120,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             else 
                 address = v3PlayerInfo.Tunnel.Address + ":" + v3PlayerInfo.Tunnel.Port;
             return (id, player.Name, address);
-        }
-
-        private void SetPlayerTunnelInfo(V3PlayerInfo v3PlayerInfo)
-        {
-            if (v3PlayerInfo == null)
-            {
-                if (!useDynamicTunnels)
-                {
-                    // for non-dynamic mode, all players use the host's tunnel
-                    v3PlayerInfo.Tunnel = tunnelHandler.CurrentTunnel;
-                }
-            }
         }
 
         private uint GeneratePlayerID(string playerName)
@@ -1976,7 +1972,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (newUseDynamic == useDynamicTunnels && newUseLegacy == useLegacyTunnels)
                 return;
 
-            if (!newUseDynamic)
+            if (!newUseDynamic && useDynamicTunnels)
             {
                 foreach (var v3Player in v3PlayerInfos)
                 {
@@ -2003,11 +1999,26 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 ? $"Tunnel mode changed to {modeDescription}."
                 : $"The game host has changed tunnel mode to {modeDescription}.");
 
-            switch (tunnelMode)
+            if (IsHost)
             {
-                case TUNNEL_MODE_V3_DYNAMIC:
+                if (newUseDynamic)
+                {
                     btnChangeTunnel.Disable();
+                    tunnelHandler.CurrentTunnel = null;
+                }
+                else
+                {
+                    btnChangeTunnel.Enable();
+                    AutoSelectBestTunnel();
+                }
+            }
+            else
+            {
+                btnChangeTunnel.Disable();
+            }
 
+            if (newUseDynamic)
+            {
                     foreach (var v3Player in v3PlayerInfos)
                     {
                         v3Player.Tunnel = null;
@@ -2020,21 +2031,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         foreach (var v3Player in v3PlayerInfos.Where(p => p.Name != ProgramConstants.PLAYERNAME))
                             StartTunnelNegotiationForPlayer(v3Player);
                     }
-                    break;
-
-                case TUNNEL_MODE_V2_LEGACY:
-                case TUNNEL_MODE_V3_STATIC:
-                    if (IsHost)
-                    {
-                        btnChangeTunnel.Enable();
-                        AutoSelectBestTunnel();
                     }
                     else
-                        btnChangeTunnel.Disable();
-                    break;
-            }
-
-            if (!newUseDynamic)
             {
                 negotiationStatuses.Clear();
                 playerPingMatrix.Clear();
