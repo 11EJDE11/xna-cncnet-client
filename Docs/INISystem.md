@@ -288,6 +288,59 @@ _(inherits XNADropDown)_
 ToolTip=            ; text, tooltip for dropdown.
 ```
 
+#### [XNAClientJSONLabel](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAClientJSONLabel.cs)
+
+_(inherits [XNALabel](#XNALabel))_
+
+Fetches JSON data from a web API and displays extracted values. Automatically refreshes at configured intervals.
+Uses Newtonsoft.Json for JSONPath queries. JSONPath expressions are embedded directly in the `Text` template as placeholders.
+
+```ini
+[SOMEJSONLABEL]              ; XNAClientJSONLabel
+Template=                    ; text,    template string with {JSONPath:Format} placeholders.
+                             ;          JSONPath expressions are evaluated and replaced with values.
+                             ;          Supports .NET format specifiers:
+                             ;          - {path:N0} -> number with thousand separator (1,234)
+                             ;          - {path:F2} -> decimal with 2 places (12.34)
+                             ;          - {path:C} -> currency ($1,234.56)
+                             ;          - {path:P} -> percentage (12.34%)
+                             ;          - {path:yyyy-MM-dd} -> date format
+                             ;          Example: "{YR[0].player_name} ({YR[0].points:N0} pts)"
+LoadingText=                 ; text,    optional text to display while fetching data.
+                             ;          If not specified, shows the Text template.
+URL=                         ; string,  the URL endpoint to fetch JSON data from.
+MaxResults=0                 ; integer, maximum number of results per JSONPath query. 0 is all.
+                             ;          Useful when a JSONPath returns multiple values but you only want first N.
+RefreshIntervalSeconds=300   ; integer, how often to refresh data in seconds.
+                             ;          Set to 0 to fetch once and never refresh. Default: 300.
+TimeoutSeconds=10            ; integer, request timeout in seconds. Default: 10.
+FallbackText=N/A             ; text,    text to display on error or unavailable data. Default: "N/A".
+```
+
+**JSONPath Syntax:**
+See Newtonsoft.Json documentation: https://www.newtonsoft.com/json/help/html/QueryJsonSelectToken.htm
+
+Common patterns:
+- `object.property` -> access nested property
+- `array[0]` -> specific array index
+- `array[*]` -> all array elements (use MaxResults to limit)
+- `array[0:3]` -> array slice (first 3 elements)
+- `$..*` -> recursive descent
+
+**Example Usage:**
+```ini
+[lblLadderRankings]
+$Type=XNAClientJSONLabel
+Text={YR[0].player_name} ({YR[0].points:N0}), {YR[1].player_name} ({YR[1].points:N0}), {YR[2].player_name} ({YR[2].points:N0})
+LoadingText=Loading...
+Location=310,48
+URL=https://ladder.cncnet.org/api/v1/qm/ladder/rankings
+RefreshIntervalSeconds=0
+FallbackText=—
+FontIndex=1
+```
+This displays: "OneSided (1,500), Realest (1,215), WaY2eZ (1,131)"
+
 #### [XNAColorDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAColorDropDown.cs)
 
 _(inherits XNAClientDropDown)_
