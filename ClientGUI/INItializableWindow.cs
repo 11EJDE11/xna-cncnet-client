@@ -88,6 +88,14 @@ namespace ClientGUI
             return configIniPath.Exists ? configIniPath.FullName : null;
         }
 
+        /// <summary>
+        /// Override to provide the INI file path for the WYSIWYG editor.
+        /// </summary>
+        public override string GetINIFilePath()
+        {
+            return GetConfigPath();
+        }
+
         public override void Initialize()
         {
             if (_initialized)

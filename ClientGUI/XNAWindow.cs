@@ -45,6 +45,20 @@ namespace ClientGUI
                 GetINIAttributes(new CCIniFile(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), GENERIC_WINDOW_INI)));
         }
 
+        public override string GetINIFilePath()
+        {
+            if (SafePath.GetFile(ProgramConstants.GetResourcePath(), FormattableString.Invariant($"{Name}.ini")).Exists)
+                return SafePath.CombineFilePath(ProgramConstants.GetResourcePath(), FormattableString.Invariant($"{Name}.ini"));
+            else if (SafePath.GetFile(ProgramConstants.GetBaseResourcePath(), FormattableString.Invariant($"{Name}.ini")).Exists)
+                return SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), FormattableString.Invariant($"{Name}.ini"));
+            else if (SafePath.GetFile(ProgramConstants.GetResourcePath(), GENERIC_WINDOW_INI).Exists)
+                return SafePath.CombineFilePath(ProgramConstants.GetResourcePath(), GENERIC_WINDOW_INI);
+            else if (SafePath.GetFile(ProgramConstants.GetBaseResourcePath(), GENERIC_WINDOW_INI).Exists)
+                return SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), GENERIC_WINDOW_INI);
+
+            return null;
+        }
+
         /// <summary>
         /// Reads this window's attributes from an INI file.
         /// </summary>
