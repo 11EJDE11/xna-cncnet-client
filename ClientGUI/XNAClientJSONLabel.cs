@@ -3,26 +3,22 @@ using Rampastring.XNAUI;
 using Rampastring.Tools;
 using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
+using ClientCore;
 using ClientCore.Extensions;
 
 namespace ClientGUI;
 
 public class XNAClientJSONLabel : XNALabel
 {
-    public string URL { get; set; }
+    public string DataSourceID { get; set; }
     public string Template { get; set; }
     public string LoadingText { get; set; }
     public int MaxResults { get; set; } = 0;
-    public int RefreshIntervalSeconds { get; set; } = 300;
-    public int TimeoutSeconds { get; set; } = 10;
     public string FallbackText { get; set; } = "N/A";
 
-    private CancellationTokenSource _loopCTS;
-    private bool _fetchTaskStarted = false;
+    private Action<string, bool> _dataSourceCallback;
+    private bool _isSubscribed = false;
 
     public XNAClientJSONLabel(WindowManager windowManager) : base(windowManager)
     {
@@ -38,16 +34,16 @@ public class XNAClientJSONLabel : XNALabel
         else if (!string.IsNullOrEmpty(Template))
             Text = Template;
 
-        Logger.Log($"XNAClientJSONLabel [{Name}]: Template='{Template}', LoadingText='{LoadingText}'");
+        TrySubscribeToDataSource();
     }
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
         switch (key)
         {
-            case "URL":
-                URL = value;
-                TryStartFetchLoop();
+            case "DataSourceID":
+                DataSourceID = value;
+                TrySubscribeToDataSource();
                 return;
             case "Template":
                 Template = value.FromIniString();
@@ -58,12 +54,6 @@ public class XNAClientJSONLabel : XNALabel
             case "MaxResults":
                 MaxResults = Conversions.IntFromString(value, 0);
                 return;
-            case "RefreshIntervalSeconds":
-                RefreshIntervalSeconds = Conversions.IntFromString(value, 300);
-                return;
-            case "TimeoutSeconds":
-                TimeoutSeconds = Conversions.IntFromString(value, 10);
-                return;
             case "FallbackText":
                 FallbackText = value.FromIniString();
                 return;
@@ -72,51 +62,22 @@ public class XNAClientJSONLabel : XNALabel
         base.ParseControlINIAttribute(iniFile, key, value);
     }
 
-    private void TryStartFetchLoop()
+    private void TrySubscribeToDataSource()
     {
-        if (!_fetchTaskStarted && !string.IsNullOrEmpty(URL))
-        {
-            _fetchTaskStarted = true;
-            _loopCTS = new CancellationTokenSource();
-            Task.Run(() => FetchLoopAsync(_loopCTS.Token));
-        }
-    }
-
-    private async Task FetchLoopAsync(CancellationToken token)
-    {
-        while (!token.IsCancellationRequested)
-        {
-            try
-            {
-                await FetchAndUpdateAsync(token);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"XNAClientJSONLabel error: {ex.Message}");
-                WindowManager.AddCallback(() => Text = FallbackText, null);
-            }
-
-            if (RefreshIntervalSeconds <= 0)
-                break;
-
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(RefreshIntervalSeconds), token);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-        }
-    }
-
-    private async Task FetchAndUpdateAsync(CancellationToken token)
-    {
-        if (token.IsCancellationRequested)
+        if (_isSubscribed || string.IsNullOrEmpty(DataSourceID))
             return;
 
-        string json = await DownloadWithTimeout(URL, TimeoutSeconds, token);
-        if (json == null)
+        _dataSourceCallback = OnDataReceived;
+        bool success = JSONDataSourceManager.Instance.Subscribe(DataSourceID, _dataSourceCallback);
+        if (success)
+            _isSubscribed = true;
+        else
+            Text = FallbackText;
+    }
+
+    private void OnDataReceived(string json, bool isError)
+    {
+        if (isError || json == null)
         {
             WindowManager.AddCallback(() => Text = FallbackText, null);
             return;
@@ -129,7 +90,7 @@ public class XNAClientJSONLabel : XNALabel
         }
         catch (Exception ex)
         {
-            Logger.Log($"XNAClientJSONLabel processing error: {ex.Message}");
+            Logger.Log($"XNAClientJSONLabel [{Name}] processing error: {ex.Message}");
             WindowManager.AddCallback(() => Text = FallbackText, null);
         }
     }
@@ -185,39 +146,6 @@ public class XNAClientJSONLabel : XNALabel
         return result;
     }
 
-    private async Task<string> DownloadWithTimeout(string url, int timeoutSeconds, CancellationToken token)
-    {
-        using (var cts = new CancellationTokenSource())
-        using (var webClient = new WebClient())
-        {
-            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), cts.Token);
-
-            var downloadTask = webClient.DownloadStringTaskAsync(url);
-
-            var completed = await Task.WhenAny(downloadTask, timeoutTask);
-
-            if (completed == timeoutTask)
-            {
-                Logger.Log($"XNAClientJSONLabel timeout for {url}");
-                return null;
-            }
-
-            cts.Cancel();
-
-            if (token.IsCancellationRequested)
-                return null;
-
-            try
-            {
-                return await downloadTask;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"XNAClientJSONLabel download error: {ex.Message}");
-                return null;
-            }
-        }
-    }
 
     private List<string> ParseJSONPath(string json, string path)
     {
@@ -244,7 +172,12 @@ public class XNAClientJSONLabel : XNALabel
 
     public override void Kill()
     {
-        _loopCTS?.Cancel();
+        if (_isSubscribed && !string.IsNullOrEmpty(DataSourceID) && _dataSourceCallback != null)
+        {
+            JSONDataSourceManager.Instance.Unsubscribe(DataSourceID, _dataSourceCallback);
+            _isSubscribed = false;
+        }
+
         base.Kill();
     }
 }

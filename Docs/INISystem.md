@@ -292,11 +292,12 @@ ToolTip=            ; text, tooltip for dropdown.
 
 _(inherits [XNALabel](#XNALabel))_
 
-Fetches JSON data from a web API and displays extracted values. Automatically refreshes at configured intervals.
-Uses Newtonsoft.Json for JSONPath queries. JSONPath expressions are embedded directly in the `Text` template as placeholders.
+Displays data from a JSON or ini web request. Datasources are defined in ClientDefinitions.
+Uses Newtonsoft.Json for JSONPath queries. JSONPath expressions are embedded directly in the `Template` template as placeholders.
 
 ```ini
 [SOMEJSONLABEL]              ; XNAClientJSONLabel
+DataSourceID=                ; text,    the datasource ID defined in ClientDefinitions.
 Template=                    ; text,    template string with {JSONPath:Format} placeholders.
                              ;          JSONPath expressions are evaluated and replaced with values.
                              ;          Supports .NET format specifiers:
@@ -308,12 +309,8 @@ Template=                    ; text,    template string with {JSONPath:Format} p
                              ;          Example: "{YR[0].player_name} ({YR[0].points:N0} pts)"
 LoadingText=                 ; text,    optional text to display while fetching data.
                              ;          If not specified, shows the Text template.
-URL=                         ; string,  the URL endpoint to fetch JSON data from.
 MaxResults=0                 ; integer, maximum number of results per JSONPath query. 0 is all.
                              ;          Useful when a JSONPath returns multiple values but you only want first N.
-RefreshIntervalSeconds=300   ; integer, how often to refresh data in seconds.
-                             ;          Set to 0 to fetch once and never refresh. Default: 300.
-TimeoutSeconds=10            ; integer, request timeout in seconds. Default: 10.
 FallbackText=N/A             ; text,    text to display on error or unavailable data. Default: "N/A".
 ```
 
@@ -329,17 +326,17 @@ Common patterns:
 
 **Example Usage:**
 ```ini
-[lblLadderRankings]
+[lblTopPlayer1]
 $Type=XNAClientJSONLabel
-Text={YR[0].player_name} ({YR[0].points:N0}), {YR[1].player_name} ({YR[1].points:N0}), {YR[2].player_name} ({YR[2].points:N0})
+DataSourceID=TopPlayers
+Template=1. {YR[0].player_name} - {YR[0].points:N0} pts
 LoadingText=Loading...
-Location=310,48
-URL=https://ladder.cncnet.org/api/v1/qm/ladder/rankings
-RefreshIntervalSeconds=0
-FallbackText=—
+FallbackText=---
 FontIndex=1
+RemapColor=230,230,230
+Location=360,166
 ```
-This displays: "OneSided (1,500), Realest (1,215), WaY2eZ (1,131)"
+This displays: "OneSided (1,500)"
 
 #### [XNAColorDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAColorDropDown.cs)
 
@@ -599,4 +596,7 @@ TrustedDomains=                ; comma-separated list of strings,
                                ; example: cncnet.org,github.com,moddb.com
 SaveSkirmishGameOptions=false  ; boolean, whether or not previously used game options in skirmish are saved across client sessions
 SaveCampaignGameOptions=false  ; boolean, whether or not previously used game options in campaign are saved across client sessions
+
+[DataSources]
+DataSourceID=URL,RefreshIntervalSeconds,TimeoutSeconds,Format ;example: TopPlayers=https://ladder.cncnet.org/api/v1/qm/ladder/rankings,300,10,json|ini
 ```
