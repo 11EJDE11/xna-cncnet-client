@@ -166,7 +166,6 @@ namespace DTAClient.DXGUI.Multiplayer
             );
             btnCancel.LeftClick += BtnCancel_LeftClick;
 
-            // Add controls to scroll panel's content
             scrollPanel.GetContentPanel().AddChild(lblTitle);
             scrollPanel.GetContentPanel().AddChild(chkBoxFriendsOnly);
             scrollPanel.GetContentPanel().AddChild(chkBoxHideLockedGames);
@@ -176,11 +175,9 @@ namespace DTAClient.DXGUI.Multiplayer
             scrollPanel.GetContentPanel().AddChild(ddMaxPlayerCount);
             scrollPanel.GetContentPanel().AddChild(btnResetDefaults);
 
-            // Add buttons to bottom panel
             bottomPanel.AddChild(btnSave);
             bottomPanel.AddChild(btnCancel);
 
-            // Add panels to main panel
             AddChild(scrollPanel);
             AddChild(bottomPanel);
         }
@@ -262,7 +259,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 };
 
                 // "All" item has no icon
-                dropdown.AddItem(new XNADropDownItem { Text = "All".L10N("Client:Main:FilterAllGames") });
+                dropdown.AddItem(new XNADropDownItem { Text = "All".L10N("Client:Main:FilterAllGames"), Texture = null });
 
                 Texture2D enabledIconTexture = null;
                 if (!string.IsNullOrEmpty(checkbox.EnabledIcon))
@@ -344,10 +341,18 @@ namespace DTAClient.DXGUI.Multiplayer
                     ClientRectangle = new Rectangle(columnX, rowY + topRowHeight + itemVerticalSpacing, dropdownWidth, UIDesignConstants.BUTTON_HEIGHT)
                 };
 
-                dropdown.AddItem("All".L10N("Client:Main:FilterAllGames"));
+                dropdown.AddItem(new XNADropDownItem { Text = "All".L10N("Client:Main:FilterAllGames"), Texture = null });
 
-                foreach (var item in lobbyDropdown.Items)
-                    dropdown.AddItem(new XNADropDownItem { Text = item.Text, Tag = item.Tag, Texture = item.Texture });
+                for (int i = 0; i < lobbyDropdown.Items.Count; i++)
+                {
+                    var item = lobbyDropdown.Items[i];
+                    Texture2D itemTexture = null;
+
+                    if (lobbyDropdown.Icons != null && i < lobbyDropdown.Icons.Length && !string.IsNullOrEmpty(lobbyDropdown.Icons[i]))
+                        itemTexture = AssetLoader.LoadTexture(lobbyDropdown.Icons[i]);
+
+                    dropdown.AddItem(new XNADropDownItem { Text = item.Text, Tag = item.Tag, Texture = itemTexture });
+                }
 
                 dropdown.SelectedIndex = 0;
 
