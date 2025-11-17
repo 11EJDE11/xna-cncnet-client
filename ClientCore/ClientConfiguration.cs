@@ -64,6 +64,8 @@ namespace ClientCore
                 networkDefinitionsIni = new IniFile(networkDefsPath);
             }
 
+            JSONDataSourceManager.Instance.LoadFromINI(clientDefinitionsIni);
+
             RefreshTranslationGameFiles();
         }
 
