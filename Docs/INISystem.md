@@ -317,13 +317,6 @@ FallbackText=N/A             ; text,    text to display on error or unavailable 
 **JSONPath Syntax:**
 See Newtonsoft.Json documentation: https://www.newtonsoft.com/json/help/html/QueryJsonSelectToken.htm
 
-Common patterns:
-- `object.property` -> access nested property
-- `array[0]` -> specific array index
-- `array[*]` -> all array elements (use MaxResults to limit)
-- `array[0:3]` -> array slice (first 3 elements)
-- `$..*` -> recursive descent
-
 **Example Usage:**
 ```ini
 [lblTopPlayer1]
@@ -336,7 +329,7 @@ FontIndex=1
 RemapColor=230,230,230
 Location=360,166
 ```
-This displays: "OneSided (1,500)"
+This displays: "1. OneSided - 1,500 pts"
 
 #### [XNAColorDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAColorDropDown.cs)
 
