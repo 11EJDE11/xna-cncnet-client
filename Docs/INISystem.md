@@ -279,7 +279,7 @@ OptionX=                        ; string,  the text option for dropdown. `X` is 
 ; Option_ThirdOption=33333
 ```
 
-#### [XNAClientDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAClientDropDown.cs)
+#### [XNAClientDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAClientCheckBox.cs)
 
 _(inherits XNADropDown)_
 
@@ -287,6 +287,49 @@ _(inherits XNADropDown)_
 [SOMECLIENTDROPDOWN] ; XNAClientDropDown
 ToolTip=            ; text, tooltip for dropdown.
 ```
+
+#### [XNAClientJSONLabel](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAClientJSONLabel.cs)
+
+_(inherits [XNALabel](#XNALabel))_
+
+Displays data from a JSON or ini web request. Datasources are defined in ClientDefinitions.
+Uses Newtonsoft.Json for JSONPath queries. JSONPath expressions are embedded directly in the `Template` template as placeholders.
+
+```ini
+[SOMEJSONLABEL]              ; XNAClientJSONLabel
+DataSourceID=                ; text,    the datasource ID defined in ClientDefinitions.
+Template=                    ; text,    template string with {JSONPath:Format} placeholders.
+                             ;          JSONPath expressions are evaluated and replaced with values.
+                             ;          Supports .NET format specifiers:
+                             ;          - {path:N0} -> number with thousand separator (1,234)
+                             ;          - {path:F2} -> decimal with 2 places (12.34)
+                             ;          - {path:C} -> currency ($1,234.56)
+                             ;          - {path:P} -> percentage (12.34%)
+                             ;          - {path:yyyy-MM-dd} -> date format
+                             ;          Example: "{YR[0].player_name} ({YR[0].points:N0} pts)"
+LoadingText=                 ; text,    optional text to display while fetching data.
+                             ;          If not specified, shows the Text template.
+MaxResults=0                 ; integer, maximum number of results per JSONPath query. 0 is all.
+                             ;          Useful when a JSONPath returns multiple values but you only want first N.
+FallbackText=N/A             ; text,    text to display on error or unavailable data. Default: "N/A".
+```
+
+**JSONPath Syntax:**
+See Newtonsoft.Json documentation: https://www.newtonsoft.com/json/help/html/QueryJsonSelectToken.htm
+
+**Example Usage:**
+```ini
+[lblTopPlayer1]
+$Type=XNAClientJSONLabel
+DataSourceID=TopPlayers
+Template=1. {YR[0].player_name} - {YR[0].points:N0} pts
+LoadingText=Loading...
+FallbackText=---
+FontIndex=1
+RemapColor=230,230,230
+Location=360,166
+```
+This displays: "1. OneSided - 1,500 pts"
 
 #### [XNAColorDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAColorDropDown.cs)
 
@@ -546,4 +589,7 @@ TrustedDomains=                ; comma-separated list of strings,
                                ; example: cncnet.org,github.com,moddb.com
 SaveSkirmishGameOptions=false  ; boolean, whether or not previously used game options in skirmish are saved across client sessions
 SaveCampaignGameOptions=false  ; boolean, whether or not previously used game options in campaign are saved across client sessions
+
+[DataSources]
+DataSourceID=URL,RefreshIntervalSeconds,TimeoutSeconds,Format ;example: TopPlayers=https://ladder.cncnet.org/api/v1/qm/ladder/rankings,300,10,json|ini
 ```
