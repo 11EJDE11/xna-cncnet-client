@@ -279,14 +279,15 @@ namespace DTAClient.DXGUI.Multiplayer
             }
 
             var broadcastableSettings = gameLobby.GetBroadcastableSettings();
-            var optionIcons = new List<(Texture2D, string)>();
+            var optionIconsWithText = new List<(Texture2D icon, string text, int sortOrder)>();
+            var optionIconsOnly = new List<(Texture2D icon, int sortOrder)>();
 
             for (int i = 0; i < broadcastableSettings.Count && i < cncnetGame.BroadcastedGameOptionValues.Length; i++)
             {
                 var setting = broadcastableSettings[i];
                 int value = cncnetGame.BroadcastedGameOptionValues[i];
 
-                if (setting is GameLobbyCheckBox checkbox && checkbox.IconShownInGameInfo)
+                if (setting is GameLobbyCheckBox checkbox && checkbox.ShowInGameInformationPanel)
                 {
                     bool isChecked = value != 0;
                     string iconName = isChecked ? checkbox.EnabledIcon : checkbox.DisabledIcon;
@@ -295,24 +296,49 @@ namespace DTAClient.DXGUI.Multiplayer
                         Texture2D icon = AssetLoader.LoadTexture(iconName);
                         if (icon != null)
                         {
-                            string text = $"{checkbox.Text}: {(isChecked ? "On".L10N("Client:Main:On") : "Off".L10N("Client:Main:Off"))}";
-                            optionIcons.Add((icon, text));
+                            if (checkbox.ShowInGameInformationPanelAsIconOnly)
+                            {
+                                // Show icon only
+                                optionIconsOnly.Add((icon, checkbox.SortOrder));
+                            }
+                            else
+                            {
+                                // Show with text
+                                string text = $"{checkbox.Text}: {(isChecked ? "On".L10N("Client:Main:On") : "Off".L10N("Client:Main:Off"))}";
+                                optionIconsWithText.Add((icon, text, checkbox.SortOrder));
+                            }
                         }
                     }
                 }
-                else if (setting is GameLobbyDropDown dropdown && dropdown.IconShownInGameInfo &&
-                         !string.IsNullOrEmpty(dropdown.Icon) && value >= 0 && value < dropdown.Items.Count)
+                else if (setting is GameLobbyDropDown dropdown && dropdown.ShowInGameInformationPanel)
                 {
-                    Texture2D icon = AssetLoader.LoadTexture(dropdown.Icon);
-                    if (icon != null)
+                    if (dropdown.Icons != null && dropdown.Icons.Length > 0 &&
+                        value >= 0 && value < dropdown.Icons.Length)
                     {
-                        string text = $"{dropdown.OptionName}: {dropdown.Items[value].Text}";
-                        optionIcons.Add((icon, text));
+                        string iconName = dropdown.Icons[value];
+                        if (!string.IsNullOrEmpty(iconName))
+                        {
+                            Texture2D icon = AssetLoader.LoadTexture(iconName);
+                            if (icon != null)
+                            {
+                                if (dropdown.ShowInGameInformationPanelAsIconOnly)
+                                {
+                                    // Show icon only
+                                    optionIconsOnly.Add((icon, dropdown.SortOrder));
+                                }
+                                else
+                                {
+                                    // Show with text
+                                    string text = $"{dropdown.OptionName}: {dropdown.Items[value].Text}";
+                                    optionIconsWithText.Add((icon, text, dropdown.SortOrder));
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            if (optionIcons.Count == 0)
+            if (optionIconsWithText.Count == 0 && optionIconsOnly.Count == 0)
             {
                 pnlGameOptions.Visible = false;
                 return;
@@ -326,14 +352,54 @@ namespace DTAClient.DXGUI.Multiplayer
 
             int currentY = divider.Bottom + legendPadding;
 
-            int maxIconWidth = optionIcons.Max(option => option.Item1.Width);
-
-            foreach (var (icon, label) in optionIcons)
+            // First show icons in a row
+            if (optionIconsOnly.Count > 0)
             {
-                var iconPanel = new GameInformationIconPanel(WindowManager, icon, label, maxIconWidth);
-                iconPanel.ClientRectangle = new Rectangle(leftColumnPositionX, currentY, pnlGameOptions.Width, legendIconHeight);
-                pnlGameOptions.AddChild(iconPanel);
-                currentY += legendIconHeight + 2;
+                var sortedIconsOnly = optionIconsOnly.OrderBy(x => x.sortOrder).ToList();
+                int iconX = leftColumnPositionX;
+                const int iconSpacing = 4;
+                int maxIconHeight = sortedIconsOnly.Max(x => x.icon.Height);
+
+                foreach (var (icon, _) in sortedIconsOnly)
+                {
+                    var iconPanel = new GameInformationIconOnlyPanel(WindowManager, icon);
+                    iconPanel.ClientRectangle = new Rectangle(iconX, currentY, icon.Width, icon.Height);
+                    pnlGameOptions.AddChild(iconPanel);
+                    iconX += icon.Width + iconSpacing;
+                }
+
+                currentY += maxIconHeight + legendPadding;
+            }
+
+            // Then show icons with text ( two columns)
+            if (optionIconsWithText.Count > 0)
+            {
+                var sortedIconsWithText = optionIconsWithText.OrderBy(x => x.sortOrder).ToList();
+                int maxIconWidth = sortedIconsWithText.Max(option => option.icon.Width);
+
+                int itemIndex = 0;
+                int leftY = currentY;
+                int rightY = currentY;
+
+                foreach (var (icon, label, _) in sortedIconsWithText)
+                {
+                    bool isLeftColumn = (itemIndex % 2 == 0);
+                    int xPosition = isLeftColumn ? leftColumnPositionX : rightColumnPositionX;
+                    int yPosition = isLeftColumn ? leftY : rightY;
+
+                    var iconPanel = new GameInformationIconPanel(WindowManager, icon, label, maxIconWidth);
+                    iconPanel.ClientRectangle = new Rectangle(xPosition, yPosition, columnWidth, legendIconHeight);
+                    pnlGameOptions.AddChild(iconPanel);
+
+                    if (isLeftColumn)
+                        leftY += legendIconHeight + 2;
+                    else
+                        rightY += legendIconHeight + 2;
+
+                    itemIndex++;
+                }
+
+                currentY = Math.Max(leftY, rightY);
             }
 
             pnlGameOptions.Height = currentY + legendPadding;

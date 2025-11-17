@@ -263,20 +263,45 @@ namespace DTAClient.DXGUI.Multiplayer
 
             for (int i = 0; i < broadcastableSettings.Count && i < cncnetGame.BroadcastedGameOptionValues.Length; i++)
             {
-                if (broadcastableSettings[i] is not GameLobbyCheckBox checkbox || !checkbox.IconShownInGameList)
-                    continue;
+                var setting = broadcastableSettings[i];
+                int value = cncnetGame.BroadcastedGameOptionValues[i];
 
-                string iconName = cncnetGame.BroadcastedGameOptionValues[i] != 0 ? checkbox.EnabledIcon : checkbox.DisabledIcon;
-                if (string.IsNullOrEmpty(iconName))
-                    continue;
-
-                Texture2D icon = AssetLoader.LoadTexture(iconName);
-                if (icon != null)
+                if (setting is GameLobbyCheckBox checkbox && checkbox.ShowInGameList)
                 {
-                    if (checkbox.IconShownInGameListOnRight)
-                        rightIcons.Add(icon);
-                    else
-                        leftIcons.Add(icon);
+                    string iconName = value != 0 ? checkbox.EnabledIcon : checkbox.DisabledIcon;
+                    if (string.IsNullOrEmpty(iconName))
+                        continue;
+
+                    Texture2D icon = AssetLoader.LoadTexture(iconName);
+                    if (icon != null)
+                    {
+                        if (checkbox.ShowInGameListOnRight)
+                            rightIcons.Add(icon);
+                        else
+                            leftIcons.Add(icon);
+                    }
+                }
+                else if (setting is GameLobbyDropDown dropdown && dropdown.ShowInGameList)
+                {
+                    if (dropdown.Icons == null || dropdown.Icons.Length == 0)
+                        continue;
+
+                    // Use the icon for the selected value
+                    if (value >= 0 && value < dropdown.Icons.Length)
+                    {
+                        string iconName = dropdown.Icons[value];
+                        if (string.IsNullOrEmpty(iconName))
+                            continue;
+
+                        Texture2D icon = AssetLoader.LoadTexture(iconName);
+                        if (icon != null)
+                        {
+                            if (dropdown.ShowInGameListOnRight)
+                                rightIcons.Add(icon);
+                            else
+                                leftIcons.Add(icon);
+                        }
+                    }
                 }
             }
 
@@ -381,6 +406,16 @@ namespace DTAClient.DXGUI.Multiplayer
 
                 var hostedGame = (GenericHostedGame)lbItem.Tag;
 
+                // left-side game option icons
+                var (leftIcons, rightIcons) = GetGameOptionIcons(hostedGame);
+                foreach (var icon in leftIcons)
+                {
+                    DrawTexture(icon,
+                        new Rectangle(x, height,
+                        icon.Width, icon.Height), Color.White);
+                    x += icon.Width + ICON_MARGIN;
+                }
+
                 if (ClientConfiguration.Instance.ShowGameIconInGameList)
                 {
                     DrawTexture(hostedGame.Game.Texture,
@@ -404,16 +439,6 @@ namespace DTAClient.DXGUI.Multiplayer
                         new Rectangle(x, height,
                         txIncompatibleGame.Width, txIncompatibleGame.Height), Color.White);
                     x += txIncompatibleGame.Width + ICON_MARGIN;
-                }
-
-                // left-side game option icons
-                var (leftIcons, rightIcons) = GetGameOptionIcons(hostedGame);
-                foreach (var icon in leftIcons)
-                {
-                    DrawTexture(icon,
-                        new Rectangle(x, height,
-                        icon.Width, icon.Height), Color.White);
-                    x += icon.Width + ICON_MARGIN;
                 }
 
                 // right-side icons (right game option icons, then password, then skill level)

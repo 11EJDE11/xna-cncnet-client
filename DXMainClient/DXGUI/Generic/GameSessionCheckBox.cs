@@ -53,8 +53,6 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
 
     protected bool reversed;
 
-    private bool defaultValue;
-
     private string enabledSpawnIniValue = "True";
     private string disabledSpawnIniValue = "False";
 
@@ -64,25 +62,36 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
     public bool BroadcastToLobby { get; private set; }
 
     /// <summary>
-    /// Whether the icon should be shown in the game list.
+    /// Whether the icon/text should be shown in the game list.
     /// </summary>
-    public bool IconShownInGameList { get; private set; }
+    public bool ShowInGameList { get; private set; }
 
     /// <summary>
     /// Whether the icon should be shown on the right side of the game list.
-    /// Only applies if IconShownInGameList is true.
+    /// Only applies if ShowInGameList is true.
     /// </summary>
-    public bool IconShownInGameListOnRight { get; private set; }
+    public bool ShowInGameListOnRight { get; private set; }
 
     /// <summary>
-    /// Whether the icon should be shown in the game information panel.
+    /// Whether the icon/text should be shown in the game information panel.
     /// </summary>
-    public bool IconShownInGameInfo { get; private set; }
+    public bool ShowInGameInformationPanel { get; private set; }
 
     /// <summary>
-    /// Whether the icon should be shown in the game filters panel.
+    /// Whether to show only the icon (without text) in the game information panel.
+    /// Only applies if ShowInGameInformationPanel is true.
     /// </summary>
-    public bool IconShownInFilters { get; private set; }
+    public bool ShowInGameInformationPanelAsIconOnly { get; private set; }
+
+    /// <summary>
+    /// Whether the icon should be shown in the game lobby control itself.
+    /// </summary>
+    public bool ShowIconInGameLobby { get; private set; }
+
+    /// <summary>
+    /// Whether this setting should be filterable and shown in the filters panel.
+    /// </summary>
+    public bool ShowInFilters { get; private set; }
 
     /// <summary>
     /// The texture name for the icon when setting is enabled.
@@ -93,6 +102,12 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
     /// The texture name for the icon when setting is disabled.
     /// </summary>
     public string DisabledIcon { get; private set; }
+
+    /// <summary>
+    /// Sort order for displaying icons in the GameInformationPanel and GameListBox.
+    /// Lower values appear first.
+    /// </summary>
+    public int SortOrder { get; private set; } = 100;
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
@@ -116,7 +131,6 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
             case "Checked":
                 bool checkedValue = Conversions.BooleanFromString(value, false);
                 Checked = checkedValue;
-                defaultValue = checkedValue;
                 return;
             case "MapScoringMode":
                 mapScoringMode = (CheckBoxMapScoringMode)Enum.Parse(typeof(CheckBoxMapScoringMode), value);
@@ -124,23 +138,32 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
             case "BroadcastToLobby":
                 BroadcastToLobby = Conversions.BooleanFromString(value, false);
                 return;
-            case "IconShownInGameList":
-                IconShownInGameList = Conversions.BooleanFromString(value, false);
+            case "ShowInGameList":
+                ShowInGameList = Conversions.BooleanFromString(value, false);
                 return;
-            case "IconShownInGameListOnRight":
-                IconShownInGameListOnRight = Conversions.BooleanFromString(value, false);
+            case "ShowInGameListOnRight":
+                ShowInGameListOnRight = Conversions.BooleanFromString(value, false);
                 return;
-            case "IconShownInGameInfo":
-                IconShownInGameInfo = Conversions.BooleanFromString(value, false);
+            case "ShowInGameInformationPanel":
+                ShowInGameInformationPanel = Conversions.BooleanFromString(value, false);
                 return;
-            case "IconShownInFilters":
-                IconShownInFilters = Conversions.BooleanFromString(value, false);
+            case "ShowInGameInformationPanelAsIconOnly":
+                ShowInGameInformationPanelAsIconOnly = Conversions.BooleanFromString(value, false);
+                return;
+            case "ShowIconInGameLobby":
+                ShowIconInGameLobby = Conversions.BooleanFromString(value, false);
+                return;
+            case "ShowInFilters":
+                ShowInFilters = Conversions.BooleanFromString(value, false);
                 return;
             case "EnabledIcon":
                 EnabledIcon = value;
                 return;
             case "DisabledIcon":
                 DisabledIcon = value;
+                return;
+            case "SortOrder":
+                SortOrder = int.Parse(value);
                 return;
         }
 

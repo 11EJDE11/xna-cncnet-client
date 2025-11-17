@@ -39,19 +39,48 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
     public bool BroadcastToLobby { get; private set; }
 
     /// <summary>
-    /// Whether the icon should be shown in the game information panel.
+    /// Whether the icon/text should be shown in the game list.
     /// </summary>
-    public bool IconShownInGameInfo { get; private set; }
+    public bool ShowInGameList { get; private set; }
 
     /// <summary>
-    /// Whether the icon should be shown in the game filters panel.
+    /// Whether the icon should be shown on the right side of the game list.
+    /// Only applies if ShowInGameList is true.
     /// </summary>
-    public bool IconShownInFilters { get; private set; }
+    public bool ShowInGameListOnRight { get; private set; }
 
     /// <summary>
-    /// The texture name for the icon.
+    /// Whether the icon/text should be shown in the game information panel.
     /// </summary>
-    public string Icon { get; private set; }
+    public bool ShowInGameInformationPanel { get; private set; }
+
+    /// <summary>
+    /// Whether to show only the icon (without text) in the game information panel.
+    /// Only applies if ShowInGameInformationPanel is true.
+    /// </summary>
+    public bool ShowInGameInformationPanelAsIconOnly { get; private set; }
+
+    /// <summary>
+    /// Whether the icon should be shown in the game lobby control itself.
+    /// </summary>
+    public bool ShowIconInGameLobby { get; private set; }
+
+    /// <summary>
+    /// Whether this setting should be filterable and shown in the filters panel.
+    /// </summary>
+    public bool ShowInFilters { get; private set; }
+
+    /// <summary>
+    /// The texture names for the icons for each dropdown option.
+    /// If specified, this array should match the number of items.
+    /// </summary>
+    public string[] Icons { get; private set; }
+
+    /// <summary>
+    /// Sort order for displaying icons in the GameInformationPanel and GameListBox.
+    /// Lower values appear first.
+    /// </summary>
+    public int SortOrder { get; private set; } = 100;
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
@@ -99,14 +128,29 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
             case "BroadcastToLobby":
                 BroadcastToLobby = Conversions.BooleanFromString(value, false);
                 return;
-            case "IconShownInGameInfo":
-                IconShownInGameInfo = Conversions.BooleanFromString(value, false);
+            case "ShowInGameList":
+                ShowInGameList = Conversions.BooleanFromString(value, false);
                 return;
-            case "IconShownInFilters":
-                IconShownInFilters = Conversions.BooleanFromString(value, false);
+            case "ShowInGameListOnRight":
+                ShowInGameListOnRight = Conversions.BooleanFromString(value, false);
                 return;
-            case "Icon":
-                Icon = value;
+            case "ShowInGameInformationPanel":
+                ShowInGameInformationPanel = Conversions.BooleanFromString(value, false);
+                return;
+            case "ShowInGameInformationPanelAsIconOnly":
+                ShowInGameInformationPanelAsIconOnly = Conversions.BooleanFromString(value, false);
+                return;
+            case "ShowIconInGameLobby":
+                ShowIconInGameLobby = Conversions.BooleanFromString(value, false);
+                return;
+            case "ShowInFilters":
+                ShowInFilters = Conversions.BooleanFromString(value, false);
+                return;
+            case "Icons":
+                Icons = value.SplitWithCleanup();
+                return;
+            case "SortOrder":
+                SortOrder = int.Parse(value);
                 return;
         }
 

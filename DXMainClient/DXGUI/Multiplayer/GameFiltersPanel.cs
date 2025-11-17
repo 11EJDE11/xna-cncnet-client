@@ -12,11 +12,27 @@ using Rampastring.XNAUI.XNAControls;
 
 namespace DTAClient.DXGUI.Multiplayer
 {
+    /// <summary>
+    /// Custom scroll panel that exposes ContentPanel for adding children
+    /// </summary>
+    internal class GameFiltersScrollPanel : XNAScrollPanel
+    {
+        public GameFiltersScrollPanel(WindowManager windowManager) : base(windowManager)
+        {
+        }
+
+        public XNAPanel GetContentPanel() => ContentPanel;
+    }
+
     public class GameFiltersPanel : XNAPanel
     {
         private const int minPlayerCount = 2;
         private const int maxPlayerCount = 8;
         private const int GAP = 12;
+        private const int BOTTOM_PANEL_HEIGHT = 60;
+
+        private GameFiltersScrollPanel scrollPanel;
+        private XNAPanel bottomPanel;
 
         private XNAClientCheckBox chkBoxFriendsOnly;
         private XNAClientCheckBox chkBoxHideLockedGames;
@@ -34,12 +50,9 @@ namespace DTAClient.DXGUI.Multiplayer
             public bool IsCheckbox { get; set; }
             public XNAClientDropDown DropDown { get; set; }
             public XNALabel Label { get; set; }
-            public int IconX { get; set; }
-            public int IconY { get; set; }
-            public Texture2D CurrentIcon { get; set; }
+            public XNAPanel IconPanel { get; set; }
             public string EnabledIcon { get; set; }
             public string DisabledIcon { get; set; }
-            public string Icon { get; set; }
         }
 
         public GameFiltersPanel(WindowManager windowManager, GameLobbyBase gameLobby) : base(windowManager)
@@ -53,6 +66,20 @@ namespace DTAClient.DXGUI.Multiplayer
 
             Name = "GameFiltersWindow";
             BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0), Width, Height);
+
+            // Create scroll panel for filters content
+            scrollPanel = new GameFiltersScrollPanel(WindowManager);
+            scrollPanel.Name = "FiltersScrollPanel";
+            scrollPanel.ClientRectangle = new Rectangle(0, 0, Width, Height - BOTTOM_PANEL_HEIGHT);
+            scrollPanel.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 200), 1, 1);
+            scrollPanel.DrawBorders = false;
+
+            // Create bottom panel for Save/Cancel buttons
+            bottomPanel = new XNAPanel(WindowManager);
+            bottomPanel.Name = "BottomButtonPanel";
+            bottomPanel.ClientRectangle = new Rectangle(0, Height - BOTTOM_PANEL_HEIGHT, Width, BOTTOM_PANEL_HEIGHT);
+            bottomPanel.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 255), 1, 1);
+            bottomPanel.DrawBorders = false;
 
             var lblTitle = new XNALabel(WindowManager);
             lblTitle.Name = nameof(lblTitle);
@@ -125,7 +152,7 @@ namespace DTAClient.DXGUI.Multiplayer
             btnSave.Name = nameof(btnSave);
             btnSave.Text = "Save".L10N("Client:Main:ButtonSave");
             btnSave.ClientRectangle = new Rectangle(
-                GAP, btnResetDefaults.Y + UIDesignConstants.BUTTON_HEIGHT + GAP,
+                GAP, (BOTTOM_PANEL_HEIGHT - UIDesignConstants.BUTTON_HEIGHT) / 2,
                 UIDesignConstants.BUTTON_WIDTH_92, UIDesignConstants.BUTTON_HEIGHT
             );
             btnSave.LeftClick += BtnSave_LeftClick;
@@ -134,21 +161,28 @@ namespace DTAClient.DXGUI.Multiplayer
             btnCancel.Name = nameof(btnCancel);
             btnCancel.Text = "Cancel".L10N("Client:Main:ButtonCancel");
             btnCancel.ClientRectangle = new Rectangle(
-                Width - GAP - UIDesignConstants.BUTTON_WIDTH_92, btnSave.Y,
+                Width - GAP - UIDesignConstants.BUTTON_WIDTH_92, (BOTTOM_PANEL_HEIGHT - UIDesignConstants.BUTTON_HEIGHT) / 2,
                 UIDesignConstants.BUTTON_WIDTH_92, UIDesignConstants.BUTTON_HEIGHT
             );
             btnCancel.LeftClick += BtnCancel_LeftClick;
 
-            AddChild(lblTitle);
-            AddChild(chkBoxFriendsOnly);
-            AddChild(chkBoxHideLockedGames);
-            AddChild(chkBoxHidePasswordedGames);
-            AddChild(chkBoxHideIncompatibleGames);
-            AddChild(lblMaxPlayerCount);
-            AddChild(ddMaxPlayerCount);
-            AddChild(btnResetDefaults);
-            AddChild(btnSave);
-            AddChild(btnCancel);
+            // Add controls to scroll panel's content
+            scrollPanel.GetContentPanel().AddChild(lblTitle);
+            scrollPanel.GetContentPanel().AddChild(chkBoxFriendsOnly);
+            scrollPanel.GetContentPanel().AddChild(chkBoxHideLockedGames);
+            scrollPanel.GetContentPanel().AddChild(chkBoxHidePasswordedGames);
+            scrollPanel.GetContentPanel().AddChild(chkBoxHideIncompatibleGames);
+            scrollPanel.GetContentPanel().AddChild(lblMaxPlayerCount);
+            scrollPanel.GetContentPanel().AddChild(ddMaxPlayerCount);
+            scrollPanel.GetContentPanel().AddChild(btnResetDefaults);
+
+            // Add buttons to bottom panel
+            bottomPanel.AddChild(btnSave);
+            bottomPanel.AddChild(btnCancel);
+
+            // Add panels to main panel
+            AddChild(scrollPanel);
+            AddChild(bottomPanel);
         }
 
         private void CreateGameOptionFilters()
@@ -163,19 +197,19 @@ namespace DTAClient.DXGUI.Multiplayer
             const int itemVerticalSpacing = 4;
             const int minLabelRowHeight = 18;
 
-            int dropdownWidth = (Width - (GAP * 3)) / 2;
+            int dropdownWidth = (scrollPanel.Width - (GAP * 3)) / 2;
 
-            var divider = CreateDivider(currentY);
-            AddChild(divider);
+            var divider = CreateDivider(currentY, scrollPanel.Width);
+            scrollPanel.GetContentPanel().AddChild(divider);
             currentY += divider.Height + GAP;
 
             int leftColumnX = GAP;
-            int rightColumnX = Width / 2 + GAP / 2;
+            int rightColumnX = scrollPanel.Width / 2 + GAP / 2;
             int filterIndex = 0;
             int maxItemHeight = 0;
 
             // Create filters for broadcastable checkboxes
-            var broadcastableCheckboxes = gameLobby.CheckBoxes.Where(cb => cb.BroadcastToLobby && cb.IconShownInFilters).ToList();
+            var broadcastableCheckboxes = gameLobby.CheckBoxes.Where(cb => cb.BroadcastToLobby && cb.ShowInFilters).ToList();
             foreach (var checkbox in broadcastableCheckboxes)
             {
                 var filterControl = new GameOptionFilterControl
@@ -197,16 +231,23 @@ namespace DTAClient.DXGUI.Multiplayer
                 int columnX = isLeftColumn ? leftColumnX : rightColumnX;
                 int rowY = currentY + (filterIndex / 2) * maxItemHeight;
 
+                XNAPanel iconPanel = null;
                 if (icon != null)
                 {
-                    filterControl.IconX = columnX;
-                    filterControl.IconY = rowY;
+                    iconPanel = new XNAPanel(WindowManager)
+                    {
+                        Name = $"icon{checkbox.Name}Filter",
+                        ClientRectangle = new Rectangle(columnX, rowY, iconWidth, iconHeight),
+                        DrawBorders = false,
+                        BackgroundTexture = icon
+                    };
+                    filterControl.IconPanel = iconPanel;
                 }
 
                 var label = new XNALabel(WindowManager)
                 {
                     Name = $"lbl{checkbox.Name}Filter",
-                    Text = checkbox.Text ?? checkbox.Name,
+                    Text = checkbox.Text + ":",
                     ClientRectangle = new Rectangle(
                     columnX + iconWidth + (iconWidth > 0 ? iconLabelSpacing : 0), rowY,
                     0, UIDesignConstants.BUTTON_HEIGHT)
@@ -219,11 +260,21 @@ namespace DTAClient.DXGUI.Multiplayer
                     Name = $"dd{checkbox.Name}Filter",
                     ClientRectangle = new Rectangle(columnX, rowY + topRowHeight + itemVerticalSpacing, dropdownWidth, UIDesignConstants.BUTTON_HEIGHT)
                 };
-                dropdown.AddItem("All".L10N("Client:Main:FilterAllGames"));
-                dropdown.AddItem("On".L10N("Client:Main:FilterOn"));
-                dropdown.AddItem("Off".L10N("Client:Main:FilterOff"));
+
+                // "All" item has no icon
+                dropdown.AddItem(new XNADropDownItem { Text = "All".L10N("Client:Main:FilterAllGames") });
+
+                Texture2D enabledIconTexture = null;
+                if (!string.IsNullOrEmpty(checkbox.EnabledIcon))
+                    enabledIconTexture = AssetLoader.LoadTexture(checkbox.EnabledIcon);
+                dropdown.AddItem(new XNADropDownItem { Text = "On".L10N("Client:Main:FilterOn"), Texture = enabledIconTexture });
+
+                Texture2D disabledIconTexture = null;
+                if (!string.IsNullOrEmpty(checkbox.DisabledIcon))
+                    disabledIconTexture = AssetLoader.LoadTexture(checkbox.DisabledIcon);
+                dropdown.AddItem(new XNADropDownItem { Text = "Off".L10N("Client:Main:FilterOff"), Texture = disabledIconTexture });
+
                 dropdown.SelectedIndex = 0;
-                dropdown.SelectedIndexChanged += FilterDropDown_SelectedIndexChanged;
 
                 filterControl.DropDown = dropdown;
                 filterControl.Label = label;
@@ -233,26 +284,28 @@ namespace DTAClient.DXGUI.Multiplayer
                     maxItemHeight = itemHeight;
 
                 gameOptionFilterControls.Add(filterControl);
-                AddChild(dropdown);
-                AddChild(label);
+                if (iconPanel != null)
+                    scrollPanel.GetContentPanel().AddChild(iconPanel);
+                scrollPanel.GetContentPanel().AddChild(dropdown);
+                scrollPanel.GetContentPanel().AddChild(label);
 
                 filterIndex++;
             }
 
             // Create filters for broadcastable dropdowns
-            var broadcastableDropdowns = gameLobby.DropDowns.Where(dd => dd.BroadcastToLobby && dd.IconShownInFilters).ToList();
+            var broadcastableDropdowns = gameLobby.DropDowns.Where(dd => dd.BroadcastToLobby && dd.ShowInFilters).ToList();
             foreach (var lobbyDropdown in broadcastableDropdowns)
             {
                 var filterControl = new GameOptionFilterControl
                 {
                     OptionName = lobbyDropdown.Name,
-                    IsCheckbox = false,
-                    Icon = lobbyDropdown.Icon
+                    IsCheckbox = false
                 };
 
+                // For dropdowns with multiple icons, show the first one initially
                 Texture2D icon = null;
-                if (!string.IsNullOrEmpty(lobbyDropdown.Icon))
-                    icon = AssetLoader.LoadTexture(lobbyDropdown.Icon);
+                if (lobbyDropdown.Icons != null && lobbyDropdown.Icons.Length > 0 && !string.IsNullOrEmpty(lobbyDropdown.Icons[0]))
+                    icon = AssetLoader.LoadTexture(lobbyDropdown.Icons[0]);
 
                 int iconWidth = icon?.Width ?? 0;
                 int iconHeight = icon?.Height ?? 0;
@@ -261,16 +314,23 @@ namespace DTAClient.DXGUI.Multiplayer
                 int columnX = isLeftColumn ? leftColumnX : rightColumnX;
                 int rowY = currentY + (filterIndex / 2) * maxItemHeight;
 
+                XNAPanel iconPanel = null;
                 if (icon != null)
                 {
-                    filterControl.IconX = columnX;
-                    filterControl.IconY = rowY;
+                    iconPanel = new XNAPanel(WindowManager)
+                    {
+                        Name = $"icon{lobbyDropdown.Name}Filter",
+                        ClientRectangle = new Rectangle(columnX, rowY, iconWidth, iconHeight),
+                        DrawBorders = false,
+                        BackgroundTexture = icon
+                    };
+                    filterControl.IconPanel = iconPanel;
                 }
 
                 var label = new XNALabel(WindowManager)
                 {
                     Name = $"lbl{lobbyDropdown.Name}Filter",
-                    Text = lobbyDropdown.OptionName ?? lobbyDropdown.Name,
+                    Text = lobbyDropdown.OptionName,
                     ClientRectangle = new Rectangle(
                     columnX + iconWidth + (iconWidth > 0 ? iconLabelSpacing : 0), rowY,
                     0, UIDesignConstants.BUTTON_HEIGHT)
@@ -283,13 +343,13 @@ namespace DTAClient.DXGUI.Multiplayer
                     Name = $"dd{lobbyDropdown.Name}Filter",
                     ClientRectangle = new Rectangle(columnX, rowY + topRowHeight + itemVerticalSpacing, dropdownWidth, UIDesignConstants.BUTTON_HEIGHT)
                 };
+
                 dropdown.AddItem("All".L10N("Client:Main:FilterAllGames"));
 
                 foreach (var item in lobbyDropdown.Items)
-                    dropdown.AddItem(new XNADropDownItem { Text = item.Text, Tag = item.Tag });
+                    dropdown.AddItem(new XNADropDownItem { Text = item.Text, Tag = item.Tag, Texture = item.Texture });
 
                 dropdown.SelectedIndex = 0;
-                dropdown.SelectedIndexChanged += FilterDropDown_SelectedIndexChanged;
 
                 filterControl.DropDown = dropdown;
                 filterControl.Label = label;
@@ -299,8 +359,10 @@ namespace DTAClient.DXGUI.Multiplayer
                     maxItemHeight = itemHeight;
 
                 gameOptionFilterControls.Add(filterControl);
-                AddChild(dropdown);
-                AddChild(label);
+                if (iconPanel != null)
+                    scrollPanel.GetContentPanel().AddChild(iconPanel);
+                scrollPanel.GetContentPanel().AddChild(dropdown);
+                scrollPanel.GetContentPanel().AddChild(label);
 
                 filterIndex++;
             }
@@ -310,12 +372,12 @@ namespace DTAClient.DXGUI.Multiplayer
                 int numRows = (filterIndex + 1) / 2;
                 currentY += numRows * maxItemHeight;
 
-                var secondDivider = CreateDivider(currentY);
-                AddChild(secondDivider);
+                var secondDivider = CreateDivider(currentY, scrollPanel.Width);
+                scrollPanel.GetContentPanel().AddChild(secondDivider);
 
                 currentY += secondDivider.Height + GAP;
 
-                var btnResetDefaults = Children.FirstOrDefault(c => c.Name == "btnResetDefaults") as XNAClientButton;
+                var btnResetDefaults = scrollPanel.GetContentPanel().Children.FirstOrDefault(c => c.Name == "btnResetDefaults") as XNAClientButton;
                 if (btnResetDefaults != null)
                 {
                     btnResetDefaults.ClientRectangle = new Rectangle(
@@ -323,38 +385,7 @@ namespace DTAClient.DXGUI.Multiplayer
                         UIDesignConstants.BUTTON_WIDTH_133, UIDesignConstants.BUTTON_HEIGHT
                     );
                 }
-            }
-
-            UpdateFilterIcons();
-        }
-
-        private void FilterDropDown_SelectedIndexChanged(object sender, EventArgs e) => UpdateFilterIcons();
-
-        private void UpdateFilterIcons()
-        {
-            foreach (var filterControl in gameOptionFilterControls)
-            {
-                if (filterControl.IconX == 0 && filterControl.IconY == 0)
-                    continue;
-
-                string iconToShow = null;
-
-                if (filterControl.IsCheckbox)
-                {
-                    // For checkboxes: 0 = All, 1 = On, 2 = Off
-                    int selectedIndex = filterControl.DropDown.SelectedIndex;
-                    if (selectedIndex == 0 || selectedIndex == 1) // All or On
-                        iconToShow = filterControl.EnabledIcon;
-                    else if (selectedIndex == 2) // Off
-                        iconToShow = filterControl.DisabledIcon;
-                }
-                else
-                {
-                    // For dropdowns, always show the icon
-                    iconToShow = filterControl.Icon;
-                }
-
-                filterControl.CurrentIcon = !string.IsNullOrEmpty(iconToShow) ? AssetLoader.LoadTexture(iconToShow) : null;
+                UpdateScrollContentHeight();
             }
         }
 
@@ -448,8 +479,6 @@ namespace DTAClient.DXGUI.Multiplayer
                     filterControl.DropDown.SelectedIndex = filterValue == null ? 0 : filterValue.Value + 1;
                 }
             }
-
-            UpdateFilterIcons();
         }
 
         private void ResetDefaults()
@@ -463,24 +492,6 @@ namespace DTAClient.DXGUI.Multiplayer
             if (!gameOptionFiltersCreated)
             {
                 CreateGameOptionFilters();
-
-                var btnResetDefaults = Children.FirstOrDefault(c => c.Name == "btnResetDefaults") as XNAClientButton;
-                var btnSave = Children.FirstOrDefault(c => c.Name == "btnSave") as XNAClientButton;
-                var btnCancel = Children.FirstOrDefault(c => c.Name == "btnCancel") as XNAClientButton;
-
-                if (btnResetDefaults != null && btnSave != null && btnCancel != null)
-                {
-                    btnSave.ClientRectangle = new Rectangle(
-                        GAP, btnResetDefaults.Y + UIDesignConstants.BUTTON_HEIGHT + GAP,
-                        UIDesignConstants.BUTTON_WIDTH_92, UIDesignConstants.BUTTON_HEIGHT
-                    );
-
-                    btnCancel.ClientRectangle = new Rectangle(
-                        Width - GAP - UIDesignConstants.BUTTON_WIDTH_92, btnSave.Y,
-                        UIDesignConstants.BUTTON_WIDTH_92, UIDesignConstants.BUTTON_HEIGHT
-                    );
-                }
-
                 gameOptionFiltersCreated = true;
             }
 
@@ -492,31 +503,21 @@ namespace DTAClient.DXGUI.Multiplayer
         {
             Disable();
         }
+        private void UpdateScrollContentHeight()
+        {
+            var content = scrollPanel.GetContentPanel();
+            int bottom = content.Children.Max(c => c.Bottom);
+            content.Height = bottom + GAP;
+        }
 
-        private XNAPanel CreateDivider(int y, int height = 1)
+        private XNAPanel CreateDivider(int y, int width, int height = 1)
         {
             var dividerPanel = new XNAPanel(WindowManager)
             {
                 DrawBorders = true,
-                ClientRectangle = new Rectangle(0, y, Width, height)
+                ClientRectangle = new Rectangle(0, y, width, height)
             };
             return dividerPanel;
-        }
-
-        public override void Draw(GameTime gameTime)
-        {
-            base.Draw(gameTime);
-
-            foreach (var filterControl in gameOptionFilterControls)
-            {
-                if (filterControl.CurrentIcon != null)
-                {
-                    DrawTexture(filterControl.CurrentIcon,
-                        new Rectangle(filterControl.IconX, filterControl.IconY,
-                            filterControl.CurrentIcon.Width, filterControl.CurrentIcon.Height),
-                        Color.White);
-                }
-            }
         }
     }
 }

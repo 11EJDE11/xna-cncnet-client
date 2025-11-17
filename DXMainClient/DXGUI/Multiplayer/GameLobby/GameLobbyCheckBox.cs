@@ -5,6 +5,9 @@ using ClientCore.Extensions;
 
 using DTAClient.DXGUI.Generic;
 
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
@@ -117,5 +120,27 @@ public class GameLobbyCheckBox : GameSessionCheckBox
 
         base.OnLeftClick(inputEventArgs);
         UserChecked = Checked;
+    }
+
+    public override void Draw(GameTime gameTime)
+    {
+        if (ShowIconInGameLobby)
+        {
+            string iconName = Checked ? EnabledIcon : DisabledIcon;
+            if (!string.IsNullOrEmpty(iconName))
+            {
+                Texture2D icon = AssetLoader.LoadTexture(iconName);
+                if (icon != null)
+                {
+                    const int iconSpacing = 6;
+                    int iconX = -icon.Width - iconSpacing;
+                    int iconY = (Height - icon.Height) / 2;
+
+                    DrawTexture(icon, new Rectangle(iconX, iconY, icon.Width, icon.Height), Color.White);
+                }
+            }
+        }
+
+        base.Draw(gameTime);
     }
 }
