@@ -126,12 +126,21 @@ public class XNAClientJSONLabel : XNALabel
 
                 if (!string.IsNullOrEmpty(format))
                 {
-                    if (long.TryParse(value, out long numValue))
-                        return numValue.ToString(format);
-                    else if (double.TryParse(value, out double doubleValue))
-                        return doubleValue.ToString(format);
-                    else if (DateTime.TryParse(value, out DateTime dateValue))
-                        return dateValue.ToString(format);
+                    var formatted = new List<string>();
+
+                    foreach (var v in values)
+                    {
+                        if (long.TryParse(v, out long num))
+                            formatted.Add(num.ToString(format));
+                        else if (double.TryParse(v, out double dbl))
+                            formatted.Add(dbl.ToString(format));
+                        else if (DateTime.TryParse(v, out DateTime dt))
+                            formatted.Add(dt.ToString(format));
+                        else
+                            formatted.Add(v);
+                    }
+
+                    return string.Join(", ", formatted);
                 }
 
                 return value;
