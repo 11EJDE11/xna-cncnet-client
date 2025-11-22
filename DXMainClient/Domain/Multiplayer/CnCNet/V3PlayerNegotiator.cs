@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -264,12 +265,15 @@ public class V3PlayerNegotiator : IDisposable
 
             result.PingResults.Add(ping);
 
+            var pingIdBytes = new byte[4];
+            BinaryPrimitives.WriteInt32LittleEndian(pingIdBytes, i);
+
             _tunnelHandler.SendPacket(
                 tunnel,
                 _localPlayer.Id,
                 _remotePlayer.Id,
                 TunnelPacketType.PingRequest,
-                BitConverter.GetBytes(i)
+                pingIdBytes
             );
 
             // Wait for a ping response or timeout
@@ -327,7 +331,7 @@ public class V3PlayerNegotiator : IDisposable
                 //if we receive a ping response, note down the received time and complete the ping.
                 if (_isDecider && payload.Length >= 4)
                 {
-                    int id = BitConverter.ToInt32(payload, 0);
+                    int id = BinaryPrimitives.ReadInt32LittleEndian(payload);
                     var ping = result.PingResults.FirstOrDefault(p => p.ID == id);
                     if (ping != null && !ping.ReceivedTimeTicks.HasValue)
                     {
@@ -343,7 +347,7 @@ public class V3PlayerNegotiator : IDisposable
                     // The chosen tunnel is the one this packet came through
                     int ping = 0;
                     if (payload != null && payload.Length >= 4)
-                        ping = BitConverter.ToInt32(payload, 0);
+                        ping = BinaryPrimitives.ReadInt32LittleEndian(payload);
 
                     Logger.Log($"V3TunnelNegotiator: {_remotePlayer.Name} chose {tunnel.Name} (Ping: {ping}ms)");
 
@@ -378,10 +382,13 @@ public class V3PlayerNegotiator : IDisposable
     {
         Logger.Log($"V3TunnelNegotiator: Sending tunnel choice to {_remotePlayer.Name}: {tunnel.Name} (Ping: {ping}ms)");
 
+        var pingBytes = new byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(pingBytes, ping);
+
         for (int attempt = 0; attempt < TUNNEL_CHOICE_MAX_RETRIES; attempt++)
         {
             _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
-                TunnelPacketType.TunnelChoice, BitConverter.GetBytes(ping));
+                TunnelPacketType.TunnelChoice, pingBytes);
 
             Logger.Log($"V3TunnelNegotiator: Attempt {attempt + 1} sent to {_remotePlayer.Name} via {tunnel.Name}");
 
