@@ -161,9 +161,12 @@ public class V3PlayerNegotiator : IDisposable
         if (bestTunnel != null)
         {
             var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
-            int halvedPing = (int)Math.Round(bestResult.AverageRtt / 2.0);
-            await SendTunnelChoiceAsync(bestTunnel, halvedPing);
-            RaiseNegotiationResult(bestTunnel, halvedPing);
+            if (bestResult != null)
+            {
+                int halvedPing = (int)Math.Round(bestResult.AverageRtt / 2.0);
+                await SendTunnelChoiceAsync(bestTunnel, halvedPing);
+                RaiseNegotiationResult(bestTunnel, halvedPing);
+            }
         }
         else
         {

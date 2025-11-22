@@ -88,7 +88,7 @@ public class V3GameTunnelBridge
 
         _isRunning = false;
         _localGameClient?.Close();
-        _tunnelHandler?.UnregisterV3PacketHandler(_localId, 0);
+        _tunnelHandler.UnregisterV3PacketHandler(_localId, 0);
 
         Logger.Log("V3GameTunnelBridge: Stopped");
     }

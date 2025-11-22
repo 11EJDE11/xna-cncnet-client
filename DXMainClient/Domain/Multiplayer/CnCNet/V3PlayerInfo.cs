@@ -58,7 +58,7 @@ public class TunnelTestResult
 
     public double AverageRtt => PingResults
         .Where(p => p.RoundTripTime.HasValue)
-        .Select(p => p.RoundTripTime.Value)
+        .Select(p => p.RoundTripTime!.Value)
         .DefaultIfEmpty(-1)
         .Average();
 

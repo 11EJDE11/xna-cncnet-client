@@ -185,7 +185,7 @@ public class V3TunnelCommunicator
         {
             try
             {
-                _udpClient.Send(packet, packet.Length, tunnel.Address, tunnel.Port);
+                _udpClient!.Send(packet, packet.Length, tunnel.Address, tunnel.Port);
                 Logger.Log($"V3TunnelCommunicator: Registration sent to {tunnel.Name}");
             }
             catch (Exception ex)
@@ -215,7 +215,7 @@ public class V3TunnelCommunicator
         try
         {
             var packet = CreatePacket(senderId, receiverId, packetType, payload);
-            _udpClient.Send(packet, packet.Length, tunnel.Address, tunnel.Port);
+            _udpClient!.Send(packet, packet.Length, tunnel.Address, tunnel.Port);
         }
         catch (Exception ex)
         {
@@ -330,7 +330,7 @@ public class V3TunnelCommunicator
             {
                 try
                 {
-                    if (_udpClient.Client.Poll(500_000, SelectMode.SelectRead)) // 500ms
+                    if (_udpClient!.Client.Poll(500_000, SelectMode.SelectRead)) // 500ms
                     {
                         byte[] data = _udpClient.Receive(ref remoteEndpoint);
                         var receivedTime = Stopwatch.GetTimestamp();
