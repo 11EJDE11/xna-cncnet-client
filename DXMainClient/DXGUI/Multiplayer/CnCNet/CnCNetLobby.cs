@@ -1507,6 +1507,20 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (splitMessage.Length != 13)
             {
                 Logger.Log("Ignoring CTCP game message because of an invalid amount of parameters.");
+
+                // Remind users that the network is good but the client is outdated or newer
+                if (lbGameList.Items.Count == 0 && lbGameList.HostedGames.Count == 0)
+                {
+                    string message = ("There are no games listed but you are indeed connected. The client did receive a game message but can't add it to the list because the message is invalid. " +
+                        "You can ignore this prompt if there are games listed later. " +
+                        "Otherwise, this usually means that your client is outdated, or, in a rare case, newer than others. Please check for updates.").L10N("Client:Main:InvalidGameMessage");
+
+                    if ((lbChatMessages.Items.LastOrDefault()?.Tag as ChatMessage)?.Message != message)
+                    {
+                        lbChatMessages.AddMessage(new ChatMessage(Color.Gray, message));
+                    }
+                }
+
                 return;
             }
 
