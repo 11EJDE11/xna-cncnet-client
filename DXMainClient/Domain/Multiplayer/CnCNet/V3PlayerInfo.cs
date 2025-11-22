@@ -56,11 +56,18 @@ public class TunnelTestResult
     /// </summary>
     public TaskCompletionSource<bool> PingsCompletedTcs { get; } = new TaskCompletionSource<bool>();
 
-    public double AverageRtt => PingResults
-        .Where(p => p.RoundTripTime.HasValue)
-        .Select(p => p.RoundTripTime!.Value)
-        .DefaultIfEmpty(-1)
-        .Average();
+    public double? AverageRtt
+    {
+        get
+        {
+            var values = PingResults
+                .Where(p => p.RoundTripTime.HasValue)
+                .Select(p => p.RoundTripTime!.Value)
+                .ToList();
+
+            return values.Count > 0 ? values.Average() : null;
+        }
+    }
 
     public double PacketLoss => PingResults.Count == 0 ? 100 :
         PingResults.Count(p => !p.RoundTripTime.HasValue) * 100.0 / PingResults.Count;
@@ -109,8 +116,8 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     public CnCNetTunnel? SelectBestTunnel()
     {
         var bestTunnel = TunnelResults
-            .Where(kvp => kvp.Value.PingResults.Any(p => p.RoundTripTime.HasValue))
-            .OrderBy(kvp => kvp.Value.AverageRtt + kvp.Value.PacketLoss * PACKET_LOSS_WEIGHT) //20% packet loss = 200ms penalty
+            .Where(kvp => kvp.Value.AverageRtt.HasValue)
+            .OrderBy(kvp => kvp.Value.AverageRtt!.Value + kvp.Value.PacketLoss * PACKET_LOSS_WEIGHT) //20% packet loss = 200ms penalty
             .Select(kvp => kvp.Key)
             .FirstOrDefault();
 

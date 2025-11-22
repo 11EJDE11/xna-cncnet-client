@@ -161,9 +161,9 @@ public class V3PlayerNegotiator : IDisposable
         if (bestTunnel != null)
         {
             var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
-            if (bestResult != null)
+            if (bestResult != null && bestResult.AverageRtt.HasValue)
             {
-                int halvedPing = (int)Math.Round(bestResult.AverageRtt / 2.0);
+                int halvedPing = (int)Math.Round(bestResult.AverageRtt.Value / 2.0);
                 await SendTunnelChoiceAsync(bestTunnel, halvedPing);
                 RaiseNegotiationResult(bestTunnel, halvedPing);
             }
@@ -438,10 +438,10 @@ public class V3PlayerNegotiator : IDisposable
                 sb.AppendLine(
                     $"Player: {_remotePlayer.Name} | " +
                     $"Tunnel: {tunnel.Name} | " +
-                    $"Avg RTT: {(result.AverageRtt < double.MaxValue ? $"{result.AverageRtt:F1}ms" : "N/A")} | " +
+                    $"Avg RTT: {(result.AverageRtt.HasValue ? $"{result.AverageRtt.Value:F1}ms" : "N/A")} | " +
                     $"Real ping: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs:F1}ms" : "N/A")} | " +
                     $"Real ping*2: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs * 2:F1}ms" : "N/A")} | " +
-                    $"Difference: {(tunnel.PingInMs >= 0 && result.AverageRtt < double.MaxValue ? $"{result.AverageRtt - (tunnel.PingInMs * 2):F1}ms" : "N/A")} | " +
+                    $"Difference: {(tunnel.PingInMs >= 0 && result.AverageRtt.HasValue ? $"{result.AverageRtt.Value - (tunnel.PingInMs * 2):F1}ms" : "N/A")} | " +
                     $"Packet Loss: {result.PacketLoss:F1}% | " +
                     $"Pings: {successfulPings}/{result.PingResults.Count} | " +
                     $"Connected: {result.ConnectedReceived}"
@@ -455,7 +455,7 @@ public class V3PlayerNegotiator : IDisposable
             var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
             if (bestResult != null)
             {
-                var rttDisplay = bestResult.AverageRtt < double.MaxValue ? $"{bestResult.AverageRtt:F1}ms" : "N/A";
+                var rttDisplay = bestResult.AverageRtt.HasValue ? $"{bestResult.AverageRtt.Value:F1}ms" : "N/A";
                 sb.AppendLine($"BEST TUNNEL for {_remotePlayer.Name}: {bestTunnel.Name} " +
                     $"(RTT: {rttDisplay}, Loss: {bestResult.PacketLoss:F1}%)");
             }

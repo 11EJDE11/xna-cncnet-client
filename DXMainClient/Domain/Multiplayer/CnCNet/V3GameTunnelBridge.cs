@@ -146,8 +146,15 @@ public class V3GameTunnelBridge
                         var recipient = _otherPlayers.FirstOrDefault(p => p.PlayerGameId == receiverId);
 
                         if (recipient != null)
+                        {
+                            if (recipient.Tunnel == null)
+                            {
+                                Logger.Log($"V3GameTunnelBridge: Cannot send to {recipient.Name} - no tunnel assigned");
+                                continue;
+                            }
                             _tunnelHandler.SendPacket(recipient.Tunnel, _localId, recipient.Id,
                                 TunnelPacketType.GameData, gameData);
+                        }
                         else
                             Logger.Log($"V3GameTunnelBridge: No matching recipient found for receiverId={receiverId}");
                     }
