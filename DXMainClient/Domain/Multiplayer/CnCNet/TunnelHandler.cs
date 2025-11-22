@@ -403,8 +403,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         public V3GameTunnelBridge StartGameBridge(uint localId, int localPort, List<V3PlayerInfo> allPlayers)
         {
-            if (GameTunnelBridge != null)
-                StopGameBridge();
+            StopGameBridge();
 
             GameTunnelBridge = new V3GameTunnelBridge(localId, localPort, allPlayers, this);
             GameTunnelBridge.Start();
