@@ -205,7 +205,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                         tunnel.PingInMs = pingResult;
                     }
 
-                    if (previousPing > 0 && (tunnel.PingInMs <= 0 || tunnel.PingInMs > TUNNEL_FAILED_PING_AMOUNT))
+                    if (previousPing > 0 && (tunnel.PingInMs < 0 || tunnel.PingInMs > TUNNEL_FAILED_PING_AMOUNT))
                         TunnelFailed?.Invoke(this, tunnel);
 
                     DoTunnelPinged(tunnel.Address, tunnel.Port);
@@ -224,7 +224,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 tunnel.UpdatePing();
                 int pingResult = tunnel.PingInMs;
 
-                if (previousPing > 0 && (pingResult <= 0 || pingResult > TUNNEL_FAILED_PING_AMOUNT))
+                if (previousPing > 0 && (pingResult < 0 || pingResult > TUNNEL_FAILED_PING_AMOUNT))
                     TunnelFailed?.Invoke(this, tunnel);
 
                 DoCurrentTunnelPinged();
@@ -240,7 +240,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                         int otherPreviousPing = otherTunnel.PingInMs;
                         otherTunnel.PingInMs = pingResult;
 
-                        if (otherPreviousPing > 0 && (pingResult <= 0 || pingResult > TUNNEL_FAILED_PING_AMOUNT))
+                        if (otherPreviousPing > 0 && (pingResult < 0 || pingResult > TUNNEL_FAILED_PING_AMOUNT))
                             TunnelFailed?.Invoke(this, otherTunnel);
 
                         DoTunnelPinged(otherTunnel.Address, otherTunnel.Port);

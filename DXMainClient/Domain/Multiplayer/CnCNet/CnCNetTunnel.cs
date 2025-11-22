@@ -159,6 +159,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 catch (PingException ex)
                 {
                     Logger.Log($"Caught an exception when pinging {Name} tunnel server: {ex.ToString()}");
+                    PingInMs = -1;
                 }
             }
         }
