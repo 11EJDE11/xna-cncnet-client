@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 
 using Rampastring.Tools;
 
+#nullable enable
+
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 
 /// <summary>
