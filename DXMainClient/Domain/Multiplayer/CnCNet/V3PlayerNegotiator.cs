@@ -60,8 +60,8 @@ public class V3PlayerNegotiator : IDisposable
 
     public V3PlayerInfo RemotePlayer => _remotePlayer;
 
-    public event EventHandler<TunnelChosenEventArgs> NegotiationResult;
-    public event EventHandler NegotiationComplete;
+    public event EventHandler<TunnelChosenEventArgs>? NegotiationResult;
+    public event EventHandler? NegotiationComplete;
 
     private static readonly byte[] SINGLE_BYTE_TRUE = [0x01];
 
@@ -111,7 +111,7 @@ public class V3PlayerNegotiator : IDisposable
         }
     }
 
-    private void RaiseNegotiationResult(CnCNetTunnel tunnel, int negotiationPing = 0, string failureReason = null)
+    private void RaiseNegotiationResult(CnCNetTunnel? tunnel, int negotiationPing = 0, string? failureReason = null)
     {
         var args = new TunnelChosenEventArgs
         {
@@ -428,10 +428,10 @@ public class V3PlayerNegotiator : IDisposable
                 sb.AppendLine(
                     $"Player: {_remotePlayer.Name} | " +
                     $"Tunnel: {tunnel.Name} | " +
-                    $"Avg RTT: {(result.AverageRtt >= 0 ? $"{result.AverageRtt:F1}ms" : "N/A")} | " +
+                    $"Avg RTT: {(result.AverageRtt < double.MaxValue ? $"{result.AverageRtt:F1}ms" : "N/A")} | " +
                     $"Real ping: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs:F1}ms" : "N/A")} | " +
                     $"Real ping*2: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs * 2:F1}ms" : "N/A")} | " +
-                    $"Difference: {(tunnel.PingInMs >= 0 && result.AverageRtt > 0 ? $"{result.AverageRtt - (tunnel.PingInMs * 2):F1}ms" : "N/A")} | " +
+                    $"Difference: {(tunnel.PingInMs >= 0 && result.AverageRtt < double.MaxValue ? $"{result.AverageRtt - (tunnel.PingInMs * 2):F1}ms" : "N/A")} | " +
                     $"Packet Loss: {result.PacketLoss:F1}% | " +
                     $"Pings: {successfulPings}/{result.PingResults.Count} | " +
                     $"Connected: {result.ConnectedReceived}"
@@ -443,8 +443,12 @@ public class V3PlayerNegotiator : IDisposable
         if (bestTunnel != null)
         {
             var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
-            sb.AppendLine($"BEST TUNNEL for {_remotePlayer.Name}: {bestTunnel.Name} " +
-                $"(RTT: {bestResult.AverageRtt:F1}ms, Loss: {bestResult.PacketLoss:F1}%)");
+            if (bestResult != null)
+            {
+                var rttDisplay = bestResult.AverageRtt < double.MaxValue ? $"{bestResult.AverageRtt:F1}ms" : "N/A";
+                sb.AppendLine($"BEST TUNNEL for {_remotePlayer.Name}: {bestTunnel.Name} " +
+                    $"(RTT: {rttDisplay}, Loss: {bestResult.PacketLoss:F1}%)");
+            }
         }
         else
         {

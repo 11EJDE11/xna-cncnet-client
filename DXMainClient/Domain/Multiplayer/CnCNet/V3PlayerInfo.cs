@@ -83,8 +83,8 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     public ushort PlayerGameId { get; set; } = playerGameID;
     public bool HasNegotiated { get; set; }
     public bool IsNegotiating { get; set; }
-    public CnCNetTunnel Tunnel { get; set; }
-    public V3PlayerNegotiator Negotiator { get; set; }
+    public CnCNetTunnel? Tunnel { get; set; }
+    public V3PlayerNegotiator? Negotiator { get; set; }
     public Dictionary<CnCNetTunnel, TunnelTestResult> TunnelResults { get; } = [];
     private const int PACKET_LOSS_WEIGHT = 10;
 
@@ -101,12 +101,12 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     /// <summary>
     /// Retrieves the <see cref="TunnelTestResult"/> for the specified tunnel, or null if not found.
     /// </summary>
-    public TunnelTestResult GetTunnelResult(CnCNetTunnel tunnel) => TunnelResults.TryGetValue(tunnel, out var result) ? result : null;
+    public TunnelTestResult? GetTunnelResult(CnCNetTunnel tunnel) => TunnelResults.TryGetValue(tunnel, out var result) ? result : null;
 
     /// <summary>
     /// Selects the best available tunnel based on RTT and packet loss
     /// </summary>
-    public CnCNetTunnel SelectBestTunnel()
+    public CnCNetTunnel? SelectBestTunnel()
     {
         var bestTunnel = TunnelResults
             .Where(kvp => kvp.Value.PingResults.Any(p => p.RoundTripTime.HasValue))
@@ -118,15 +118,6 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
             Tunnel = bestTunnel;
 
         return bestTunnel;
-    }
-
-    /// <summary>
-    /// Returns the lowest average ping across all tested tunnels.
-    /// </summary>
-    public double GetBestPing()
-    {
-        var best = SelectBestTunnel();
-        return best != null ? TunnelResults[best].AverageRtt : double.NaN;
     }
 
     public void SetNegotiator(V3PlayerNegotiator negotiator)

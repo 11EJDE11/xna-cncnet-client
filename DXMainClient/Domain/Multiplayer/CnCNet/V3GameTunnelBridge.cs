@@ -23,7 +23,7 @@ public class V3GameTunnelBridge
     private readonly TunnelHandler _tunnelHandler;
     private readonly Thread _bridgeThread;
     private readonly UdpClient _localGameClient; // game will connect to this
-    private volatile IPEndPoint _gameEndpoint;
+    private volatile IPEndPoint? _gameEndpoint;
     private volatile bool _isRunning = false;
     public bool IsRunning => _isRunning;
 

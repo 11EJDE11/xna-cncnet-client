@@ -62,8 +62,8 @@ public class V3TunnelCommunicator
 {
     private readonly static byte[] MAGIC_BYTES = [0x45, 0x4A, 0x45, 0x4A, 0x45, 0x4A]; //EJEJEJ
 
-    private UdpClient _udpClient;
-    private Thread _receiveThread; 
+    private UdpClient? _udpClient;
+    private Thread? _receiveThread; 
     private volatile bool _running;
     private readonly ConcurrentDictionary<IPEndPoint, CnCNetTunnel> _endpointToTunnel = new();
     private readonly ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler> _handlers = new();
@@ -128,7 +128,7 @@ public class V3TunnelCommunicator
     /// <param name="packetType">Type of the packet to create.</param>
     /// <param name="payload">Optional payload data (defaults to empty).</param>
     /// <returns>A byte array containing the fully formatted packet.</returns>
-    public static byte[] CreatePacket(uint senderId, uint receiverId, TunnelPacketType packetType, byte[] payload = null)
+    public static byte[] CreatePacket(uint senderId, uint receiverId, TunnelPacketType packetType, byte[]? payload = null)
     {
         const int HeaderSize = 8;
 
@@ -172,7 +172,7 @@ public class V3TunnelCommunicator
     /// Optional list of tunnels to send to.  
     /// If omitted, all known tunnels will be targeted.
     /// </param>
-    public void SendRegistrationToTunnels(uint localId, List<CnCNetTunnel> tunnels = null)
+    public void SendRegistrationToTunnels(uint localId, List<CnCNetTunnel>? tunnels = null)
     {
         if (!IsInitialized)
             return;
@@ -203,8 +203,8 @@ public class V3TunnelCommunicator
     /// <param name="receiverId">The receiver's V3PlayerInfo ID.</param>
     /// <param name="packetType">The type of packet to send.</param>
     /// <param name="payload">Optional payload data.</param>
-    public void SendPacket(CnCNetTunnel tunnel, uint senderId, uint receiverId,
-        TunnelPacketType packetType, byte[] payload = null)
+    public void SendPacket(CnCNetTunnel? tunnel, uint senderId, uint receiverId,
+        TunnelPacketType packetType, byte[]? payload = null)
     {
         if (!IsInitialized || tunnel == null)
         {
@@ -244,7 +244,7 @@ public class V3TunnelCommunicator
         };
         _receiveThread.Start();
 
-        Logger.Log($"V3TunnelCommunicator: Initialized V3 tunnel connection with {_endpointToTunnel.Count} tunnels on local port {((IPEndPoint)_udpClient.Client.LocalEndPoint).Port}");
+        Logger.Log($"V3TunnelCommunicator: Initialized V3 tunnel connection with {_endpointToTunnel.Count} tunnels on local port {((IPEndPoint)_udpClient.Client.LocalEndPoint!).Port}");
     }
 
     /// <summary>
@@ -262,7 +262,7 @@ public class V3TunnelCommunicator
             if (parsed.Payload.Length == 0 && !parsed.NegotiationType.HasValue)
                 return;
 
-            PacketHandler handler = null;
+            PacketHandler? handler = null;
 
             if (parsed.NegotiationType.HasValue)
                 _handlers.TryGetValue((parsed.ReceiverId, parsed.SenderId), out handler);
