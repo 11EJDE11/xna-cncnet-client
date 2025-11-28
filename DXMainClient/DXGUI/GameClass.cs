@@ -279,6 +279,7 @@ namespace DTAClient.DXGUI
                             .AddSingletonXnaControl<PlayerExtraOptionsPanel>()
                             .AddSingletonXnaControl<CampaignSelector>()
                             .AddSingletonXnaControl<GameLoadingWindow>()
+                            .AddSingletonXnaControl<GameReplayWindow>()
                             .AddSingletonXnaControl<StatisticsWindow>()
                             .AddSingletonXnaControl<UpdateQueryWindow>()
                             .AddSingletonXnaControl<ManualUpdateQueryWindow>()

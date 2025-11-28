@@ -2049,6 +2049,43 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             CopyPlayerDataToUI();
 
             UpdateDiscordPresence(true);
+
+            // Only save replay.dat if we're not exiting from replay playback
+            if (!GameProcessLogic.IsReplayPlayback)
+            {
+                try
+                {
+                    string replaySource = Path.Combine(ProgramConstants.GamePath, "replay.dat");
+                    if (File.Exists(replaySource))
+                    {
+                        string replayDir = Path.Combine(ProgramConstants.GamePath, "replays");
+                        Directory.CreateDirectory(replayDir);
+
+                        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                        string replayDest = Path.Combine(replayDir, $"Replay_{timestamp}.yrrp");
+
+                        // If file already exists, add a counter
+                        int counter = 1;
+                        string baseName = replayDest;
+                        while (File.Exists(replayDest))
+                        {
+                            replayDest = baseName.Replace(".yrrp", $"_{counter}.yrrp");
+                            counter++;
+                        }
+
+                        File.Move(replaySource, replayDest);
+                        Logger.Log($"Replay saved to: {replayDest}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Failed to move replay.dat: {ex.Message}");
+                }
+            }
+            else
+            {
+                Logger.Log("Skipping replay.dat save - exiting from replay playback");
+            }
         }
 
         /// <summary>

@@ -25,6 +25,24 @@ namespace ClientGUI
         public static bool UseQres { get; set; }
         public static bool SingleCoreAffinity { get; set; }
 
+        //TODO fix all this properly
+        /// <summary>
+        /// Indicates whether the game is currently running in replay playback mode.
+        /// This is set by GameReplayWindow when launching a replay.
+        /// </summary>
+        public static bool IsReplayPlayback { get; set; }
+
+        /// <summary>
+        /// The time when the game process was started.
+        /// Used to detect and ignore premature exits (Phobos/Spawner debug modes).
+        /// </summary>
+        private static DateTime gameStartTime;
+
+        /// <summary>
+        /// The name of the actual game process to monitor.
+        /// </summary>
+        private const string ACTUAL_GAME_PROCESS_NAME = "gamemd-spawn";
+
         /// <summary>
         /// Starts the main game process.
         /// </summary>
@@ -42,7 +60,7 @@ namespace ClientGUI
                 waitTimes++;
                 if (waitTimes > 10)
                 {
-                    XNAMessageBox.Show(windowManager, 
+                    XNAMessageBox.Show(windowManager,
                         "INI preprocessing not complete".L10N("Client:ClientGUI:INIPreprocessingNotCompleteTitle"),
                         ("INI preprocessing not complete. Please try " +
                         "launching the game again. If the problem persists, " +
@@ -82,6 +100,8 @@ namespace ClientGUI
             SafePath.DeleteFileIfExists(ProgramConstants.GamePath, "TS.LOG");
 
             GameProcessStarting?.Invoke();
+
+            gameStartTime = DateTime.Now;
 
             if (UserINISettings.Instance.WindowedMode && UseQres && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -165,11 +185,70 @@ namespace ClientGUI
 
         static void Process_Exited(object sender, EventArgs e)
         {
-            Logger.Log("GameProcessLogic: Process exited.");
+
             Process proc = (Process)sender;
             proc.Exited -= Process_Exited;
             proc.Dispose();
-            GameProcessExited?.Invoke();
+
+            //TODO fix all this
+            TimeSpan elapsed = DateTime.Now - gameStartTime;
+            if (elapsed.TotalSeconds < 5)
+            {
+                Logger.Log($"GameProcessLogic: Launcher process exited after {elapsed.TotalSeconds:F1} seconds. This is likely Syringe.exe.");
+                Logger.Log($"GameProcessLogic: Now monitoring for {ACTUAL_GAME_PROCESS_NAME}.exe to exit...");
+
+                // Start monitoring the gamemd-spawn.exe
+                var monitorThread = new Thread(() => MonitorActualGameProcess());
+                monitorThread.IsBackground = true;
+                monitorThread.Start();
+            }
+            else
+            {
+                // Normal exit
+                Logger.Log($"GameProcessLogic: Process exited after {elapsed.TotalSeconds:F1} seconds.");
+                GameProcessExited?.Invoke();
+            }
+        }
+
+        static void MonitorActualGameProcess()
+        {
+            try
+            {
+                Thread.Sleep(500);
+
+                // Find the gamemd-spawn process
+                Process[] gameProcesses = Process.GetProcessesByName(ACTUAL_GAME_PROCESS_NAME);
+
+                if (gameProcesses.Length == 0)
+                {
+                    Logger.Log($"GameProcessLogic: No {ACTUAL_GAME_PROCESS_NAME}.exe process found. Game may have failed to start.");
+                    GameProcessExited?.Invoke();
+                    return;
+                }
+
+                Process gameProcess = gameProcesses[0];
+                Logger.Log($"GameProcessLogic: Found {ACTUAL_GAME_PROCESS_NAME}.exe (PID: {gameProcess.Id}). Monitoring for exit...");
+
+                for (int i = 1; i < gameProcesses.Length; i++)
+                {
+                    gameProcesses[i].Dispose();
+                }
+
+                gameProcess.WaitForExit();
+
+                TimeSpan totalElapsed = DateTime.Now - gameStartTime;
+                Logger.Log($"GameProcessLogic: {ACTUAL_GAME_PROCESS_NAME}.exe exited after {totalElapsed.TotalSeconds:F1} seconds total.");
+
+                gameProcess.Dispose();
+
+                GameProcessExited?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"GameProcessLogic: Error monitoring game process: {ex.Message}");
+                // Invoke exit event anyway to prevent the client from being stuck
+                GameProcessExited?.Invoke();
+            }
         }
     }
 }
