@@ -83,10 +83,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public double Longitude { get; private set; }
         public int Version { get; private set; }
         public double Distance { get; private set; }
-        public int PingInMs { get; set; } = -1;
+        public PingValue Ping { get; set; } = PingValue.Unknown;
 
         /// <summary>
-        /// Updates this tunnel's metadata from another tunnel instance, preserving Address, Port, and existing PingInMs.
+        /// Updates this tunnel's metadata from another tunnel instance, preserving Address, Port, and existing Ping.
         /// </summary>
         internal void UpdateFrom(CnCNetTunnel updatedTunnel)
         {
@@ -154,12 +154,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 {
                     PingReply reply = p.Send(IPAddress.Parse(Address), PING_TIMEOUT);
                     if (reply.Status == IPStatus.Success)
-                        PingInMs = Convert.ToInt32(reply.RoundtripTime);
+                        Ping = PingValue.FromMs(Convert.ToInt32(reply.RoundtripTime));
+                    else
+                        Ping = PingValue.Unknown;
                 }
                 catch (PingException ex)
                 {
                     Logger.Log($"Caught an exception when pinging {Name} tunnel server: {ex.ToString()}");
-                    PingInMs = -1;
+                    Ping = PingValue.Unknown;
                 }
             }
         }

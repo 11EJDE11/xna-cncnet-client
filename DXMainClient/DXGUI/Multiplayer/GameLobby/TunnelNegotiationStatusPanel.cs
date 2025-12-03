@@ -165,7 +165,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         }
     }
 
-    private void UpdateCell(XNALabel cell, NegotiationStatus status, int? ping)
+    private void UpdateCell(XNALabel cell, NegotiationStatus status, PingValue? ping)
     {
         cell.CenterOnParent();
         switch (status)
@@ -179,14 +179,14 @@ public class TunnelNegotiationStatusPanel : XNAPanel
                 cell.TextColor = Color.Yellow;
                 break;
             case NegotiationStatus.Succeeded:
-                if (ping.HasValue && ping.Value > 0)
+                if (ping.HasValue)
                 {
-                    cell.Text = $"{ping}ms";
-                    if (ping < 50)
+                    cell.Text = ping.ToString();
+                    if (ping.Value.Milliseconds < 50)
                         cell.TextColor = Color.LightGreen;
-                    else if (ping < 100)
+                    else if (ping.Value.Milliseconds < 100)
                         cell.TextColor = Color.Yellow;
-                    else if (ping < 200)
+                    else if (ping.Value.Milliseconds < 200)
                         cell.TextColor = Color.Orange;
                     else
                         cell.TextColor = Color.Red;

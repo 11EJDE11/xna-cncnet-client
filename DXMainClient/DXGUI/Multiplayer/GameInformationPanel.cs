@@ -191,10 +191,7 @@ namespace DTAClient.DXGUI.Multiplayer
             }
             else
             {
-                if (game.Ping > 0)
-                    pingText = "Ping:".L10N("Client:Main:GameInfoPing") + " " + game.Ping.ToString() + " ms";
-                else
-                    pingText = "Ping: Unknown".L10N("Client:Main:GameInfoPingUnknown");
+                pingText = "Ping:".L10N("Client:Main:GameInfoPing") + " " + hostedGame.TunnelServer.Ping.ToString();
             }
 
             lblPing.Text = pingText;

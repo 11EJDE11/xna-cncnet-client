@@ -348,7 +348,7 @@ public class V3PlayerNegotiator : IDisposable
                 if (!_isDecider)
                 {
                     // The chosen tunnel is the one this packet came through
-                    int ping = 0;
+                    int ping = -1;
                     if (payload != null && payload.Length >= 4)
                         ping = BinaryPrimitives.ReadInt32LittleEndian(payload);
 
@@ -439,9 +439,9 @@ public class V3PlayerNegotiator : IDisposable
                     $"Player: {_remotePlayer.Name} | " +
                     $"Tunnel: {tunnel.Name} | " +
                     $"Avg RTT: {(result.AverageRtt.HasValue ? $"{result.AverageRtt.Value:F1}ms" : "N/A")} | " +
-                    $"Real ping: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs:F1}ms" : "N/A")} | " +
-                    $"Real ping*2: {(tunnel.PingInMs >= 0 ? $"{tunnel.PingInMs * 2:F1}ms" : "N/A")} | " +
-                    $"Difference: {(tunnel.PingInMs >= 0 && result.AverageRtt.HasValue ? $"{result.AverageRtt.Value - (tunnel.PingInMs * 2):F1}ms" : "N/A")} | " +
+                    $"Real ping: {(tunnel.Ping.IsValid() ? $"{tunnel.Ping.Milliseconds:F1}ms" : "N/A")} | " +
+                    $"Real ping*2: {(tunnel.Ping.IsValid() ? $"{tunnel.Ping.Milliseconds * 2:F1}ms" : "N/A")} | " +
+                    $"Difference: {(tunnel.Ping.IsValid() && result.AverageRtt.HasValue ? $"{result.AverageRtt.Value - (tunnel.Ping.Milliseconds * 2):F1}ms" : "N/A")} | " +
                     $"Packet Loss: {result.PacketLoss:F1}% | " +
                     $"Pings: {successfulPings}/{result.PingResults.Count} | " +
                     $"Connected: {result.ConnectedReceived}"

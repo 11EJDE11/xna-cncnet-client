@@ -16,6 +16,7 @@ using DTAClient.Domain;
 using Microsoft.Xna.Framework.Graphics;
 using ClientCore.Extensions;
 using DTAClient.DXGUI.Multiplayer.CnCNet;
+using DTAClient.Domain.Multiplayer.CnCNet;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
@@ -1075,15 +1076,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             XNAClientDropDown ddPlayerName = ddPlayerNames[pInfo.Index];
             ddPlayerName.Items[0].Texture = GetTextureForPing(pInfo.Ping);
-            if (pInfo.Ping < 0)
-                ddPlayerName.ToolTip.Text = "Ping:".L10N("Client:Main:PlayerInfoPing") + " ? " + "ms".L10N("Client:Main:MillisecondsShort");
-            else
-                ddPlayerName.ToolTip.Text = "Ping:".L10N("Client:Main:PlayerInfoPing") + $" {pInfo.Ping} " + "ms".L10N("Client:Main:MillisecondsShort");
+            ddPlayerName.ToolTip.Text = "Ping:".L10N("Client:Main:PlayerInfoPing") + " " + pInfo.Ping.ToString();
         }
 
-        private Texture2D GetTextureForPing(int ping)
+        private Texture2D GetTextureForPing(PingValue ping)
         {
-            switch (ping)
+            switch (ping.Milliseconds)
             {
                 case int p when (p > 350):
                     return PingTextures[4];

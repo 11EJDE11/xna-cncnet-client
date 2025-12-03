@@ -17,8 +17,8 @@ public class NegotiationDataManager
     // This tracks what each player reports about their negotiation with each other player
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, NegotiationStatus>> _negotiationStatuses = new();
 
-    // reportingPlayer -> targetPlayer -> ping (in milliseconds)
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, int>> _playerPingMatrix = new();
+    // reportingPlayer -> targetPlayer -> ping
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, PingValue>> _playerPingMatrix = new();
 
     /// <summary>
     /// Updates the negotiation status reported by one player about another.
@@ -36,8 +36,8 @@ public class NegotiationDataManager
     public void UpdatePing(string reportingPlayer, string targetPlayer, int ping)
     {
         var reporterPings = _playerPingMatrix.GetOrAdd(reportingPlayer,
-            _ => new ConcurrentDictionary<string, int>());
-        reporterPings[targetPlayer] = ping;
+            _ => new ConcurrentDictionary<string, PingValue>());
+        reporterPings[targetPlayer] = ping >= 0 ? PingValue.FromMs(ping) : PingValue.Unknown;
     }
 
     /// <summary>
@@ -64,20 +64,22 @@ public class NegotiationDataManager
     /// <summary>
     /// Gets the ping between two players by checking both directions.
     /// Returns the first ping found, checking player1->player2 then player2->player1.
+    /// Returns null if no ping data exists for this player pair.
     /// </summary>
-    public int? GetPing(string player1, string player2)
+    public PingValue? GetPing(string player1, string player2)
     {
         // Players don't have ping to themselves
         if (player1 == player2)
             return null;
 
         if (_playerPingMatrix.TryGetValue(player1, out var player1Pings) &&
-            player1Pings.TryGetValue(player2, out var ping))
+            player1Pings.TryGetValue(player2, out var ping) && ping.IsValid())
             return ping;
 
         if (_playerPingMatrix.TryGetValue(player2, out var player2Pings) &&
-            player2Pings.TryGetValue(player1, out ping))
+            player2Pings.TryGetValue(player1, out ping) && ping.IsValid())
             return ping;
+
 
         return null;
     }

@@ -32,7 +32,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public string MatchID { get; set; }
         public CnCNetTunnel TunnelServer { get; set; }
 
-        public override int Ping => TunnelServer?.PingInMs ?? 0;
+        public override PingValue Ping => TunnelServer?.Ping ?? PingValue.Unknown;
 
         public override bool Equals(GenericHostedGame other)
             => other is HostedCnCNetGame hostedCnCNetGame

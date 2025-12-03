@@ -364,7 +364,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         _negotiationData.UpdatePing(e.PlayerName, ProgramConstants.PLAYERNAME, e.NegotiationPing);
                     }
 
-                    playerInfo.Ping = e.NegotiationPing;
+                    playerInfo.Ping = e.NegotiationPing >= 0 ? PingValue.FromMs(e.NegotiationPing) : PingValue.Unknown;
                     UpdatePlayerPingIndicator(playerInfo);
                     CopyPlayerDataToUI();
 
@@ -419,7 +419,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void TunnelHandler_TunnelFailed(object sender, CnCNetTunnel failedTunnel)
         {
-            if (tunnelHandler.GameTunnelBridge.IsRunning)
+            if (tunnelHandler.GameTunnelBridge != null && tunnelHandler.GameTunnelBridge.IsRunning)
                 return;
 
             if (_useDynamicTunnels)
@@ -562,12 +562,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (tunnelHandler.CurrentTunnel == null)
                 return;
 
-            channel.SendCTCPMessage("TNLPNG " + tunnelHandler.CurrentTunnel.PingInMs, QueuedMessageType.SYSTEM_MESSAGE, 10);
+            channel.SendCTCPMessage("TNLPNG " + tunnelHandler.CurrentTunnel.Ping.Milliseconds, QueuedMessageType.SYSTEM_MESSAGE, 10);
 
             PlayerInfo pInfo = Players.Find(p => p.Name.Equals(ProgramConstants.PLAYERNAME));
             if (pInfo != null)
             {
-                pInfo.Ping = tunnelHandler.CurrentTunnel.PingInMs;
+                pInfo.Ping = tunnelHandler.CurrentTunnel.Ping;
                 UpdatePlayerPingIndicator(pInfo);
                 CopyPlayerDataToUI();
             }
@@ -1536,7 +1536,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     PlayerInfo pInfo = Players.Find(p => p.Name == targetPlayer);
                     if (pInfo != null)
                     {
-                        pInfo.Ping = ping;
+                        pInfo.Ping = PingValue.FromMs(ping);
                         UpdatePlayerPingIndicator(pInfo);
                         CopyPlayerDataToUI();
                     }
@@ -1546,7 +1546,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     PlayerInfo pInfo = Players.Find(p => p.Name == sender);
                     if (pInfo != null)
                     {
-                        pInfo.Ping = ping;
+                        pInfo.Ping = PingValue.FromMs(ping);
                         UpdatePlayerPingIndicator(pInfo);
                         CopyPlayerDataToUI();
                     }
@@ -1632,8 +1632,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             foreach (var (player1, player2) in _negotiationData.GetPlayerPairs(playerNames))
             {
                 var ping = _negotiationData.GetPing(player1, player2);
-                if (ping.HasValue && ping.Value > HIGH_PING_THRESHOLD)
-                    highPingPairs.Add((player1, player2, ping.Value));
+                if (ping.HasValue && ping.Value.Milliseconds > HIGH_PING_THRESHOLD)
+                    highPingPairs.Add((player1, player2, ping.Value.Milliseconds));
             }
 
             if (highPingPairs.Count > 0)
@@ -1932,7 +1932,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 foreach (PlayerInfo pInfo in Players)
                 {
-                    pInfo.Ping = -1;
+                    pInfo.Ping = PingValue.Unknown;
                     UpdatePlayerPingIndicator(pInfo);
                 }
                 CopyPlayerDataToUI();
@@ -2347,7 +2347,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             PlayerInfo pInfo = Players.Find(p => p.Name.Equals(sender));
             if (pInfo != null)
             {
-                pInfo.Ping = ping;
+                pInfo.Ping = ping >= 0 ? PingValue.FromMs(ping) : PingValue.Unknown;
                 UpdatePlayerPingIndicator(pInfo);
             }
         }
@@ -2546,15 +2546,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             int targetVersion = _useLegacyTunnels ? 2 : 3;
 
             var bestTunnel = tunnelHandler.Tunnels
-                .Where(t => t.PingInMs > 0
+                .Where(t => t.Ping.IsValid()
                     && (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended)
                     && t.Version == targetVersion)
-                .OrderBy(t => t.PingInMs)
+                .OrderBy(t => t.Ping.Milliseconds)
                 .FirstOrDefault();
 
             if (bestTunnel != null)
             {
-                AddNotice($"Auto-selected tunnel: {bestTunnel.Name} (Ping: {bestTunnel.PingInMs}ms)");
+                AddNotice($"Auto-selected tunnel: {bestTunnel.Name} (Ping: {bestTunnel.Ping.Milliseconds}ms)");
                 channel.SendCTCPMessage($"{CHANGE_TUNNEL_SERVER_MESSAGE} {bestTunnel.Address}:{bestTunnel.Port}",
                     QueuedMessageType.SYSTEM_MESSAGE, 10);
                 HandleTunnelServerChange(bestTunnel);
@@ -2572,7 +2572,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             foreach (PlayerInfo pInfo in Players)
             {
-                pInfo.Ping = -1;
+                pInfo.Ping = PingValue.Unknown;
                 UpdatePlayerPingIndicator(pInfo);
             }
 

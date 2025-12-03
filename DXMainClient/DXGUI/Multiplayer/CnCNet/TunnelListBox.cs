@@ -139,10 +139,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 info.Add(""); // Flag column
                 info.Add(tunnel.Name);
                 info.Add(Conversions.BooleanToString(tunnel.Official, BooleanStringStyle.YESNO));
-                if (tunnel.PingInMs < 0)
-                    info.Add("Unknown".L10N("Client:Main:UnknownPing"));
-                else
-                    info.Add(tunnel.PingInMs + " ms");
+                info.Add(tunnel.Ping.ToString());
                 info.Add(tunnel.Clients + " / " + tunnel.MaxClients);
 
                 AddItem(info, true);
@@ -151,7 +148,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 if (flagItem != null)
                     flagItem.Tag = GetFlagRectangle(tunnel.CountryCode);
 
-                if ((tunnel.Official || tunnel.Recommended) && tunnel.PingInMs > -1)
+                if ((tunnel.Official || tunnel.Recommended) && tunnel.Ping.IsValid())
                 {
                     int rating = GetTunnelRating(tunnel);
                     if (rating < lowestTunnelRating)
@@ -202,12 +199,10 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return;
 
             XNAListBoxItem lbItem = GetItem(3, filteredIndex);
+            lbItem.Text = tunnel.Ping.ToString();
 
-            if (tunnel.PingInMs == -1)
-                lbItem.Text = "Unknown".L10N("Client:Main:UnknownPing");
-            else
+            if (tunnel.Ping.IsValid())
             {
-                lbItem.Text = tunnel.PingInMs + " ms";
                 int rating = GetTunnelRating(tunnel);
 
                 if (isManuallySelectedTunnel)
@@ -231,7 +226,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             usageRatio *= 100.0;
 
-            return Convert.ToInt32(Math.Pow(tunnel.PingInMs, 2.0) * usageRatio);
+            return Convert.ToInt32(Math.Pow(tunnel.Ping.Milliseconds, 2.0) * usageRatio);
         }
 
         public CnCNetTunnel GetSelectedTunnel()
