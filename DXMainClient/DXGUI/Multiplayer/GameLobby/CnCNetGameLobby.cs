@@ -586,15 +586,60 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void PrintTunnelServerInformation(string s)
         {
-            if (tunnelHandler.CurrentTunnel == null)
+            // V3 dynamic (per-player)
+            if (_useDynamicTunnels)
+            {
+                AddNotice("V3 Tunnel Mode - Per-player tunnel information:".L10N("Client:Main:V3TunnelHeader"));
+
+                foreach (var v3Player in _v3PlayerInfos.Where(p => p.Name != ProgramConstants.PLAYERNAME))
+                {
+                    var t = v3Player.Tunnel;
+
+                    if (t != null)
+                    {
+                        AddNotice(string.Format(
+                            "{0}: {1} {2} (Ping: {3}) (Players: {4}/{5}) (Official: {6}) Version: {7}"
+                                .L10N("Client:Main:V3TunnelInfo"),
+
+                            v3Player.Name,
+                            t.Name,
+                            t.Country,
+                            t.Ping.ToString(),
+                            t.Clients,
+                            t.MaxClients,
+                            t.Official,
+                            t.Version.ToString()
+                        ));
+                    }
+                    else
+                    {
+                        AddNotice(string.Format(
+                           "{0}: Not negotiated yet".L10N("Client:Main:V3TunnelNotNegotiated"),
+                            v3Player.Name
+                        ));
+                    }
+                }
+            }
+
+            // V2 legacy tunnels or V3 static with a single tunnel
+            else if (tunnelHandler.CurrentTunnel == null)
             {
                 AddNotice("Tunnel server unavailable!".L10N("Client:Main:TunnelUnavailable"));
             }
             else
             {
-                AddNotice(string.Format("Current tunnel server: {0} {1} (Players: {2}/{3}) (Official: {4}) Version: {5}".L10N("Client:Main:TunnelInfo"),
-                        tunnelHandler.CurrentTunnel.Name, tunnelHandler.CurrentTunnel.Country, tunnelHandler.CurrentTunnel.Clients, tunnelHandler.CurrentTunnel.MaxClients, tunnelHandler.CurrentTunnel.Official, tunnelHandler.CurrentTunnel.Version.ToString()
-                    ));
+                var t = tunnelHandler.CurrentTunnel;
+
+                AddNotice(string.Format(
+                    "Current tunnel server: {0} {1} (Players: {2}/{3}) (Official: {4}) Version: {5}"
+                        .L10N("Client:Main:TunnelInfo"),
+                    t.Name,
+                    t.Country,
+                    t.Clients,
+                    t.MaxClients,
+                    t.Official,
+                    t.Version.ToString()
+                ));
             }
         }
 
