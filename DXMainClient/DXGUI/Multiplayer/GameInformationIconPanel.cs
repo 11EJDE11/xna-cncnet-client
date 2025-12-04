@@ -39,7 +39,8 @@ namespace DTAClient.DXGUI.Multiplayer
             int textHeight = (int)textSize.Y;
 
             int iconY = (textHeight - icon.Height) / 2;
-            if (iconY < 0) iconY = 0;
+            if (iconY < 0) 
+                iconY = 0;
 
             DrawTexture(icon, new Rectangle(0, iconY, icon.Width, icon.Height), Color.White);
 
