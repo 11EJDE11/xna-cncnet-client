@@ -34,6 +34,8 @@ public enum CheckBoxMapScoringMode
 // TODO split the logic between descendants better and clean up
 public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
 {
+    private const int DEFAULT_SORT_ORDER = 100;
+
     public GameSessionCheckBox(WindowManager windowManager) : base (windowManager) { }
 
     public bool AllowChanges { get; set; } = true;
@@ -107,7 +109,7 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
     /// Sort order for displaying icons in the GameInformationPanel and GameListBox.
     /// Lower values appear first.
     /// </summary>
-    public int SortOrder { get; private set; } = 100;
+    public int SortOrder { get; private set; } = DEFAULT_SORT_ORDER;
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
