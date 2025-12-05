@@ -318,7 +318,9 @@ namespace DTAClient.DXGUI.Multiplayer
             int rightIconsWidth = rightIcons.Count > 0 ?
                 (rightIcons.Sum(icon => icon.Width) + (rightIcons.Count * ICON_MARGIN)) : 0;
 
-            int gameTextureWidth = ClientConfiguration.Instance.ShowGameIconInGameList ? hg.Game.Texture.Width : 0;
+            bool showGameIcon = ClientConfiguration.Instance.ShowGameIconInGameList
+                || hg.Game.InternalName != localGameIdentifier.ToLower();
+            int gameTextureWidth = showGameIcon ? hg.Game.Texture.Width : 0;
 
             int skillLevelIconWidth = 0;
             if (txSkillLevelIcons[hg.SkillLevel] != null)
@@ -416,7 +418,10 @@ namespace DTAClient.DXGUI.Multiplayer
                     x += icon.Width + ICON_MARGIN;
                 }
 
-                if (ClientConfiguration.Instance.ShowGameIconInGameList)
+                bool showGameIcon = ClientConfiguration.Instance.ShowGameIconInGameList
+                    || hostedGame.Game.InternalName != localGameIdentifier.ToLower();
+
+                if (showGameIcon)
                 {
                     DrawTexture(hostedGame.Game.Texture,
                         new Rectangle(x, height,
