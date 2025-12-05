@@ -485,8 +485,7 @@ namespace ClientCore
         private void ResetGameOptionFilters()
         {
             var section = SettingsIni.GetSection(GAME_OPTION_FILTERS);
-            if (section != null)
-                section.RemoveAllKeys();
+            section?.RemoveAllKeys();
         }
 
         /// <summary>
