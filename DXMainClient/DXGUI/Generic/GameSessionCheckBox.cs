@@ -34,7 +34,7 @@ public enum CheckBoxMapScoringMode
 // TODO split the logic between descendants better and clean up
 public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
 {
-    private const int DEFAULT_SORT_ORDER = 100;
+    private const int DEFAULT_SORT_ORDER = 0;
 
     public GameSessionCheckBox(WindowManager windowManager) : base (windowManager) { }
 

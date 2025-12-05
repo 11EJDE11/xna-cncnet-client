@@ -21,7 +21,7 @@ namespace DTAClient.DXGUI.Generic;
 public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
 {
 
-    private const int DEFAULT_SORT_ORDER = 100;
+    private const int DEFAULT_SORT_ORDER = 0;
 
     public GameSessionDropDown(WindowManager windowManager) : base(windowManager) { }
 
