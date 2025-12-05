@@ -372,7 +372,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 currentY += maxIconHeight + legendPadding;
             }
 
-            // Then show icons with text ( two columns)
+            // Then show icons with text (two columns)
             if (optionIconsWithText.Count > 0)
             {
                 var sortedIconsWithText = optionIconsWithText.OrderBy(x => x.sortOrder).ToList();
