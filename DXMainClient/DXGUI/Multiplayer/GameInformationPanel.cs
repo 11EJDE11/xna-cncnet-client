@@ -76,6 +76,7 @@ namespace DTAClient.DXGUI.Multiplayer
         private const int legendTopSpacing = 15;
         private const int legendIconHeight = 18;
         private const int legendPadding = 5;
+        private const int legendIconPadding = 2;
 
         private const int gameInfoLabelTopPadding = 6;
 
@@ -392,9 +393,9 @@ namespace DTAClient.DXGUI.Multiplayer
                     pnlGameOptions.AddChild(iconPanel);
 
                     if (isLeftColumn)
-                        leftY += legendIconHeight + 2;
+                        leftY += legendIconHeight + legendIconPadding;
                     else
-                        rightY += legendIconHeight + 2;
+                        rightY += legendIconHeight + legendIconPadding;
 
                     itemIndex++;
                 }
