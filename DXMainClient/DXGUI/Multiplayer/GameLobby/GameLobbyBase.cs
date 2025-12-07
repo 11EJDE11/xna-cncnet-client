@@ -2723,7 +2723,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 GameLobbyCheckBox checkBox = CheckBoxes.Find(c => c.Name == kvp.Key);
                 if (checkBox != null && checkBox.AllowChanges && checkBox.AllowChecking)
+                {
                     checkBox.Checked = kvp.Value;
+                    checkBox.HostChecked = kvp.Value;
+                }
             }
 
             var dropDownValues = preset.GetDropDownValues();
@@ -2731,7 +2734,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 GameLobbyDropDown dropDown = DropDowns.Find(d => d.Name == kvp.Key);
                 if (dropDown != null && dropDown.AllowDropDown)
+                {
                     dropDown.SelectedIndex = kvp.Value;
+                    dropDown.HostSelectedIndex = kvp.Value;
+                }
             }
 
             disableGameOptionUpdateBroadcast = false;
