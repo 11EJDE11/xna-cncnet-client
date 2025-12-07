@@ -22,6 +22,7 @@ using System.Linq;
 using System.Threading;
 using ClientUpdater;
 using DTAClient.Domain.Multiplayer;
+using DTAClient.DXGUI.Campaign;
 
 namespace DTAClient.DXGUI.Generic
 {
@@ -899,7 +900,7 @@ namespace DTAClient.DXGUI.Generic
         }
 
         private void ManualUpdateQueryWindow_Closed(object sender, EventArgs e)
-            => updateQueryWindow.Enable();
+            => manualUpdateQueryWindow.Disable();
 
         #endregion
 
