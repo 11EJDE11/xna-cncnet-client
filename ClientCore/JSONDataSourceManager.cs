@@ -1,6 +1,4 @@
-﻿using Rampastring.Tools;
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -31,6 +29,9 @@ public class JSONDataSourceManager
     {
         const string sectionName = "DataSources";
         var section = iniFile.GetSection(sectionName);
+
+        if (section == null)
+            return;
 
         foreach (var key in section.Keys)
         {
@@ -208,31 +209,10 @@ public class JSONDataSourceManager
 
         private string ConvertIniToJson(string iniContent)
         {
-            var iniFile = new IniFile();
-            using (var reader = new StringReader(iniContent))
+            IniFile iniFile;
+            using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(iniContent)))
             {
-                string line;
-                string currentSection = null;
-                while ((line = reader.ReadLine()) != null)
-                {
-                    line = line.Trim();
-                    if (string.IsNullOrEmpty(line) || line.StartsWith(";"))
-                        continue;
-
-                    if (line.StartsWith("[") && line.EndsWith("]"))
-                    {
-                        currentSection = line.Substring(1, line.Length - 2);
-                        continue;
-                    }
-
-                    if (currentSection != null && line.Contains("="))
-                    {
-                        int equalIndex = line.IndexOf('=');
-                        string key = line.Substring(0, equalIndex).Trim();
-                        string value = line.Substring(equalIndex + 1).Trim();
-                        iniFile.SetStringValue(currentSection, key, value);
-                    }
-                }
+                iniFile = new IniFile(stream, applyBaseIni: false);
             }
 
             var sb = new StringBuilder();

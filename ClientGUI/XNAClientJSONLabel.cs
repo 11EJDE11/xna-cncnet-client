@@ -154,7 +154,7 @@ public class XNAClientJSONLabel : XNALabel
 
         return result;
     }
-    
+
     private List<string> ParseJSONPath(string json, string path)
     {
         try
