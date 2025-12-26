@@ -2443,7 +2443,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 if (Players.Count < playerLimit)
                 {
-                    AddNotice("You've unlocked the game room.".L10N("Client:Main:RoomUnockedByYou"));
+                    AddNotice("You've unlocked the game room.".L10N("Client:Main:RoomUnlockedByYou"));
                     UnlockGame(false);
                 }
                 else
