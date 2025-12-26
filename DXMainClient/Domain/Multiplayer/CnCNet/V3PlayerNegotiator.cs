@@ -55,7 +55,7 @@ public class V3PlayerNegotiator : IDisposable
 
     // Pick a tunnel early if we have 80% of the results. The remaining tunnels
     // will be high ping or timing out.
-    private const double EARLY_SELECTION_THRESHOLD = 0.8;
+    private const double EARLY_SELECTION_THRESHOLD = 0.5;
 
     private TaskCompletionSource<bool> _tunnelAckReceived = new(); //true when tunnel choice ack'd
 
