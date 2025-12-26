@@ -53,7 +53,7 @@ public class V3PlayerNegotiator : IDisposable
     private const int TUNNEL_CHOICE_RETRY_INTERVAL_MS = 1000;
     private const int TUNNEL_CHOICE_MAX_RETRIES = 10;
 
-    // Pick a tunnel early if we have 80% of the results. The remaining tunnels
+    // Pick a tunnel early if we have 50% of the results. The remaining tunnels
     // will be high ping or timing out.
     private const double EARLY_SELECTION_THRESHOLD = 0.5;
 
