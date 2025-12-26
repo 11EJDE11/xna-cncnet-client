@@ -460,6 +460,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             foreach (var v3Player in affectedPlayers)
             {
+                v3Player.StopNegotiation();
                 v3Player.ResetNegotiator();
 
                 _negotiationData.ClearPlayer(v3Player.Name);
@@ -1175,7 +1176,18 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private void RegenerateV3PlayerInfos()
         {
             // Remove players who are no longer in the game
-            _v3PlayerInfos.RemoveAll(v3p => !Players.Any(p => p.Name == v3p.Name));
+            // First identify players to remove, then clean up their negotiations before removing
+            var playersToRemove = _v3PlayerInfos.Where(v3p => !Players.Any(p => p.Name == v3p.Name)).ToList();
+            foreach (var v3p in playersToRemove)
+            {
+                if (v3p.Negotiator != null)
+                {
+                    v3p.Negotiator.NegotiationResult -= OnPlayerNegotiationResult;
+                    v3p.Negotiator.NegotiationComplete -= OnPlayerNegotiationComplete;
+                }
+                v3p.StopNegotiation();
+                _v3PlayerInfos.Remove(v3p);
+            }
 
             for (int i = 0; i < Players.Count; i++)
             {
