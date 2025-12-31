@@ -330,7 +330,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             return tunnelHandler.Tunnels
                 .Where(t => t.Version == 3 &&
-                    (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended))
+                    (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official))
                 .ToList();
         }
 
