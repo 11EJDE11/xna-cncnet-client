@@ -310,6 +310,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             var indicator = (PlayerLocationIndicator)sender;
 
+            if (!indicator.Enabled) return;
+
             SoundPlayer.Play(sndClickSound);
 
             if (!EnableContextMenu)
@@ -600,6 +602,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 contextMenu.Disable();
                 contextMenu.Open(lastContextMenuPoint);
             }
+        }
+
+        /// <summary>
+        /// Sets which starting location indicators are enabled based on blocked starts.
+        /// </summary>
+        /// <param name="blockedStarts">List of blocked starting locations (1-based, 1-8).</param>
+        public void SetBlockedStartingLocations(List<int> blockedStarts)
+        {
+            for (int i = 0; i < startingLocationIndicators.Length; i++)
+                startingLocationIndicators[i].Enabled = !blockedStarts.Contains(i+1);
         }
 
         public override void OnMouseEnter()

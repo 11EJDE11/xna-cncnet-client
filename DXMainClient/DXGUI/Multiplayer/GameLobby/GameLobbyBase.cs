@@ -593,6 +593,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         protected virtual void OnGameOptionChanged()
         {
             CheckDisallowedSides();
+            CheckBlockedStarts();
 
             btnLaunchGame.SetRank(GetRank());
         }
@@ -1145,6 +1146,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
 
             CheckDisallowedSides();
+            CheckBlockedStarts();
         }
 
         private XNALabel GeneratePlayerOptionCaption(string name, string text, int x, int y)
@@ -1175,6 +1177,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             for (int i = 0; i < ddPlayerStarts.Length; i++)
                 EnablePlayerOptionDropDown(ddPlayerStarts[i], i, !playerExtraOptions.IsForceRandomStarts);
 
+            CheckBlockedStarts();
             UpdateMapPreviewBoxEnabledStatus();
             RefreshBtnPlayerExtraOptionsOpenTexture();
         }
@@ -1416,6 +1419,65 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             CheckDisallowedSidesForGroup(forHumanPlayers:false);
             CheckDisallowedSidesForGroup(forHumanPlayers:true);
+        }
+
+        /// <summary>
+        /// Applies blocked starting location indexes to the starting location drop-downs
+        /// and player options based on Auto Ally team start mappings.
+        /// </summary>
+        protected void CheckBlockedStarts()
+        {
+            if (PlayerExtraOptionsPanel == null)
+                return;
+
+            var teamStartMappings = PlayerExtraOptionsPanel.GetTeamStartMappings();
+            var blockedStarts = new List<int>();
+
+            foreach (var mapping in teamStartMappings)
+            {
+                if (mapping.IsBlock)
+                    blockedStarts.Add(mapping.Start);
+            }
+
+            // Enable/disable dropdown items
+            for (int pId = 0; pId < MAX_PLAYER_COUNT; pId++)
+            {
+                for (int i = 0; i < ddPlayerStarts[pId].Items.Count; i++)
+                {
+                    ddPlayerStarts[pId].Items[i].Selectable = !blockedStarts.Contains(i);
+                }
+            }
+
+            UpdateMapPreviewBlockedStarts(blockedStarts);
+
+            // Reset any player who has a blocked position selected
+            for (int pId = 0; pId < Players.Count; pId++)
+            {
+                if (blockedStarts.Contains(Players[pId].StartingLocation))
+                {
+                    Players[pId].StartingLocation = 0; // Set to random
+                    ddPlayerStarts[pId].SelectedIndex = 0;
+                }
+            }
+
+            for (int aiId = 0; aiId < AIPlayers.Count; aiId++)
+            {
+                int index = Players.Count + aiId;
+                if (blockedStarts.Contains(AIPlayers[aiId].StartingLocation))
+                {
+                    AIPlayers[aiId].StartingLocation = 0; // Set to random
+                    ddPlayerStarts[index].SelectedIndex = 0;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Updates the map preview box to disable blocked starting location indicators.
+        /// </summary>
+        /// <param name="blockedStarts">List of blocked starting locations (1-based).</param>
+        protected virtual void UpdateMapPreviewBlockedStarts(List<int> blockedStarts)
+        {
+            // implemented in derived classes
         }
 
         /// <summary>
@@ -2314,6 +2376,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             UpdateMapPreviewBoxEnabledStatus();
 
             CheckDisallowedSides();
+            CheckBlockedStarts();
 
             PlayerUpdatingInProgress = false;
         }

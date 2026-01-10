@@ -1182,6 +1182,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
         }
 
+        protected override void UpdateMapPreviewBlockedStarts(List<int> blockedStarts) => MapPreviewBox.SetBlockedStartingLocations(blockedStarts);
+
         protected override bool UpdateLaunchGameButtonStatus()
         {
             if (IsHost)

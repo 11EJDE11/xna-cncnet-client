@@ -503,6 +503,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             MapPreviewBox.EnableStartLocationSelection = MapPreviewBox.EnableContextMenu;
         }
 
+        protected override void UpdateMapPreviewBlockedStarts(List<int> blockedStarts) => MapPreviewBox.SetBlockedStartingLocations(blockedStarts);
+
         protected override bool UpdateLaunchGameButtonStatus()
         {
             btnLaunchGame.Enabled = base.UpdateLaunchGameButtonStatus() && GameMode != null && Map != null;
