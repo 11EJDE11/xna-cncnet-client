@@ -149,7 +149,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private XNAContextMenu mapContextMenu;
         private XNAContextMenuItem toggleFavoriteMapItem;
         private XNAContextMenuItem toggleExtraTexturesItem;
-        private XNAContextMenuItem openMapFolderItem;
+        private XNAContextMenuItem RevealInExplorerItem;
         private XNAClientButton btnToggleFavoriteMap;
         private XNAClientButton btnToggleExtraTextures;
 
@@ -208,17 +208,17 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 SelectableChecker = () => GameModeMap != null,
                 VisibilityChecker = () => extraTextures.Any(x => x.Toggleable)
             };
-            openMapFolderItem = new XNAContextMenuItem()
+            RevealInExplorerItem = new XNAContextMenuItem()
             {
-                Text = "Open Map Folder".L10N("Client:Main:OpenMapFolder"),
-                SelectAction = OpenMapFolder,
+                Text = "Reveal in Explorer".L10N("Client:Main:RevealInExplorer"),
+                SelectAction = RevealInExplorer,
                 SelectableChecker = () => GameModeMap != null
             };
             mapContextMenu = new XNAContextMenu(WindowManager);
             mapContextMenu.ClientRectangle = new Rectangle(0, 0, 120, 2);
             mapContextMenu.AddItem(toggleFavoriteMapItem);
             mapContextMenu.AddItem(toggleExtraTexturesItem);
-            mapContextMenu.AddItem(openMapFolderItem);
+            mapContextMenu.AddItem(RevealInExplorerItem);
 
             btnToggleFavoriteMap = new XNAClientButton(WindowManager);
             btnToggleFavoriteMap.IdleTexture = AssetLoader.LoadTexture("favInactive.png");
@@ -277,7 +277,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             RefreshExtraTexturesBtn();
         }
 
-        private void OpenMapFolder() => GameModeMap?.Map.OpenContainingFolder();
+        private void RevealInExplorer() => GameModeMap?.Map.OpenContainingFolder();
 
         private void ContextMenu_OptionSelected(int index)
         {
