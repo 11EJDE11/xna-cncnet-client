@@ -934,6 +934,19 @@ namespace DTAClient.Domain.Multiplayer
             return new Point(pixelX, pixelY);
         }
 
+        /// <summary>
+        /// Opens the folder containing this map in Explorer and selects the map file.
+        /// </summary>
+        public void OpenContainingFolder()
+        {
+            FileInfo mapFileInfo = SafePath.GetFile(CompleteFilePath);
+            if (mapFileInfo.Exists)
+            {
+                // https://stackoverflow.com/questions/13680415/how-to-open-explorer-with-a-specific-file-selected
+                ProcessLauncher.StartShellProcess("explorer.exe", $"/select,\"{mapFileInfo.FullName}\"");
+            }
+        }
+
         protected bool Equals(Map other) => string.Equals(SHA1, other?.SHA1, StringComparison.InvariantCultureIgnoreCase);
 
         public override int GetHashCode() => SHA1 != null ? SHA1.GetHashCode() : 0;
