@@ -92,6 +92,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         protected EnhancedSoundEffect sndReturnSound;
 
         protected Texture2D[] PingTextures;
+        protected Texture2D[] NegotiationTextures;
 
         protected TopBar TopBar;
 
@@ -140,6 +141,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 AssetLoader.LoadTexture("ping2.png"),
                 AssetLoader.LoadTexture("ping3.png"),
                 AssetLoader.LoadTexture("ping4.png")
+            };
+
+            NegotiationTextures = new Texture2D[2]
+            {
+                AssetLoader.LoadTexture("negotiating.png"),
+                AssetLoader.LoadTexture("negotiation-failed.png")
             };
 
             InitPlayerOptionDropdowns();
@@ -1072,11 +1079,45 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
         }
 
+        /// <summary>
+        /// Updates the ping indicator for a player.
+        /// </summary>
+        /// <param name="pInfo">The player to update</param>
         protected virtual void UpdatePlayerPingIndicator(PlayerInfo pInfo)
         {
+            UpdatePlayerPingIndicator(pInfo, null, null);
+        }
+
+        /// <summary>
+        /// Updates the ping indicator and tooltip for a player, optionally showing negotiation status.
+        /// </summary>
+        /// <param name="pInfo">The player to update</param>
+        /// <param name="negotiationStatus">Optional negotiation status to override ping display</param>
+        /// <param name="tooltipText">Optional custom tooltip text</param>
+        protected virtual void UpdatePlayerPingIndicator(PlayerInfo pInfo,
+            NegotiationStatus? negotiationStatus,
+            string tooltipText)
+        {
             XNAClientDropDown ddPlayerName = ddPlayerNames[pInfo.Index];
-            ddPlayerName.Items[0].Texture = GetTextureForPing(pInfo.Ping);
-            ddPlayerName.ToolTip.Text = "Ping:".L10N("Client:Main:PlayerInfoPing") + " " + pInfo.Ping.ToString();
+
+            Texture2D texture;
+            if (negotiationStatus.HasValue)
+            {
+                texture = negotiationStatus.Value switch
+                {
+                    NegotiationStatus.InProgress => NegotiationTextures[0], // negotiating.png
+                    NegotiationStatus.Failed => NegotiationTextures[1],     // negotiation-failed.png
+                    NegotiationStatus.Succeeded => GetTextureForPing(pInfo.Ping), // Show ping icon on success
+                    _ => GetTextureForPing(pInfo.Ping) // NotStarted or unknown
+                };
+            }
+            else
+            {
+                texture = GetTextureForPing(pInfo.Ping);
+            }
+
+            ddPlayerName.Items[0].Texture = texture;
+            ddPlayerName.ToolTip.Text = tooltipText ?? ("Ping:".L10N("Client:Main:PlayerInfoPing") + " " + pInfo.Ping.ToString());
         }
 
         private Texture2D GetTextureForPing(PingValue ping)
