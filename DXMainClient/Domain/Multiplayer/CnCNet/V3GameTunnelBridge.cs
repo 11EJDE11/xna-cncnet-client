@@ -66,8 +66,10 @@ public class V3GameTunnelBridge
 
         Logger.Log("Player mappings:");
         foreach (var player in _otherPlayers)
+        {
             if (player.Tunnel != null)
                 Logger.Log($" Player {player.Name}: {player.Tunnel.Address}:{player.Tunnel.Port}");
+        }
         Logger.Log("=============================================");
 
         _tunnelHandler.RegisterV3PacketHandler(_localId, 0, OnTunnelPacketReceived);
@@ -78,8 +80,8 @@ public class V3GameTunnelBridge
     }
 
     /// <summary>
-    /// Stops the game tunnel bridge, unregistering packet handlers,
-    /// and closed the local/game UDP socket.
+    /// Stops the game tunnel bridge, unregisters packet handlers,
+    /// and closes the local/game UDP socket.
     /// </summary>
     public void Stop()
     {
@@ -152,11 +154,14 @@ public class V3GameTunnelBridge
                                 Logger.Log($"V3GameTunnelBridge: Cannot send to {recipient.Name} - no tunnel assigned");
                                 continue;
                             }
+
                             _tunnelHandler.SendPacket(recipient.Tunnel, _localId, recipient.Id,
                                 TunnelPacketType.GameData, gameData);
                         }
                         else
+                        {
                             Logger.Log($"V3GameTunnelBridge: No matching recipient found for receiverId={receiverId}");
+                        }
                     }
                 }
                 catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)

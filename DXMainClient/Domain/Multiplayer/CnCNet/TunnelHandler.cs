@@ -245,7 +245,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
                         if (CurrentTunnel == null && otherPreviousPing.IsValid() &&
                             (pingResult.IsUnknown() || pingResult.Milliseconds > TUNNEL_FAILED_PING_AMOUNT))
+                        {
                             TunnelFailed?.Invoke(this, otherTunnel);
+                        }
 
                         DoTunnelPinged(otherTunnel.Address, otherTunnel.Port);
                     }
