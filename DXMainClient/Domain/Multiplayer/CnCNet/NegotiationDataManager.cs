@@ -52,9 +52,8 @@ public class NegotiationDataManager
     /// </summary>
     public NegotiationStatus GetNegotiationStatus(string player1, string player2)
     {
-        // Players don't negotiate with themselves
         if (player1 == player2)
-            return NegotiationStatus.NotStarted;
+            throw new ArgumentException("Cannot get negotiation status between a player and themselves", nameof(player2));
 
         // Either player could be the reporter
         if (_negotiationStatuses.TryGetValue(player1, out var player1Statuses) &&
@@ -74,9 +73,8 @@ public class NegotiationDataManager
     /// </summary>
     public PingValue? GetPing(string player1, string player2)
     {
-        // Players don't have ping to themselves
         if (player1 == player2)
-            return null;
+            throw new ArgumentException("Cannot get ping between a player and themselves", nameof(player2));
 
         if (_playerPingMatrix.TryGetValue(player1, out var player1Pings) &&
             player1Pings.TryGetValue(player2, out var ping) && ping.IsValid())
