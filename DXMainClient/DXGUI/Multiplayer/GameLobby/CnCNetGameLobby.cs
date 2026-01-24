@@ -111,7 +111,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(PLAYER_TUNNEL_MESSAGE, HandlePlayerTunnelMessage),
                 new StringCommandHandler(NEGOTIATION_INFO_MESSAGE, HandleNegotiationInfoMessage),
                 new StringCommandHandler(TUNNEL_RENEGOTIATE_MESSAGE, HandleTunnelRenegotiateMessage),
-                new StringCommandHandler(TUNNEL_FAILED_MESSAGE, HandleTunnelFailedMessage)
+                new StringCommandHandler(TUNNEL_FAILED_MESSAGE, HandleTunnelFailedMessage),
+                new StringCommandHandler(CHANGE_TUNNEL_SERVER_MESSAGE, HandleTunnelServerChangeMessage),
+                new StringCommandHandler("GSETTINGS", ApplyGameLobbySettings)
             };
 
             MapSharer.MapDownloadFailed += MapSharer_MapDownloadFailed;
@@ -139,7 +141,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private TunnelHandler tunnelHandler;
         private TunnelSelectionWindow tunnelSelectionWindow;
+        private GameLobbySettingsWindow gameLobbySettingsWindow;
         private XNAClientButton btnChangeTunnel;
+        private XNAClientButton btnGameLobbySettings;
 
         private Channel channel;
         private CnCNetManager connectionManager;
@@ -162,9 +166,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private int playerLimit;
 
+        protected override int MaxPlayerCount => playerLimit;
+
         private bool closed = false;
 
         private int skillLevel = ClientConfiguration.Instance.DefaultSkillLevelIndex;
+
+        private string gameRoomName;
 
         private bool isCustomPassword = false;
 
@@ -224,6 +232,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             btnChangeTunnel = FindChild<XNAClientButton>(nameof(btnChangeTunnel));
             btnChangeTunnel.LeftClick += BtnChangeTunnel_LeftClick;
 
+            btnGameLobbySettings = FindChild<XNAClientButton>(nameof(btnGameLobbySettings), optional: true);
+            btnGameLobbySettings?.LeftClick += BtnGameLobbySettings_LeftClick;
+
             gameBroadcastTimer = new XNATimerControl(WindowManager);
             gameBroadcastTimer.AutoReset = true;
             gameBroadcastTimer.Interval = TimeSpan.FromSeconds(GAME_BROADCAST_INTERVAL);
@@ -238,6 +249,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             tunnelSelectionWindow.CenterOnParent();
             tunnelSelectionWindow.Disable();
             tunnelSelectionWindow.TunnelSelected += TunnelSelectionWindow_TunnelSelected;
+
+            gameLobbySettingsWindow = new GameLobbySettingsWindow(WindowManager);
+            gameLobbySettingsWindow.Initialize();
+            gameLobbySettingsWindow.DrawOrder = 1;
+            gameLobbySettingsWindow.UpdateOrder = 1;
+            DarkeningPanel.AddAndInitializeWithControl(WindowManager, gameLobbySettingsWindow);
+            gameLobbySettingsWindow.CenterOnParent();
+            gameLobbySettingsWindow.Disable();
+            gameLobbySettingsWindow.SettingsChanged += GameLobbySettingsWindow_SettingsChanged;
 
             MapLoader.MapChanged += MapLoader_MapChanged;
             mapSharingConfirmationPanel = new MapSharingConfirmationPanel(WindowManager);
@@ -291,6 +311,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             this.playerLimit = playerLimit;
             this.isCustomPassword = isCustomPassword;
             this.skillLevel = skillLevel;
+            this.gameRoomName = channel.UIName;
 
             RegenerateV3PlayerInfos();
 
@@ -662,6 +683,167 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             channel.SendCTCPMessage($"{CHANGE_TUNNEL_SERVER_MESSAGE} {e.Tunnel.Address}:{e.Tunnel.Port}",
                 QueuedMessageType.SYSTEM_MESSAGE, 10);
             HandleTunnelServerChange(e.Tunnel);
+        }
+
+        private void BtnGameLobbySettings_LeftClick(object sender, EventArgs e)
+        {
+            if (!IsHost)
+                return;
+
+            string displayPassword = isCustomPassword ? channel.Password : string.Empty;
+            gameLobbySettingsWindow.Open(gameRoomName, playerLimit, skillLevel, displayPassword);
+        }
+
+        private void GameLobbySettingsWindow_SettingsChanged(object sender, GameLobbySettingsEventArgs e)
+        {
+            if (!IsHost)
+                return;
+
+            UpdateGameLobbySettings(e.GameRoomName, e.MaxPlayers, e.SkillLevel, e.Password);
+        }
+
+        private void UpdateGameLobbySettings(string newGameRoomName, int newMaxPlayers, int newSkillLevel, string newPassword)
+        {
+            if (!IsHost)
+                return;
+
+            bool gameNameChanged = gameRoomName != newGameRoomName;
+            bool maxPlayersChanged = playerLimit != newMaxPlayers;
+            bool skillLevelChanged = skillLevel != newSkillLevel;
+
+            string currentUserPassword = isCustomPassword ? channel.Password : string.Empty;
+            bool passwordChanged = currentUserPassword != newPassword;
+
+            // ensure max players isn't less than current player count
+            if (newMaxPlayers < Players.Count + AIPlayers.Count)
+            {
+                AddNotice(string.Format("Cannot reduce maximum players to {0} with {1} players currently in game."
+                    .L10N("Client:Main:CannotReduceMaxPlayers"), newMaxPlayers, Players.Count + AIPlayers.Count));
+                return;
+            }
+
+            string oldGameRoomName = gameRoomName;
+            bool oldIsCustomPassword = isCustomPassword;
+            gameRoomName = newGameRoomName;
+            playerLimit = newMaxPlayers;
+            skillLevel = newSkillLevel;
+
+            if (passwordChanged)
+            {
+                // if new password is empty, generate password from channel name
+                string actualNewPassword = newPassword;
+                if (string.IsNullOrEmpty(newPassword))
+                {
+                    actualNewPassword = Utilities.CalculateSHA1ForString(channel.ChannelName).Substring(0, 10);
+                    isCustomPassword = false;
+                }
+                else
+                {
+                    isCustomPassword = true;
+                }
+
+                channel.ChangePassword(actualNewPassword, 10);
+            }
+
+            BroadcastGameLobbySettings();
+
+            if (gameNameChanged)
+            {
+                AddNotice(string.Format("Game room name changed from \"{0}\" to \"{1}\"."
+                    .L10N("Client:Main:GameNameChanged"), oldGameRoomName, gameRoomName));
+            }
+
+            if (maxPlayersChanged)
+            {
+                CopyPlayerDataToUI();
+                AddNotice(string.Format("Maximum players changed to {0}."
+                    .L10N("Client:Main:MaxPlayersChanged"), newMaxPlayers));
+            }
+
+            if (skillLevelChanged)
+            {
+                string[] skillLevelOptions = ClientConfiguration.Instance.SkillLevelOptions.Split(',');
+                string skillLevelName = skillLevelOptions[newSkillLevel];
+                string localizedSkillLevel = skillLevelName.L10N($"INI:ClientDefinitions:SkillLevel:{newSkillLevel}");
+                AddNotice(string.Format("Skill level changed to {0}."
+                    .L10N("Client:Main:SkillLevelChanged"), localizedSkillLevel));
+            }
+
+            if (passwordChanged)
+            {
+                if (string.IsNullOrEmpty(newPassword))
+                    AddNotice("Password removed from the game.".L10N("Client:Main:PasswordRemoved"));
+                else if (!oldIsCustomPassword)
+                    AddNotice("Password added to the game.".L10N("Client:Main:PasswordAdded"));
+                else
+                    AddNotice("Password changed.".L10N("Client:Main:PasswordChanged"));
+            }
+
+            BroadcastGame();
+        }
+
+        private void BroadcastGameLobbySettings()
+        {
+            if (!IsHost)
+                return;
+
+            StringBuilder sb = new StringBuilder("GSETTINGS ");
+            sb.Append(gameRoomName);
+            sb.Append(";");
+            sb.Append(playerLimit);
+            sb.Append(";");
+            sb.Append(skillLevel);
+            sb.Append(";");
+            sb.Append(Convert.ToInt32(isCustomPassword));
+
+            channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.GAME_SETTINGS_MESSAGE, 11);
+        }
+
+        private void ApplyGameLobbySettings(string sender, string message)
+        {
+            if (IsHost)
+                return;
+
+            string[] parts = message.Split(';');
+
+            if (parts.Length < 4)
+                return;
+
+            string newGameRoomName = parts[0];
+            int newMaxPlayers = Conversions.IntFromString(parts[1], playerLimit);
+            int newSkillLevel = Conversions.IntFromString(parts[2], skillLevel);
+            bool newIsCustomPassword = Convert.ToBoolean(Conversions.IntFromString(parts[3], 0));
+
+            bool gameNameChanged = gameRoomName != newGameRoomName;
+            bool maxPlayersChanged = playerLimit != newMaxPlayers;
+            bool skillLevelChanged = skillLevel != newSkillLevel;
+
+            gameRoomName = newGameRoomName;
+            playerLimit = newMaxPlayers;
+            skillLevel = newSkillLevel;
+            isCustomPassword = newIsCustomPassword;
+
+            if (gameNameChanged)
+            {
+                AddNotice(string.Format("{0} changed game room name to \"{1}\"."
+                    .L10N("Client:Main:HostChangedGameName"), sender, gameRoomName));
+            }
+
+            if (maxPlayersChanged)
+            {
+                CopyPlayerDataToUI();
+                AddNotice(string.Format("{0} changed maximum players to {1}."
+                    .L10N("Client:Main:HostChangedMaxPlayers"), sender, newMaxPlayers));
+            }
+
+            if (skillLevelChanged)
+            {
+                string[] skillLevelOptions = ClientConfiguration.Instance.SkillLevelOptions.Split(',');
+                string skillLevelName = skillLevelOptions[newSkillLevel];
+                string localizedSkillLevel = skillLevelName.L10N($"INI:ClientDefinitions:SkillLevel:{newSkillLevel}");
+                AddNotice(string.Format("{0} changed skill level to {1}."
+                    .L10N("Client:Main:HostChangedSkillLevel"), sender, localizedSkillLevel));
+            }
         }
 
         public void ChangeChatColor(IRCColor chatColor)
@@ -2996,7 +3178,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             sb.Append(";");
             sb.Append(channel.ChannelName);
             sb.Append(";");
-            sb.Append(channel.UIName);
+            sb.Append(gameRoomName);
             sb.Append(";");
             if (Locked)
                 sb.Append("1");
