@@ -13,11 +13,17 @@ namespace DTAClient.Domain.Multiplayer.CnCNet;
 /// </summary>
 public class NegotiationDataManager
 {
-    // reportingPlayer -> targetPlayer -> status
-    // This tracks what each player reports about their negotiation with each other player
+    /// <summary>
+    /// This tracks what each player reports about their negotiation with each other player
+    /// reportingPlayer -> targetPlayer -> status
+    /// </summary>
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, NegotiationStatus>> _negotiationStatuses = new();
 
-    // reportingPlayer -> targetPlayer -> ping
+
+    /// <summary>
+    /// This tracks what each player reports about their negotiation with each other player
+    /// // reportingPlayer -> targetPlayer -> ping
+    /// </summary>
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, PingValue>> _playerPingMatrix = new();
 
     /// <summary>
