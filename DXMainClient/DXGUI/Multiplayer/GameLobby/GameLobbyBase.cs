@@ -1603,7 +1603,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             settings.SetIntValue("Color", houseInfos[myIndex].ColorIndex);
             settings.SetStringValue("CustomLoadScreen", LoadingScreenController.GetLoadScreenName(houseInfos[myIndex].InternalSideIndex.ToString()));
             settings.SetIntValue("AIPlayers", AIPlayers.Count);
-            RandomSeed = 12345;
             settings.SetIntValue("Seed", RandomSeed);
             if (GetPvPTeamCount() > 1)
                 settings.SetBooleanValue("CoachMode", true);

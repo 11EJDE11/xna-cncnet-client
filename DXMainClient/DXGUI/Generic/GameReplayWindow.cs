@@ -42,6 +42,7 @@ namespace DTAClient.DXGUI.Generic
         private XNAClientCheckBox chkDebugLog;
 
         private List<ReplayGame> replays = new List<ReplayGame>();
+        private bool wasEnabled = false;
 
         public override void Initialize()
         {
@@ -66,7 +67,7 @@ namespace DTAClient.DXGUI.Generic
             lblGameSpeed = new XNALabel(WindowManager);
             lblGameSpeed.Name = nameof(lblGameSpeed);
             lblGameSpeed.ClientRectangle = new Rectangle(13, 305, 100, 20);
-            lblGameSpeed.Text = "Game Speed:".L10N("Client:Main:GameSpeed");
+            lblGameSpeed.Text = "Game Speed (kicks in late):".L10N("Client:Main:GameSpeed");
 
             ddGameSpeed = new XNAClientDropDown(WindowManager);
             ddGameSpeed.Name = nameof(ddGameSpeed);
@@ -86,7 +87,7 @@ namespace DTAClient.DXGUI.Generic
             chkShroudEnabled = new XNAClientCheckBox(WindowManager);
             chkShroudEnabled.Name = nameof(chkShroudEnabled);
             chkShroudEnabled.ClientRectangle = new Rectangle(checkboxX, checkboxY, 250, 20);
-            chkShroudEnabled.Text = "Enable Shroud (not working yet)".L10N("Client:Main:EnableShroud");
+            chkShroudEnabled.Text = "Enable shroud".L10N("Client:Main:EnableShroud");
             chkShroudEnabled.Checked = false;
 
             chkLockedViewport = new XNAClientCheckBox(WindowManager);
@@ -215,6 +216,7 @@ namespace DTAClient.DXGUI.Generic
             spawnIni.SetIntValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplayDebugLog", chkDebugLog.Checked ? 1 : 0);
+            spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
 
             spawnIni.WriteIniFile();
 
@@ -263,6 +265,29 @@ namespace DTAClient.DXGUI.Generic
             ListReplays();
         }
 
+        public override void Update(GameTime gameTime)
+        {
+            base.Update(gameTime);
+
+            // Check if the window was just enabled
+            if (Enabled && !wasEnabled)
+            {
+                // Check for replay.dat and move it if it exists
+                MoveReplayFileIfExists();
+
+                // Refresh the list to show any new replays
+                ListReplays();
+
+                // Select the first item if there are any replays
+                if (lbReplayGameList.ItemCount > 0)
+                {
+                    lbReplayGameList.SelectedIndex = 0;
+                }
+            }
+
+            wasEnabled = Enabled;
+        }
+
         private void GameProcessExited_Callback()
         {
             WindowManager.AddCallback(new Action(GameProcessExited), null);
@@ -277,6 +302,41 @@ namespace DTAClient.DXGUI.Generic
 
             discordHandler.UpdatePresence();
             ListReplays();
+        }
+
+        /// <summary>
+        /// Checks for replay.dat and moves it to the replays directory if it exists.
+        /// </summary>
+        private void MoveReplayFileIfExists()
+        {
+            try
+            {
+                string replaySource = Path.Combine(ProgramConstants.GamePath, "replay.dat");
+                if (File.Exists(replaySource))
+                {
+                    string replayDir = Path.Combine(ProgramConstants.GamePath, REPLAY_GAMES_DIRECTORY);
+                    Directory.CreateDirectory(replayDir);
+
+                    string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    string replayDest = Path.Combine(replayDir, $"Replay_{timestamp}.yrrp");
+
+                    // If file already exists, add a counter
+                    int counter = 1;
+                    string baseName = replayDest;
+                    while (File.Exists(replayDest))
+                    {
+                        replayDest = baseName.Replace(".yrrp", $"_{counter}.yrrp");
+                        counter++;
+                    }
+
+                    File.Move(replaySource, replayDest);
+                    Logger.Log($"Replay saved to: {replayDest}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to move replay.dat: {ex.Message}");
+            }
         }
 
         public void ListReplays()
@@ -388,7 +448,7 @@ namespace DTAClient.DXGUI.Generic
 
             if (restoredIndex == -1)
             {
-                restoredIndex = Array.IndexOf(speeds, "Normal");
+                restoredIndex = Array.IndexOf(speeds, "Fastest");
                 if (restoredIndex < 0) restoredIndex = 0; // last fallback
             }
 
