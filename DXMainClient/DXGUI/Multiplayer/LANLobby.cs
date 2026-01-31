@@ -541,7 +541,7 @@ namespace DTAClient.DXGUI.Multiplayer
 
             if (hg.Locked)
             {
-                AddChatMessage("The selected game is locked!".L10N("Client:Main:GameLocked"));
+                AddChatMessage(string.Format("The game {0} is locked!".L10N("Client:Main:GameLockedWithName"), hg.RoomName));
                 return;
             }
 
