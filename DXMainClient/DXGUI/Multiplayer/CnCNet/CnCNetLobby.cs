@@ -973,8 +973,12 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 game.Locked = true;
                 SortAndRefreshHostedGames();
             }
+            else
+            {
+                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White, "The selected game is locked!".L10N("Client:Main:GameLocked")));
+            }
 
-            ClearGameJoinAttempt((Channel)sender);
+                ClearGameJoinAttempt((Channel)sender);
         }
 
         private HostedCnCNetGame FindGameByChannelName(string channelName)
