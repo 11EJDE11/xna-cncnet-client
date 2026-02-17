@@ -300,9 +300,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 };
 
                 // For dropdowns with multiple icons, show the first one initially
-                Texture2D icon = null;
-                if (lobbyDropdown.Icons != null && lobbyDropdown.Icons.Length > 0 && !string.IsNullOrEmpty(lobbyDropdown.Icons[0]))
-                    icon = AssetLoader.LoadTexture(lobbyDropdown.Icons[0]);
+                Texture2D icon = lobbyDropdown.Items.Count > 0 ? lobbyDropdown.Items[0].Texture : null;
 
                 int iconWidth = icon?.Width ?? 0;
                 int iconHeight = icon?.Height ?? 0;
@@ -346,12 +344,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 for (int i = 0; i < lobbyDropdown.Items.Count; i++)
                 {
                     var item = lobbyDropdown.Items[i];
-                    Texture2D itemTexture = null;
-
-                    if (lobbyDropdown.Icons != null && i < lobbyDropdown.Icons.Length && !string.IsNullOrEmpty(lobbyDropdown.Icons[i]))
-                        itemTexture = AssetLoader.LoadTexture(lobbyDropdown.Icons[i]);
-
-                    dropdown.AddItem(new XNADropDownItem { Text = item.Text, Tag = item.Tag, Texture = itemTexture });
+                    dropdown.AddItem(new XNADropDownItem { Text = item.Text, Tag = item.Tag, Texture = item.Texture });
                 }
 
                 dropdown.SelectedIndex = 0;

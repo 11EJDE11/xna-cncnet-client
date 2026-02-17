@@ -1,7 +1,5 @@
 using DTAClient.DXGUI.Generic;
 
-using Microsoft.Xna.Framework.Graphics;
-
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
@@ -37,20 +35,6 @@ public class GameLobbyDropDown : GameSessionDropDown
         }
 
         base.Initialize();
-
-        // Set textures on dropdown items if Icons are specified
-        if (ShowIconInGameLobby && Icons != null && Icons.Length > 0)
-        {
-            for (int i = 0; i < Items.Count && i < Icons.Length; i++)
-            {
-                if (!string.IsNullOrEmpty(Icons[i]))
-                {
-                    Texture2D icon = AssetLoader.LoadTexture(Icons[i]);
-                    if (icon != null)
-                        Items[i].Texture = icon;
-                }
-            }
-        }
     }
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)

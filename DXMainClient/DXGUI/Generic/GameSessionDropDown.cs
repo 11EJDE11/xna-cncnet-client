@@ -74,12 +74,6 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
     public bool ShowInFilters { get; private set; }
 
     /// <summary>
-    /// The texture names for the icons for each dropdown option.
-    /// If specified, this array should match the number of items.
-    /// </summary>
-    public string[] Icons { get; private set; }
-
-    /// <summary>
     /// Sort order for displaying icons in the GameInformationPanel and GameListBox.
     /// Lower values appear first.
     /// </summary>
@@ -96,14 +90,17 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
             case "Items":
                 string[] items = value.SplitWithCleanup();
                 string[] itemLabels = iniFile.GetStringListValue(Name, "ItemLabels", "");
+                string[] iconNames = iniFile.GetStringListValue(Name, "Icons", "");
                 for (int i = 0; i < items.Length; i++)
                 {
                     bool hasLabel = itemLabels.Length > i && !string.IsNullOrEmpty(itemLabels[i]);
+                    string iconName = iconNames.Length > i ? iconNames[i] : null;
                     XNADropDownItem item = new()
                     {
                         Text = Localize(this, $"Item{i}",
                             hasLabel ? itemLabels[i] : items[i]),
                         Tag = items[i],
+                        Texture = !string.IsNullOrEmpty(iconName) ? AssetLoader.LoadTexture(iconName) : null,
                     };
                     AddItem(item);
                 }
@@ -148,9 +145,6 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
                 return;
             case "ShowInFilters":
                 ShowInFilters = Conversions.BooleanFromString(value, false);
-                return;
-            case "Icons":
-                Icons = value.SplitWithCleanup();
                 return;
             case "SortOrder":
                 SortOrder = int.Parse(value);

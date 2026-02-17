@@ -283,17 +283,10 @@ namespace DTAClient.DXGUI.Multiplayer
                 }
                 else if (setting is GameLobbyDropDown dropdown && dropdown.ShowInGameList)
                 {
-                    if (dropdown.Icons == null || dropdown.Icons.Length == 0)
-                        continue;
-
                     // Use the icon for the selected value
-                    if (value >= 0 && value < dropdown.Icons.Length)
+                    if (value >= 0 && value < dropdown.Items.Count)
                     {
-                        string iconName = dropdown.Icons[value];
-                        if (string.IsNullOrEmpty(iconName))
-                            continue;
-
-                        Texture2D icon = AssetLoader.LoadTexture(iconName);
+                        Texture2D icon = dropdown.Items[value].Texture;
                         if (icon != null)
                         {
                             if (dropdown.ShowInGameListOnRight)

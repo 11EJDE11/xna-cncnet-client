@@ -313,26 +313,21 @@ namespace DTAClient.DXGUI.Multiplayer
                 }
                 else if (setting is GameLobbyDropDown dropdown && dropdown.ShowInGameInformationPanel)
                 {
-                    if (dropdown.Icons != null && dropdown.Icons.Length > 0 &&
-                        value >= 0 && value < dropdown.Icons.Length)
+                    if (value >= 0 && value < dropdown.Items.Count)
                     {
-                        string iconName = dropdown.Icons[value];
-                        if (!string.IsNullOrEmpty(iconName))
+                        Texture2D icon = dropdown.Items[value].Texture;
+                        if (icon != null)
                         {
-                            Texture2D icon = AssetLoader.LoadTexture(iconName);
-                            if (icon != null)
+                            if (dropdown.ShowInGameInformationPanelAsIconOnly)
                             {
-                                if (dropdown.ShowInGameInformationPanelAsIconOnly)
-                                {
-                                    // Show icon only
-                                    optionIconsOnly.Add((icon, dropdown.SortOrder));
-                                }
-                                else
-                                {
-                                    // Show with text
-                                    string text = $"{dropdown.OptionName}: {dropdown.Items[value].Text}";
-                                    optionIconsWithText.Add((icon, text, dropdown.SortOrder));
-                                }
+                                // Show icon only
+                                optionIconsOnly.Add((icon, dropdown.SortOrder));
+                            }
+                            else
+                            {
+                                // Show with text
+                                string text = $"{dropdown.OptionName}: {dropdown.Items[value].Text}";
+                                optionIconsWithText.Add((icon, text, dropdown.SortOrder));
                             }
                         }
                     }

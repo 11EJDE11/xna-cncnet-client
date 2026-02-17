@@ -1602,7 +1602,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 int[] gameOptionValues = null;
 
                 // Games with different versions may have different option counts, so ignore
-                if (gameVersion == ProgramConstants.GAME_VERSION)
+                if (gameVersion == ProgramConstants.GAME_VERSION && channel.ChannelName == localGame?.GameBroadcastChannel)
                 {
                     var broadcastableSettings = gameLobby.GetBroadcastableSettings();
                     if (broadcastableSettings.Count == 0)
