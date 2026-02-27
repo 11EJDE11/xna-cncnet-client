@@ -6,12 +6,13 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Newtonsoft.Json.Linq;
 using Rampastring.Tools;
 
 namespace ClientCore;
 
 /// <summary>
-/// Manages shared JSON data sources for XNAClientJSONLabel.
+/// Manages shared JSON data sources for XNAClientWebLabel.
 /// Data sources are defined in INI files under [DataSources] section.
 /// </summary>
 public class JSONDataSourceManager
@@ -24,38 +25,49 @@ public class JSONDataSourceManager
     private JSONDataSourceManager() { }
 
     /// <summary>
-    /// Loads data sources from an INI file's [DataSources] section.
+    /// Loads data sources from an INI file.
     /// </summary>
     /// <param name="iniFile">The INI file to read from</param>
     public void LoadFromINI(IniFile iniFile)
     {
-        const string sectionName = "DataSources";
-        var section = iniFile.GetSection(sectionName);
+        const string dataSourcesSection = "DataSources";
+        var section = iniFile.GetSection(dataSourcesSection);
 
         if (section == null)
             return;
 
-        foreach (var key in section.Keys)
+        int count = section.GetIntValue("Count", 0);
+
+        for (int i = 1; i <= count; i++)
         {
-            string value = section.GetStringValue(key.Key, string.Empty);
-            if (string.IsNullOrEmpty(value))
+            string dataSourceName = section.GetStringValue(i.ToString(), string.Empty);
+
+            if (string.IsNullOrEmpty(dataSourceName))
                 continue;
 
-            // format: URL,RefreshIntervalSeconds,TimeoutSeconds,Format
-            string[] parts = value.Split(',');
-            if (parts.Length < 1)
+            if (_dataSources.ContainsKey(dataSourceName))
                 continue;
 
-            string url = parts[0].Trim();
-            int refreshInterval = parts.Length > 1 ? Conversions.IntFromString(parts[1].Trim(), 300) : 300;
-            int timeout = parts.Length > 2 ? Conversions.IntFromString(parts[2].Trim(), 10) : 10;
-            string format = parts.Length > 3 ? parts[3].Trim().ToLowerInvariant() : "json";
-
-            if (string.IsNullOrEmpty(url) || _dataSources.ContainsKey(key.Key))
+            var dataSourceSection = iniFile.GetSection(dataSourceName);
+            if (dataSourceSection == null)
+            {
+                Logger.Log($"JSONDataSourceManager: Data source '{dataSourceName}' listed but section not found");
                 continue;
+            }
 
-            var dataSource = new DataSource(key.Key, url, refreshInterval, timeout, format);
-            _dataSources.Add(key.Key, dataSource);
+            string url = dataSourceSection.GetStringValue("URL", string.Empty);
+            if (string.IsNullOrEmpty(url))
+            {
+                Logger.Log($"JSONDataSourceManager: Data source '{dataSourceName}' has no URL");
+                continue;
+            }
+
+            int refreshInterval = dataSourceSection.GetIntValue("RefreshIntervalSeconds", 300);
+            int timeout = dataSourceSection.GetIntValue("TimeoutSeconds", 10);
+            string format = dataSourceSection.GetStringValue("Format", "json");
+
+            var dataSource = new DataSource(dataSourceName, url, refreshInterval, timeout, format);
+            _dataSources.Add(dataSourceName, dataSource);
         }
     }
 
@@ -63,9 +75,9 @@ public class JSONDataSourceManager
     /// Subscribes to a data source and receives JSON updates.
     /// </summary>
     /// <param name="dataSourceId">The ID of the data source</param>
-    /// <param name="callback">Callback invoked when new data is available (json, isError)</param>
+    /// <param name="callback">Callback invoked when new data is available (jToken, isError)</param>
     /// <returns>True if subscription was successful, false if data source not found</returns>
-    public bool Subscribe(string dataSourceId, Action<string, bool> callback)
+    public bool Subscribe(string dataSourceId, Action<JToken, bool> callback)
     {
         if (string.IsNullOrEmpty(dataSourceId))
             return false;
@@ -80,7 +92,7 @@ public class JSONDataSourceManager
     /// <summary>
     /// Unsubscribes from a data source.
     /// </summary>
-    public void Unsubscribe(string dataSourceId, Action<string, bool> callback)
+    public void Unsubscribe(string dataSourceId, Action<JToken, bool> callback)
     {
         if (string.IsNullOrEmpty(dataSourceId))
             return;
@@ -96,10 +108,10 @@ public class JSONDataSourceManager
         private readonly int _refreshIntervalSeconds;
         private readonly int _timeoutSeconds;
         private readonly string _format;
-        private readonly List<Action<string, bool>> _subscribers = new List<Action<string, bool>>();
+        private readonly List<Action<JToken, bool>> _subscribers = new List<Action<JToken, bool>>();
         private CancellationTokenSource _cts;
         private Task _fetchTask;
-        private string _lastJson;
+        private JToken _lastJToken;
 
         public DataSource(string id, string url, int refreshIntervalSeconds, int timeoutSeconds, string format)
         {
@@ -107,10 +119,10 @@ public class JSONDataSourceManager
             _url = url;
             _refreshIntervalSeconds = refreshIntervalSeconds;
             _timeoutSeconds = timeoutSeconds;
-            _format = format;
+            _format = format?.ToLowerInvariant() ?? "json";
         }
 
-        public void Subscribe(Action<string, bool> callback)
+        public void Subscribe(Action<JToken, bool> callback)
         {
             lock (_subscribers)
             {
@@ -118,8 +130,8 @@ public class JSONDataSourceManager
                 {
                     _subscribers.Add(callback);
 
-                    if (_lastJson != null) // cached
-                        callback(_lastJson, false);
+                    if (_lastJToken != null) // cached
+                        callback(_lastJToken, false);
 
                     if (_subscribers.Count == 1 && _fetchTask == null)
                         StartFetching();
@@ -127,7 +139,7 @@ public class JSONDataSourceManager
             }
         }
 
-        public void Unsubscribe(Action<string, bool> callback)
+        public void Unsubscribe(Action<JToken, bool> callback)
         {
             lock (_subscribers)
             {
@@ -191,22 +203,92 @@ public class JSONDataSourceManager
                 return;
             }
 
-            if (_format == "ini")
+            string jsonString;
+            try
             {
+                jsonString = ConvertToJson(data, _format);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"JSONDataSourceManager: Error converting data to JSON for '{_id}': {ex.Message}");
+                NotifySubscribers(null, true);
+                return;
+            }
+
+            JToken jToken;
+            try
+            {
+                jToken = JToken.Parse(jsonString);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"JSONDataSourceManager: Error parsing JSON for '{_id}': {ex.Message}");
+                NotifySubscribers(null, true);
+                return;
+            }
+
+            _lastJToken = jToken;
+            NotifySubscribers(jToken, false);
+        }
+
+        private void NotifySubscribers(JToken jToken, bool isError)
+        {
+            lock (_subscribers)
+            {
+                foreach (var subscriber in _subscribers)
+                {
+                    try
+                    {
+                        subscriber(jToken, isError);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"JSONDataSourceManager: Error notifying subscriber for '{_id}': {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        private async Task<string> DownloadWithTimeout(string url, int timeoutSeconds, CancellationToken token)
+        {
+            using (var cts = new CancellationTokenSource())
+            using (var webClient = new WebClient())
+            {
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), cts.Token);
+                var downloadTask = webClient.DownloadStringTaskAsync(url);
+
+                var completed = await Task.WhenAny(downloadTask, timeoutTask);
+
+                if (completed == timeoutTask)
+                {
+                    Logger.Log($"JSONDataSourceManager: Timeout for '{_id}' ({url})");
+                    return null;
+                }
+
+                cts.Cancel();
+
+                if (token.IsCancellationRequested)
+                    return null;
+
                 try
                 {
-                    data = ConvertIniToJson(data);
+                    return await downloadTask;
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log($"JSONDataSourceManager: Error converting INI to JSON for '{_id}': {ex.Message}");
-                    NotifySubscribers(null, true);
-                    return;
+                    Logger.Log($"JSONDataSourceManager: Download error for '{_id}': {ex.Message}");
+                    return null;
                 }
             }
+        }
 
-            _lastJson = data;
-            NotifySubscribers(data, false);
+        private string ConvertToJson(string input, string format)
+        {
+            return format switch
+            {
+                "ini" => ConvertIniToJson(input),
+                _ => input  // JSON or unknown - pass through
+            };
         }
 
         private string ConvertIniToJson(string iniContent)
@@ -265,57 +347,6 @@ public class JSONDataSourceManager
                       .Replace("\n", "\\n")
                       .Replace("\r", "\\r")
                       .Replace("\t", "\\t");
-        }
-
-        private void NotifySubscribers(string json, bool isError)
-        {
-            lock (_subscribers)
-            {
-                foreach (var subscriber in _subscribers)
-                {
-                    try
-                    {
-                        subscriber(json, isError);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log($"JSONDataSourceManager: Error notifying subscriber for '{_id}': {ex.Message}");
-                    }
-                }
-            }
-        }
-
-        private async Task<string> DownloadWithTimeout(string url, int timeoutSeconds, CancellationToken token)
-        {
-            using (var cts = new CancellationTokenSource())
-            using (var webClient = new WebClient())
-            {
-                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), cts.Token);
-                var downloadTask = webClient.DownloadStringTaskAsync(url);
-
-                var completed = await Task.WhenAny(downloadTask, timeoutTask);
-
-                if (completed == timeoutTask)
-                {
-                    Logger.Log($"JSONDataSourceManager: Timeout for '{_id}' ({url})");
-                    return null;
-                }
-
-                cts.Cancel();
-
-                if (token.IsCancellationRequested)
-                    return null;
-
-                try
-                {
-                    return await downloadTask;
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"JSONDataSourceManager: Download error for '{_id}': {ex.Message}");
-                    return null;
-                }
-            }
         }
     }
 }

@@ -6,21 +6,22 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using ClientCore;
 using ClientCore.Extensions;
+using Newtonsoft.Json.Linq;
 
 namespace ClientGUI;
 
-public class XNAClientJSONLabel : XNALabel
+public class XNAClientWebLabel : XNALabel
 {
     public string DataSourceID { get; set; }
     public string Template { get; set; }
     public string LoadingText { get; set; }
     public int MaxResults { get; set; } = 0;
-    public string FallbackText { get; set; } = "N/A";
+    public string FallbackText { get; set; } = "---";
 
-    private Action<string, bool> _dataSourceCallback;
+    private Action<JToken, bool> _dataSourceCallback;
     private bool _isSubscribed = false;
 
-    public XNAClientJSONLabel(WindowManager windowManager) : base(windowManager)
+    public XNAClientWebLabel(WindowManager windowManager) : base(windowManager)
     {
         FontIndex = 1;
     }
@@ -75,9 +76,9 @@ public class XNAClientJSONLabel : XNALabel
             Text = FallbackText;
     }
 
-    private void OnDataReceived(string json, bool isError)
+    private void OnDataReceived(JToken jToken, bool isError)
     {
-        if (isError || json == null)
+        if (isError || jToken == null)
         {
             WindowManager.AddCallback(() => Text = FallbackText, null);
             return;
@@ -85,21 +86,21 @@ public class XNAClientJSONLabel : XNALabel
 
         try
         {
-            string displayText = ProcessTemplate(Template, json);
+            string displayText = ProcessTemplate(Template, jToken);
             WindowManager.AddCallback(() => Text = displayText, null);
         }
         catch (Exception ex)
         {
-            Logger.Log($"XNAClientJSONLabel [{Name}] processing error: {ex.Message}");
+            Logger.Log($"XNAClientWebLabel [{Name}] processing error: {ex.Message}");
             WindowManager.AddCallback(() => Text = FallbackText, null);
         }
     }
 
-    private string ProcessTemplate(string template, string json)
+    private string ProcessTemplate(string template, JToken jToken)
     {
         if (string.IsNullOrEmpty(template))
         {
-            Logger.Log($"XNAClientJSONLabel [{Name}]: Template is null or empty");
+            Logger.Log($"XNAClientWebLabel [{Name}]: Template is null or empty");
             return FallbackText;
         }
 
@@ -114,7 +115,7 @@ public class XNAClientJSONLabel : XNALabel
 
             try
             {
-                var values = ParseJSONPath(json, jsonPath);
+                var values = EvaluateJSONPath(jToken, jsonPath);
 
                 if (values == null || values.Count == 0)
                     return FallbackText;
@@ -147,7 +148,7 @@ public class XNAClientJSONLabel : XNALabel
             }
             catch (Exception ex)
             {
-                Logger.Log($"XNAClientJSONLabel JSONPath '{jsonPath}' error: {ex.Message}");
+                Logger.Log($"XNAClientWebLabel JSONPath '{jsonPath}' error: {ex.Message}");
                 return FallbackText;
             }
         });
@@ -155,19 +156,21 @@ public class XNAClientJSONLabel : XNALabel
         return result;
     }
 
-    private List<string> ParseJSONPath(string json, string path)
+    private List<string> EvaluateJSONPath(JToken jToken, string pathExpression)
     {
         try
         {
-            var root = Newtonsoft.Json.Linq.JToken.Parse(json);
+            var tokens = jToken.SelectTokens(pathExpression);
+
+            if (tokens == null)
+                return null;
+
             var results = new List<string>();
-
-            var tokens = root.SelectTokens(path);
-
-            if (tokens != null)
-                foreach (var token in tokens)
-                    if (token != null)
-                        results.Add(token.ToString());
+            foreach (var token in tokens)
+            {
+                if (token != null)
+                    results.Add(token.ToString());
+            }
 
             return results.Count > 0 ? results : null;
         }

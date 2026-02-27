@@ -288,7 +288,7 @@ _(inherits XNADropDown)_
 ToolTip=            ; text, tooltip for dropdown.
 ```
 
-#### [XNAClientJSONLabel](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAClientJSONLabel.cs)
+#### [XNAClientWebLabel](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAClientWebLabel.cs)
 
 _(inherits [XNALabel](#XNALabel))_
 
@@ -296,7 +296,7 @@ Displays data from a JSON or ini web request. Datasources are defined in ClientD
 Uses Newtonsoft.Json for JSONPath queries. JSONPath expressions are embedded directly in the `Template` template as placeholders.
 
 ```ini
-[SOMEJSONLABEL]              ; XNAClientJSONLabel
+[SOMEJSONLABEL]              ; XNAClientWebLabel
 DataSourceID=                ; text,    the datasource ID defined in ClientDefinitions.
 Template=                    ; text,    template string with {JSONPath:Format} placeholders.
                              ;          JSONPath expressions are evaluated and replaced with values.
@@ -311,7 +311,7 @@ LoadingText=                 ; text,    optional text to display while fetching 
                              ;          If not specified, shows the Text template.
 MaxResults=0                 ; integer, maximum number of results per JSONPath query. 0 is all.
                              ;          Useful when a JSONPath returns multiple values but you only want first N.
-FallbackText=N/A             ; text,    text to display on error or unavailable data. Default: "N/A".
+FallbackText=---             ; text,    text to display on error or unavailable data. Default: "---".
 ```
 
 **JSONPath Syntax:**
@@ -320,7 +320,7 @@ See Newtonsoft.Json documentation: https://www.newtonsoft.com/json/help/html/Que
 **Example Usage:**
 ```ini
 [lblTopPlayer1]
-$Type=XNAClientJSONLabel
+$Type=XNAClientWebLabel
 DataSourceID=TopPlayers
 Template=1. {YR[0].player_name} - {YR[0].points:N0} pts
 LoadingText=Loading...
@@ -673,9 +673,26 @@ TrustedDomains=                ; comma-separated list of strings,
 [Settings]
 SaveSkirmishGameOptions=false  ; boolean, whether or not previously used game options in skirmish are saved across client sessions
 SaveCampaignGameOptions=false  ; boolean, whether or not previously used game options in campaign are saved across client sessions
+```
 
+Data sources for web labels are listed in [DataSources] section, then defined separately:
+```ini
 [DataSources]
-DataSourceID=URL,RefreshIntervalSeconds,TimeoutSeconds,Format ;example: TopPlayers=https://ladder.cncnet.org/api/v1/qm/ladder/rankings,300,10,json|ini
+Count=2                                                          ; integer, number of data sources
+1=YRLadder                                                       ; string,  first data source name
+2=RALadder                                                         ; string,  second data source name
+
+[YRLadder]                                                       ; Section name is the DataSourceID
+URL=https://ladder.cncnet.org/api/v1/qm/ladder/rankings          ; string,  URL to fetch data from
+RefreshIntervalSeconds=300                                       ; integer, how often to refresh the data (in seconds)
+TimeoutSeconds=10                                                ; integer, timeout for the HTTP request (in seconds)
+Format=json                                                      ; string,  format of the data (json or ini)
+
+[RALadder]
+URL=https://example.com/file.ini
+RefreshIntervalSeconds=3600
+TimeoutSeconds=10
+Format=ini
 ```
 
 ```ini
