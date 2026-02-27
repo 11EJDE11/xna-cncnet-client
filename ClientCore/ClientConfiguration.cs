@@ -64,8 +64,6 @@ namespace ClientCore
                 networkDefinitionsIni = new IniFile(networkDefsPath);
             }
 
-            JSONDataSourceManager.Instance.LoadFromINI(clientDefinitionsIni);
-
             RefreshTranslationGameFiles();
         }
 
@@ -202,6 +200,8 @@ namespace ClientCore
         #endregion
 
         #region Client definitions
+
+        public IniFile ClientDefinitionsIni => clientDefinitionsIni;
 
         private string _ClientGameTypeString => clientDefinitionsIni.GetStringValue(SETTINGS, "ClientGameType", string.Empty);
         private ClientType? _ClientGameType = null;

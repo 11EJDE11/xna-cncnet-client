@@ -18,11 +18,13 @@ public class XNAClientWebLabel : XNALabel
     public int MaxResults { get; set; } = 0;
     public string FallbackText { get; set; } = "---";
 
+    private readonly JSONDataSourceManager _dataSourceManager;
     private Action<JToken, bool> _dataSourceCallback;
     private bool _isSubscribed = false;
 
-    public XNAClientWebLabel(WindowManager windowManager) : base(windowManager)
+    public XNAClientWebLabel(WindowManager windowManager, JSONDataSourceManager dataSourceManager) : base(windowManager)
     {
+        _dataSourceManager = dataSourceManager;
         FontIndex = 1;
     }
 
@@ -69,7 +71,7 @@ public class XNAClientWebLabel : XNALabel
             return;
 
         _dataSourceCallback = OnDataReceived;
-        bool success = JSONDataSourceManager.Instance.Subscribe(DataSourceID, _dataSourceCallback);
+        bool success = _dataSourceManager.Subscribe(DataSourceID, _dataSourceCallback);
         if (success)
             _isSubscribed = true;
         else
@@ -185,7 +187,7 @@ public class XNAClientWebLabel : XNALabel
     {
         if (_isSubscribed && !string.IsNullOrEmpty(DataSourceID) && _dataSourceCallback != null)
         {
-            JSONDataSourceManager.Instance.Unsubscribe(DataSourceID, _dataSourceCallback);
+            _dataSourceManager.Unsubscribe(DataSourceID, _dataSourceCallback);
             _isSubscribed = false;
         }
 

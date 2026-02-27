@@ -227,6 +227,10 @@ namespace DTAClient.DXGUI
 
             IServiceProvider serviceProvider = BuildServiceProvider(wm);
 
+            // Initialize JSON data sources
+            var jsonDataSourceManager = serviceProvider.GetService<JSONDataSourceManager>();
+            jsonDataSourceManager?.LoadFromINI(ClientConfiguration.Instance.ClientDefinitionsIni);
+
             Logger.Log("Initializing loading screen.");
             LoadingScreen ls = serviceProvider.GetService<LoadingScreen>();
             wm.AddAndInitializeControl(ls);
@@ -262,7 +266,8 @@ namespace DTAClient.DXGUI
                             .AddSingleton<PrivateMessageHandler>()
                             .AddSingleton<MapLoader>()
                             .AddSingleton<Random>(GetRandom())
-                            .AddSingleton<DirectDrawWrapperManager>();
+                            .AddSingleton<DirectDrawWrapperManager>()
+                            .AddSingleton<JSONDataSourceManager>();
 
                         // singleton xna controls - same instance on each request
                         services

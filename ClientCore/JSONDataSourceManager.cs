@@ -17,12 +17,9 @@ namespace ClientCore;
 /// </summary>
 public class JSONDataSourceManager
 {
-    private static JSONDataSourceManager _instance;
-    public static JSONDataSourceManager Instance => _instance ??= new JSONDataSourceManager();
-
     private readonly Dictionary<string, DataSource> _dataSources = new Dictionary<string, DataSource>();
 
-    private JSONDataSourceManager() { }
+    public JSONDataSourceManager() { }
 
     /// <summary>
     /// Loads data sources from an INI file.
