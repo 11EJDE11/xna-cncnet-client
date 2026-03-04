@@ -94,19 +94,19 @@ namespace DTAClient.DXGUI.Generic
             chkLockedViewport.Name = nameof(chkLockedViewport);
             chkLockedViewport.ClientRectangle = new Rectangle(checkboxX + 260, checkboxY, 200, 20);
             chkLockedViewport.Text = "Lock viewport".L10N("Client:Main:LockViewport");
-            chkLockedViewport.Checked = true;
+            chkLockedViewport.Checked = false;
 
             chkSelectUnits = new XNAClientCheckBox(WindowManager);
             chkSelectUnits.Name = nameof(chkSelectUnits);
             chkSelectUnits.ClientRectangle = new Rectangle(checkboxX, checkboxY + checkboxSpacing, 250, 20);
             chkSelectUnits.Text = "Select units".L10N("Client:Main:SelectUnits");
-            chkSelectUnits.Checked = true;
+            chkSelectUnits.Checked = false;
 
             chkDebugLog = new XNAClientCheckBox(WindowManager);
             chkDebugLog.Name = nameof(chkDebugLog);
             chkDebugLog.ClientRectangle = new Rectangle(checkboxX + 260, checkboxY + checkboxSpacing, 200, 20);
             chkDebugLog.Text = "Write playbackLog.dat".L10N("Client:Main:WriteDebugLog");
-            chkDebugLog.Checked = false;
+            chkDebugLog.Checked = true;
 
             btnLaunch = new XNAClientButton(WindowManager);
             btnLaunch.Name = nameof(btnLaunch);

@@ -360,6 +360,7 @@ namespace DTAClient.DXGUI.Generic
                 btnStatistics.HotKey = Keys.T;
                 btnCredits.HotKey = Keys.R;
                 btnExtras.HotKey = Keys.X;
+                btnLoadReplay.HotKey = Keys.Z;
             }
             else
             {
@@ -373,6 +374,7 @@ namespace DTAClient.DXGUI.Generic
                 btnStatistics.HotKey = Keys.None;
                 btnCredits.HotKey = Keys.None;
                 btnExtras.HotKey = Keys.None;
+                btnLoadReplay.HotKey = Keys.None;
             }
         }
 

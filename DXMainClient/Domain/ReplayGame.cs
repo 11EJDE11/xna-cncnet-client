@@ -105,7 +105,7 @@ namespace DTAClient.Domain
                     }
 
                     // Check version compatibility
-                    if (header.Version != 4) //TODO
+                    if (header.Version != 5) //TODO
                     {
                         Logger.Log("Unsupported replay version: " + header.Version);
                         return false;
