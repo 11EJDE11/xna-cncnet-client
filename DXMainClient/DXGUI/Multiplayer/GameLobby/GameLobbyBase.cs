@@ -21,6 +21,7 @@ using DTAClient.DXGUI.Generic;
 
 using TextCopy;
 using System.Diagnostics;
+using ClientUpdater;
 
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
@@ -52,6 +53,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         protected const int PLAYER_OPTION_HORIZONTAL_MARGIN = 3;
         protected const int PLAYER_OPTION_CAPTION_Y = 6;
         private const int DROP_DOWN_HEIGHT = 21;
+        private const string SPAWNER_VERSION_SETTINGS_KEY = "SpawnerVersion";
+        private const string PHOBOS_VERSION_SETTINGS_KEY = "PhobosVersion";
+        private const string GAME_CLIENT_VERSION_SETTINGS_KEY = "GameClientVersion";
+        private const string SPAWNER_BINARY_NAME = "CnCNet-Spawner.dll";
+        private const string PHOBOS_BINARY_NAME = "phobos.dll";
         protected readonly string BTN_LAUNCH_GAME = "Launch Game".L10N("Client:Main:ButtonLaunchGame");
         protected readonly string BTN_LAUNCH_READY = "I'm Ready".L10N("Client:Main:ButtonIAmReady");
         protected readonly string BTN_LAUNCH_NOT_READY = "Not Ready".L10N("Client:Main:ButtonNotReady");
@@ -1646,6 +1652,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             settings.SetStringValue("Scenario", ProgramConstants.SPAWNMAP_INI);
             settings.SetStringValue("UIGameMode", GameMode.UntranslatedUIName);
             settings.SetStringValue("UIMapName", Map.UntranslatedName);
+            settings.SetStringValue(SPAWNER_VERSION_SETTINGS_KEY, GetLocalBinaryVersionOrUnknown(SPAWNER_BINARY_NAME));
+            settings.SetStringValue(PHOBOS_VERSION_SETTINGS_KEY, GetLocalBinaryVersionOrUnknown(PHOBOS_BINARY_NAME));
+            string gameClientVersion = string.IsNullOrWhiteSpace(Updater.GameVersion) ? "Unknown" : Updater.GameVersion;
+            settings.SetStringValue(GAME_CLIENT_VERSION_SETTINGS_KEY, $"{ClientConfiguration.Instance.LocalGame} {gameClientVersion}".Trim());
 
             // needed for translation in game loading lobbies
             if (Map.Official)
@@ -1818,6 +1828,29 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return true;
 
             return false;
+        }
+
+        private static string GetLocalBinaryVersionOrUnknown(string binaryName)
+        {
+            string binaryPath = SafePath.CombineFilePath(ProgramConstants.GamePath, binaryName);
+            if (!File.Exists(binaryPath))
+                return "Unknown";
+
+            try
+            {
+                FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(binaryPath);
+                if (!string.IsNullOrWhiteSpace(versionInfo.FileVersion))
+                    return versionInfo.FileVersion;
+
+                if (!string.IsNullOrWhiteSpace(versionInfo.ProductVersion))
+                    return versionInfo.ProductVersion;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to read version from {binaryName}: {ex.Message}");
+            }
+
+            return "Unknown";
         }
 
         protected virtual string GetIPAddressForPlayer(PlayerInfo player) => "0.0.0.0";

@@ -8,8 +8,10 @@ using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using ClientUpdater;
 
 namespace DTAClient.DXGUI.Generic
 {
@@ -39,7 +41,9 @@ namespace DTAClient.DXGUI.Generic
         private XNAClientCheckBox chkShroudEnabled;
         private XNAClientCheckBox chkLockedViewport;
         private XNAClientCheckBox chkSelectUnits;
-        private XNAClientCheckBox chkDebugLog;
+
+        private const string SPAWNER_BINARY_NAME = "CnCNet-Spawner.dll";
+        private const string PHOBOS_BINARY_NAME = "phobos.dll";
 
         private List<ReplayGame> replays = new List<ReplayGame>();
         private bool wasEnabled = false;
@@ -55,9 +59,10 @@ namespace DTAClient.DXGUI.Generic
             lbReplayGameList = new XNAMultiColumnListBox(WindowManager);
             lbReplayGameList.Name = nameof(lbReplayGameList);
             lbReplayGameList.ClientRectangle = new Rectangle(13, 13, 724, 280);
-            lbReplayGameList.AddColumn("REPLAY GAME NAME".L10N("Client:Main:ReplayGameNameColumnHeader"), 450);
-            lbReplayGameList.AddColumn("DATE / TIME".L10N("Client:Main:ReplayGameDateTimeColumnHeader"), 174);
-            lbReplayGameList.AddColumn("PHOBOS VER".L10N("Client:Main:ReplayPhobosVersionColumnHeader"), 100);
+            lbReplayGameList.AddColumn("REPLAY GAME NAME".L10N("Client:Main:ReplayGameNameColumnHeader"), 360);
+            lbReplayGameList.AddColumn("DATE / TIME".L10N("Client:Main:ReplayGameDateTimeColumnHeader"), 154);
+            lbReplayGameList.AddColumn("SPAWNER VER", 105);
+            lbReplayGameList.AddColumn("PHOBOS VER", 105);
             lbReplayGameList.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
             lbReplayGameList.PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
             lbReplayGameList.SelectedIndexChanged += ListBox_SelectedIndexChanged;
@@ -67,7 +72,7 @@ namespace DTAClient.DXGUI.Generic
             lblGameSpeed = new XNALabel(WindowManager);
             lblGameSpeed.Name = nameof(lblGameSpeed);
             lblGameSpeed.ClientRectangle = new Rectangle(13, 305, 100, 20);
-            lblGameSpeed.Text = "Game Speed (kicks in late):".L10N("Client:Main:GameSpeed");
+            lblGameSpeed.Text = "Game speed:".L10N("Client:Main:GameSpeed");
 
             ddGameSpeed = new XNAClientDropDown(WindowManager);
             ddGameSpeed.Name = nameof(ddGameSpeed);
@@ -89,24 +94,21 @@ namespace DTAClient.DXGUI.Generic
             chkShroudEnabled.ClientRectangle = new Rectangle(checkboxX, checkboxY, 250, 20);
             chkShroudEnabled.Text = "Enable shroud".L10N("Client:Main:EnableShroud");
             chkShroudEnabled.Checked = false;
+            chkShroudEnabled.ToolTipText = "Fog of war will be enabled for the recording player.".L10N("Client:Main:ReplayShroudTooltip");
 
             chkLockedViewport = new XNAClientCheckBox(WindowManager);
             chkLockedViewport.Name = nameof(chkLockedViewport);
             chkLockedViewport.ClientRectangle = new Rectangle(checkboxX + 260, checkboxY, 200, 20);
             chkLockedViewport.Text = "Lock viewport".L10N("Client:Main:LockViewport");
             chkLockedViewport.Checked = false;
+            chkLockedViewport.ToolTipText = "Locks the viewport to what the recording player was seeing.".L10N("Client:Main:ReplayLockViewportTooltip");
 
             chkSelectUnits = new XNAClientCheckBox(WindowManager);
             chkSelectUnits.Name = nameof(chkSelectUnits);
             chkSelectUnits.ClientRectangle = new Rectangle(checkboxX, checkboxY + checkboxSpacing, 250, 20);
             chkSelectUnits.Text = "Select units".L10N("Client:Main:SelectUnits");
             chkSelectUnits.Checked = false;
-
-            chkDebugLog = new XNAClientCheckBox(WindowManager);
-            chkDebugLog.Name = nameof(chkDebugLog);
-            chkDebugLog.ClientRectangle = new Rectangle(checkboxX + 260, checkboxY + checkboxSpacing, 200, 20);
-            chkDebugLog.Text = "Write playbackLog.dat".L10N("Client:Main:WriteDebugLog");
-            chkDebugLog.Checked = true;
+            chkSelectUnits.ToolTipText = "Shows which units were selected by the recording player.".L10N("Client:Main:ReplaySelectUnitsTooltip");
 
             btnLaunch = new XNAClientButton(WindowManager);
             btnLaunch.Name = nameof(btnLaunch);
@@ -135,7 +137,6 @@ namespace DTAClient.DXGUI.Generic
             AddChild(chkShroudEnabled);
             AddChild(chkLockedViewport);
             AddChild(chkSelectUnits);
-            AddChild(chkDebugLog);
             AddChild(btnLaunch);
             AddChild(btnDelete);
             AddChild(btnCancel);
@@ -172,19 +173,8 @@ namespace DTAClient.DXGUI.Generic
             ReplayGame replay = replays[lbReplayGameList.SelectedIndex];
             Logger.Log("Loading replay " + replay.FileName);
 
-            // Validate Phobos version before launching
-            // Would be good to prompt user to auto download correct Phobos version for the replay from Github.
-            string currentPhobosVersion = GetCurrentPhobosVersion();
-            if (replay.PhobosVersion != currentPhobosVersion)
-            {
-                var msgBox = new XNAMessageBox(WindowManager, "Version Mismatch".L10N("Client:Main:VersionMismatchTitle"),
-                    string.Format(("Replay Phobos version ({0}) does not match current version ({1}).\n\n" +
-                                 "Playback is blocked to prevent desync.").L10N("Client:Main:VersionMismatchText"),
-                                 replay.PhobosVersion, currentPhobosVersion),
-                    XNAMessageBoxButtons.OK);
-                msgBox.Show();
+            if (!ValidateReplayVersions(replay))
                 return;
-            }
 
             // Extract spawn.ini and spawnmap.ini from the replay file
             string spawnIniContent = replay.ExtractSpawnIni();
@@ -215,7 +205,6 @@ namespace DTAClient.DXGUI.Generic
             spawnIni.SetIntValue("Settings", "ReplayShroudEnabled", chkShroudEnabled.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked ? 1 : 0);
-            spawnIni.SetIntValue("Settings", "ReplayDebugLog", chkDebugLog.Checked ? 1 : 0);
             spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
 
             spawnIni.WriteIniFile();
@@ -368,7 +357,8 @@ namespace DTAClient.DXGUI.Generic
                 string[] item = new string[] {
                     Renderer.GetSafeString(sg.GUIName, lbReplayGameList.FontIndex),
                     sg.LastModified.ToString(),
-                    sg.PhobosVersion ?? "Unknown" };
+                    sg.SpawnerVersion ?? "Unknown",
+                    string.IsNullOrWhiteSpace(sg.PhobosVersion) ? "Unknown" : sg.PhobosVersion };
                 lbReplayGameList.AddItem(item, true);
             }
         }
@@ -382,14 +372,163 @@ namespace DTAClient.DXGUI.Generic
                 replays.Add(replay);
         }
 
-        /// <summary>
-        /// Gets the current Phobos version installed.
-        /// TODO: Read from phobos.dll or a version file.
-        /// </summary>
+        private bool ValidateReplayVersions(ReplayGame replay)
+        {
+            string replaySpawnerVersion = replay.SpawnerVersion;
+            string currentSpawnerVersion = GetCurrentSpawnerVersion();
+
+            //if (!string.IsNullOrWhiteSpace(replaySpawnerVersion)
+            //    && !string.IsNullOrWhiteSpace(currentSpawnerVersion)
+            //    && !AreVersionStringsEquivalent(replaySpawnerVersion, currentSpawnerVersion))
+            //{
+            //    var msgBox = new XNAMessageBox(WindowManager, "Version Mismatch",
+            //        $"Replay spawner version ({replaySpawnerVersion}) does not match local spawner version ({currentSpawnerVersion}).\n\nPlayback is blocked to prevent desync.",
+            //        XNAMessageBoxButtons.OK);
+            //    msgBox.Show();
+            //    return false;
+            //}
+
+            //if (!string.IsNullOrWhiteSpace(replay.PhobosVersion))
+            //{
+            //    string currentPhobosVersion = GetCurrentPhobosVersion();
+            //    if (!string.IsNullOrWhiteSpace(currentPhobosVersion)
+            //        && !AreVersionStringsEquivalent(replay.PhobosVersion, currentPhobosVersion))
+            //    {
+            //        var msgBox = new XNAMessageBox(WindowManager, "Version Mismatch",
+            //            $"Replay Phobos version ({replay.PhobosVersion}) does not match local Phobos version ({currentPhobosVersion}).\n\nPlayback is blocked to prevent desync.",
+            //            XNAMessageBoxButtons.OK);
+            //        msgBox.Show();
+            //        return false;
+            //    }
+            //}
+
+            //if (!string.IsNullOrWhiteSpace(replay.GameClientVersion))
+            //{
+            //    string currentGameClientVersion = GetCurrentGameClientVersion();
+            //    if (!string.IsNullOrWhiteSpace(currentGameClientVersion)
+            //        && !AreComparableTextEquivalent(replay.GameClientVersion, currentGameClientVersion))
+            //    {
+            //        var msgBox = new XNAMessageBox(WindowManager, "Version Mismatch",
+            //            $"Replay game client version ({replay.GameClientVersion}) does not match local game client version ({currentGameClientVersion}).\n\nPlayback is blocked to prevent desync.",
+            //            XNAMessageBoxButtons.OK);
+            //        msgBox.Show();
+            //        return false;
+            //    }
+            //}
+
+            return true;
+        }
+
+        private static bool AreComparableTextEquivalent(string left, string right)
+        {
+            string normalizedLeft = NormalizeComparableText(left);
+            string normalizedRight = NormalizeComparableText(right);
+            return normalizedLeft.Equals(normalizedRight, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeComparableText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return string.Empty;
+
+            string[] parts = text
+                .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            return string.Join(" ", parts);
+        }
+
+        private static bool AreVersionStringsEquivalent(string left, string right)
+        {
+            if (left.Equals(right, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!TryParseVersionComponents(left, out int[] leftParts)
+                || !TryParseVersionComponents(right, out int[] rightParts))
+            {
+                return false;
+            }
+
+            int maxLength = Math.Max(leftParts.Length, rightParts.Length);
+            for (int i = 0; i < maxLength; i++)
+            {
+                int leftValue = i < leftParts.Length ? leftParts[i] : 0;
+                int rightValue = i < rightParts.Length ? rightParts[i] : 0;
+                if (leftValue != rightValue)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static bool TryParseVersionComponents(string versionText, out int[] components)
+        {
+            components = Array.Empty<int>();
+
+            if (string.IsNullOrWhiteSpace(versionText))
+                return false;
+
+            string[] rawParts = versionText.Split('.');
+            if (rawParts.Length == 0)
+                return false;
+
+            var parsed = new List<int>(rawParts.Length);
+            foreach (string rawPart in rawParts)
+            {
+                if (!int.TryParse(rawPart.Trim(), out int value) || value < 0)
+                    return false;
+
+                parsed.Add(value);
+            }
+
+            while (parsed.Count > 0 && parsed[parsed.Count - 1] == 0)
+                parsed.RemoveAt(parsed.Count - 1);
+
+            if (parsed.Count == 0)
+                parsed.Add(0);
+
+            components = parsed.ToArray();
+            return true;
+        }
+
+        private string GetCurrentSpawnerVersion()
+        {
+            return GetLocalBinaryVersion(SPAWNER_BINARY_NAME);
+        }
+
         private string GetCurrentPhobosVersion()
         {
-            // TODO
-            return "0.3.0.1"; //Phobos.version.h
+            return GetLocalBinaryVersion(PHOBOS_BINARY_NAME);
+        }
+
+        private static string GetCurrentGameClientVersion()
+        {
+            if (string.IsNullOrWhiteSpace(Updater.GameVersion))
+                return string.Empty;
+
+            return $"{ClientConfiguration.Instance.LocalGame} {Updater.GameVersion}".Trim();
+        }
+
+        private string GetLocalBinaryVersion(string fileName)
+        {
+            string filePath = Path.Combine(ProgramConstants.GamePath, fileName);
+            if (!File.Exists(filePath))
+                return string.Empty;
+
+            try
+            {
+                FileVersionInfo fileVersionInfo = FileVersionInfo.GetVersionInfo(filePath);
+
+                if (!string.IsNullOrWhiteSpace(fileVersionInfo.FileVersion))
+                    return fileVersionInfo.FileVersion;
+
+                if (!string.IsNullOrWhiteSpace(fileVersionInfo.ProductVersion))
+                    return fileVersionInfo.ProductVersion;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to read version from {fileName}: {ex.Message}");
+            }
+
+            return string.Empty;
         }
 
         /// <summary>

@@ -27,22 +27,26 @@ namespace DTAClient.Domain
         public string MapName { get; private set; }
         public int Seed { get; private set; }
         public uint StartFrame { get; private set; }
+        public string SpawnerVersion { get; private set; }
         public string PhobosVersion { get; private set; }
+        public string GameClientVersion { get; private set; }
         public string GameVersion { get; private set; }
         public uint GameMode { get; private set; } //Skirmish, LAN, Online, ...
+
+        private const uint REPLAY_MAGIC = 0x4A455259;
+        private const uint SUPPORTED_REPLAY_FORMAT_VERSION = 1;
 
         // Spawn ini file content
         private string spawnIniContent;
         private string spawnMapContent;
 
         /// <summary>
-        /// Replay file header structure matching Phobos Body.h
+        /// Replay file header structure written by the spawner.
         /// </summary>
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
         private struct ReplayHeader
         {
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
-            public byte[] Magic;                    // "YREJ"
+            public uint Magic;
             public uint Version;                    // Replay format version
 
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 260)]
@@ -51,13 +55,15 @@ namespace DTAClient.Domain
             public uint StartFrame;                 // Frame when recording started
 
             // Version info
-            public byte PhobosVersionMajor;
-            public byte PhobosVersionMinor;
-            public byte PhobosVersionRevision;
-            public byte PhobosVersionPatch;
+            public byte SpawnerVersionMajor;
+            public byte SpawnerVersionMinor;
+            public byte SpawnerVersionRevision;
+            public byte SpawnerVersionPatch;
 
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
             public byte[] GameVersionString;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)]
+            public byte[] GameClientVersion;
 
             public uint GameMode;                   // GameMode (Skirmish=5, LAN=3, Internet=4, Campaign=0)
 
@@ -97,15 +103,14 @@ namespace DTAClient.Domain
                     ReplayHeader header = ReadStruct<ReplayHeader>(reader);
 
                     // Validate magic number
-                    string magic = Encoding.ASCII.GetString(header.Magic);
-                    if (magic != "YREJ")
+                    if (header.Magic != REPLAY_MAGIC)
                     {
-                        Logger.Log("Invalid replay file magic number: " + magic + " (expected YREJ)");
+                        Logger.Log($"Invalid replay file magic number: 0x{header.Magic:X8} (expected 0x{REPLAY_MAGIC:X8})");
                         return false;
                     }
 
                     // Check version compatibility
-                    if (header.Version != 5) //TODO
+                    if (header.Version != SUPPORTED_REPLAY_FORMAT_VERSION)
                     {
                         Logger.Log("Unsupported replay version: " + header.Version);
                         return false;
@@ -118,8 +123,9 @@ namespace DTAClient.Domain
                     StartFrame = header.StartFrame;
 
                     // Store version info
-                    PhobosVersion = $"{header.PhobosVersionMajor}.{header.PhobosVersionMinor}.{header.PhobosVersionRevision}.{header.PhobosVersionPatch}";
+                    SpawnerVersion = $"{header.SpawnerVersionMajor}.{header.SpawnerVersionMinor}.{header.SpawnerVersionRevision}.{header.SpawnerVersionPatch}";
                     GameVersion = Encoding.ASCII.GetString(header.GameVersionString).TrimEnd('\0');
+                    GameClientVersion = Encoding.ASCII.GetString(header.GameClientVersion).TrimEnd('\0');
                     GameMode = header.GameMode;
 
                     // Read spawn.ini content
@@ -134,6 +140,27 @@ namespace DTAClient.Domain
                     {
                         byte[] spawnMapBytes = reader.ReadBytes((int)header.SpawnMapSize);
                         spawnMapContent = Encoding.ASCII.GetString(spawnMapBytes);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(spawnIniContent))
+                    {
+                        using MemoryStream spawnIniStream = new MemoryStream(Encoding.UTF8.GetBytes(spawnIniContent));
+                        IniFile spawnIni = new IniFile(spawnIniStream, applyBaseIni: false);
+                        string spawnIniSpawnerVersion = spawnIni.GetStringValue("Settings", "SpawnerVersion", string.Empty);
+                        if (!string.IsNullOrWhiteSpace(spawnIniSpawnerVersion))
+                            SpawnerVersion = spawnIniSpawnerVersion;
+                        if (string.IsNullOrWhiteSpace(GameClientVersion))
+                            GameClientVersion = spawnIni.GetStringValue("Settings", "GameClientVersion", string.Empty);
+                        PhobosVersion = spawnIni.GetStringValue("Settings", "PhobosVersion", string.Empty);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(spawnMapContent))
+                    {
+                        using MemoryStream spawnMapStream = new MemoryStream(Encoding.UTF8.GetBytes(spawnMapContent));
+                        IniFile spawnMapIni = new IniFile(spawnMapStream, applyBaseIni: false);
+                        string mapDisplayName = spawnMapIni.GetStringValue("Basic", "Name", string.Empty);
+                        if (!string.IsNullOrWhiteSpace(mapDisplayName))
+                            MapName = mapDisplayName;
                     }
 
                     // Use map name for display, fallback to filename
@@ -187,5 +214,6 @@ namespace DTAClient.Domain
                 handle.Free();
             }
         }
+
     }
 }
