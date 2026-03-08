@@ -27,6 +27,7 @@ namespace DTAClient.Domain
         public string MapName { get; private set; }
         public int Seed { get; private set; }
         public uint StartFrame { get; private set; }
+        public uint RecordedGameSpeed { get; private set; }
         public string SpawnerVersion { get; private set; }
         public string PhobosVersion { get; private set; }
         public string GameClientVersion { get; private set; }
@@ -35,6 +36,7 @@ namespace DTAClient.Domain
 
         private const uint REPLAY_MAGIC = 0x4A455259;
         private const uint SUPPORTED_REPLAY_FORMAT_VERSION = 1;
+        private const uint MAX_GAME_SPEED_INDEX = 6;
 
         // Spawn ini file content
         private string spawnIniContent;
@@ -78,6 +80,7 @@ namespace DTAClient.Domain
             // Spawn file sizes (files stored after header, before events)
             public uint SpawnIniSize;
             public uint SpawnMapSize;
+            public uint RecordedGameSpeed;
         }
 
         /// <summary>
@@ -116,11 +119,18 @@ namespace DTAClient.Domain
                         return false;
                     }
 
+                    if (header.RecordedGameSpeed > MAX_GAME_SPEED_INDEX)
+                    {
+                        Logger.Log("Invalid replay RecordedGameSpeed: " + header.RecordedGameSpeed);
+                        return false;
+                    }
+
                     // Store header data
                     Version = header.Version;
                     MapName = Encoding.ASCII.GetString(header.MapName).TrimEnd('\0');
                     Seed = header.Seed;
                     StartFrame = header.StartFrame;
+                    RecordedGameSpeed = header.RecordedGameSpeed;
 
                     // Store version info
                     SpawnerVersion = $"{header.SpawnerVersionMajor}.{header.SpawnerVersionMinor}.{header.SpawnerVersionRevision}.{header.SpawnerVersionPatch}";
