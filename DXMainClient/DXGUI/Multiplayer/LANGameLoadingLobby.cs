@@ -55,7 +55,8 @@ namespace DTAClient.DXGUI.Multiplayer
             {
                 new ClientStringCommandHandler(CHAT_COMMAND, Client_HandleChatMessage),
                 new ClientStringCommandHandler(OPTIONS_COMMAND, Client_HandleOptionsMessage),
-                new ClientNoParamCommandHandler(GAME_LAUNCH_COMMAND, Client_HandleStartCommand)
+                new ClientNoParamCommandHandler(GAME_LAUNCH_COMMAND, Client_HandleStartCommand),
+                new ClientNoParamCommandHandler(PLAYER_QUIT_COMMAND, HandleHostQuit),
             };
 
             WindowManager.GameClosing += WindowManager_GameClosing;
@@ -98,12 +99,14 @@ namespace DTAClient.DXGUI.Multiplayer
 
         private bool started = false;
         private volatile bool leaving;
+        private int sessionId;
 
         public void SetUp(bool isHost,
             IPEndPoint hostEndPoint, TcpClient client,
             int loadedGameId)
         {
             leaving = false;
+            sessionId++;
             Refresh(isHost);
 
             this.hostEndPoint = hostEndPoint;
@@ -320,6 +323,8 @@ namespace DTAClient.DXGUI.Multiplayer
 
             int bytesRead = 0;
 
+            int mySessionId = sessionId;
+
             if (!client.Connected)
                 return;
 
@@ -339,7 +344,7 @@ namespace DTAClient.DXGUI.Multiplayer
                         break;
 
                     Logger.Log("Reading data from the server failed! Message: " + ex.ToString());
-                    LeaveGame();
+                    AddCallback(() => { if (sessionId == mySessionId) LeaveGame(); });
                     break;
                 }
 
@@ -368,14 +373,18 @@ namespace DTAClient.DXGUI.Multiplayer
 
                     foreach (string cmd in commands)
                     {
-                        AddCallback(new Action<string>(HandleMessageFromServer), cmd);
+                        string capturedCmd = cmd;
+                        AddCallback(() => { if (sessionId == mySessionId) HandleMessageFromServer(capturedCmd); });
                     }
 
                     continue;
                 }
 
+                if (leaving)
+                    break;
+
                 Logger.Log("Reading data from the server failed (0 bytes received)!");
-                LeaveGame();
+                AddCallback(() => { if (sessionId == mySessionId) LeaveGame(); });
                 break;
             }
         }
@@ -393,8 +402,17 @@ namespace DTAClient.DXGUI.Multiplayer
             Logger.Log("Unknown LAN command from the server: " + message);
         }
 
+        private void HandleHostQuit()
+        {
+            if (!IsHost && !leaving)
+                LeaveGame();
+        }
+
         protected override void LeaveGame()
         {
+            if (leaving)
+                return;
+
             Clear();
             Disable();
 
@@ -405,6 +423,7 @@ namespace DTAClient.DXGUI.Multiplayer
         {
             if (IsHost)
             {
+                GameBroadcast?.Invoke(this, new GameBroadcastEventArgs("GAMECLOSED"));
                 BroadcastMessage(PLAYER_QUIT_COMMAND);
                 Players.ForEach(p => CleanUpPlayer((LANPlayerInfo)p));
                 Players.Clear();

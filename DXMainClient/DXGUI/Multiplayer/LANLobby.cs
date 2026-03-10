@@ -473,6 +473,16 @@ namespace DTAClient.DXGUI.Multiplayer
 
                     break;
 
+                case "GAMECLOSED":
+                    int closedGameIndex = lbGameList.HostedGames.FindIndex(g => ((HostedLANGame)g).EndPoint.Equals(endPoint));
+                    if (closedGameIndex > -1)
+                    {
+                        lbGameList.HostedGames.RemoveAt(closedGameIndex);
+                        lbGameList.Refresh();
+                    }
+
+                    break;
+
                 case "GAME":
                     if (user == null)
                         return;
