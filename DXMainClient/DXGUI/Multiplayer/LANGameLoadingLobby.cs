@@ -97,11 +97,13 @@ namespace DTAClient.DXGUI.Multiplayer
         private int loadedGameId;
 
         private bool started = false;
+        private volatile bool leaving;
 
         public void SetUp(bool isHost,
             IPEndPoint hostEndPoint, TcpClient client,
             int loadedGameId)
         {
+            leaving = false;
             Refresh(isHost);
 
             this.hostEndPoint = hostEndPoint;
@@ -328,6 +330,9 @@ namespace DTAClient.DXGUI.Multiplayer
                 }
                 catch (Exception ex)
                 {
+                    if (leaving)
+                        break;
+
                     Logger.Log("Reading data from the server failed! Message: " + ex.ToString());
                     LeaveGame();
                     break;
@@ -404,6 +409,8 @@ namespace DTAClient.DXGUI.Multiplayer
             {
                 SendMessageToHost(PLAYER_QUIT_COMMAND);
             }
+
+            leaving = true;
 
             if (this.client.Connected)
                 this.client.Close();

@@ -106,6 +106,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private TcpListener listener;
         private TcpClient client;
+        private volatile bool leaving;
 
         private IPEndPoint hostEndPoint;
         private LANColor[] chatColors;
@@ -137,6 +138,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public void SetUp(bool isHost,
             IPEndPoint hostEndPoint, TcpClient client)
         {
+            leaving = false;
             Refresh(isHost);
 
             this.hostEndPoint = hostEndPoint;
@@ -374,6 +376,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 {
                     // Disconnect from server
 
+                    if (leaving)
+                        break;
+
                     Logger.Log(string.Format(
                         "Reading data from the server failed! Server address: {0}. Exception: {1}",
                         hostEndPoint.Address.ToString(), ex.ToString()));
@@ -490,6 +495,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 SendMessageToHost(PLAYER_QUIT_COMMAND);
             }
+
+            leaving = true;
 
             if (this.client.Connected)
                 this.client.Close();
