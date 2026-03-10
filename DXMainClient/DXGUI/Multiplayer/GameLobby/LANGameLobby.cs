@@ -308,7 +308,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void LpInfo_ConnectionLost(object sender, EventArgs e)
         {
-            var lpInfo = (LANPlayerInfo)sender;
+            AddCallback(new Action<LANPlayerInfo>(HandleConnectionLost), (LANPlayerInfo)sender);
+        }
+
+        private void HandleConnectionLost(LANPlayerInfo lpInfo)
+        {
             CleanUpPlayer(lpInfo);
             Players.Remove(lpInfo);
 

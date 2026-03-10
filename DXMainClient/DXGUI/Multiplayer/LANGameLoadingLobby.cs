@@ -267,7 +267,11 @@ namespace DTAClient.DXGUI.Multiplayer
 
         private void LpInfo_ConnectionLost(object sender, EventArgs e)
         {
-            var lpInfo = (LANPlayerInfo)sender;
+            AddCallback(new Action<LANPlayerInfo>(HandleConnectionLost), (LANPlayerInfo)sender);
+        }
+
+        private void HandleConnectionLost(LANPlayerInfo lpInfo)
+        {
             CleanUpPlayer(lpInfo);
             Players.Remove(lpInfo);
 
@@ -302,6 +306,7 @@ namespace DTAClient.DXGUI.Multiplayer
         private void CleanUpPlayer(LANPlayerInfo lpInfo)
         {
             lpInfo.MessageReceived -= LpInfo_MessageReceived;
+            lpInfo.ConnectionLost -= LpInfo_ConnectionLost;
             lpInfo.TcpClient.Close();
         }
 
