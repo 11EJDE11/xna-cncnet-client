@@ -868,6 +868,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     return;
                 }
 
+                channel.FlushGameSettingsMessages();
+
                 StringBuilder sb = new StringBuilder("START ");
                 sb.Append(UniqueGameID);
                 for (int pId = 0; pId < Players.Count; pId++)
