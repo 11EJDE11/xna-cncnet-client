@@ -21,7 +21,7 @@ namespace DTAClient.DXGUI.Multiplayer
     class LANGameLoadingLobby : GameLoadingLobbyBase
     {
         private const double DROPOUT_TIMEOUT = 20.0;
-        private const double GAME_BROADCAST_INTERVAL = 10.0;
+        private const double GAME_BROADCAST_INTERVAL = 2.0;
 
         private const string OPTIONS_COMMAND = "OPTS";
         private const string GAME_LAUNCH_COMMAND = "START";

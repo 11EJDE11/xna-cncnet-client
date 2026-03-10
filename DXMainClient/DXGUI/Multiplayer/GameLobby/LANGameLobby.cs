@@ -27,7 +27,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private const int GAME_OPTION_SPECIAL_FLAG_COUNT = 5;
 
         private const double DROPOUT_TIMEOUT = 20.0;
-        private const double GAME_BROADCAST_INTERVAL = 10.0;
+        private const double GAME_BROADCAST_INTERVAL = 2.0;
 
         private const string CHAT_COMMAND = "GLCHAT";
         private const string RETURN_COMMAND = "RETURN";
