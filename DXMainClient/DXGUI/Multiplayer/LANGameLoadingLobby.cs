@@ -344,7 +344,11 @@ namespace DTAClient.DXGUI.Multiplayer
                         break;
 
                     Logger.Log("Reading data from the server failed! Message: " + ex.ToString());
-                    AddCallback(() => { if (sessionId == mySessionId) LeaveGame(); });
+                    AddCallback(() =>
+                    {
+                        if (sessionId == mySessionId)
+                            LeaveGame();
+                    });
                     break;
                 }
 
@@ -374,7 +378,11 @@ namespace DTAClient.DXGUI.Multiplayer
                     foreach (string cmd in commands)
                     {
                         string capturedCmd = cmd;
-                        AddCallback(() => { if (sessionId == mySessionId) HandleMessageFromServer(capturedCmd); });
+                        AddCallback(() =>
+                        {
+                            if (sessionId == mySessionId)
+                                HandleMessageFromServer(capturedCmd);
+                        });
                     }
 
                     continue;

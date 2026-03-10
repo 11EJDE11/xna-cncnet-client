@@ -396,7 +396,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         "Reading data from the server failed! Server address: {0}. Exception: {1}".L10N("Client:Main:LanServerReadError"),
                          hostEndPoint.Address.ToString(), ex.Message);
 
-                    AddCallback(() => { if (sessionId == mySessionId) LeaveGame(localizedMessage); });
+                    AddCallback(() =>
+                    {
+                        if (sessionId == mySessionId)
+                            LeaveGame(localizedMessage);
+                    });
                     break;
                 }
 
@@ -426,7 +430,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     foreach (string cmd in commands)
                     {
                         string capturedCmd = cmd;
-                        AddCallback(() => { if (sessionId == mySessionId) HandleMessageFromServer(capturedCmd); });
+                        AddCallback(() =>
+                        {
+                            if (sessionId == mySessionId)
+                                HandleMessageFromServer(capturedCmd);
+                        });
                     }
 
                     continue;
@@ -444,7 +452,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         "Reading data from the server failed (0 bytes received)! Server address: {0}".L10N("Client:Main:LanServerReadZero"),
                          hostEndPoint.Address.ToString());
 
-                    AddCallback(() => { if (sessionId == mySessionId) LeaveGame(localizedMessage); });
+                    AddCallback(() =>
+                    {
+                        if (sessionId == mySessionId)
+                            LeaveGame(localizedMessage);
+                    });
                 }
 
                 break;
