@@ -879,7 +879,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     sb.Append(tunnelHandler.CurrentTunnel.Address + ":");
                     sb.Append(playerPorts[pId]);
                 }
-                channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.SYSTEM_MESSAGE, 10);
+                channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.INSTANT_MESSAGE, 10);
             }
             else
             {
