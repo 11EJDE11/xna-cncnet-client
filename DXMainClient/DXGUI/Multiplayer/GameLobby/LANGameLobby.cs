@@ -871,16 +871,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (side > 0 && side <= SideCount && disallowedSides[side - 1])
                 return;
 
-            if (Map.CoopInfo != null)
+            if (GameModeMap.CoopInfo != null)
             {
-                if (Map.CoopInfo.DisallowedPlayerSides.Contains(side - 1) || side == SideCount + RandomSelectorCount)
+                if (GameModeMap.CoopInfo.DisallowedPlayerSides.Contains(side - 1) || side == SideCount + RandomSelectorCount)
                     return;
 
-                if (Map.CoopInfo.DisallowedPlayerColors.Contains(color - 1))
+                if (GameModeMap.CoopInfo.DisallowedPlayerColors.Contains(color - 1))
                     return;
             }
 
-            if (start < 0 || start > Map.MaxPlayers)
+            if (!(start == 0 || (GameModeMap?.AllowedStartingLocations?.Contains(start) ?? true)))
                 return;
 
             if (team < 0 || team > 4)
@@ -1026,7 +1026,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             string mapSHA1 = parts[parts.Length - (GAME_OPTION_SPECIAL_FLAG_COUNT - 1)];
             string gameMode = parts[parts.Length - (GAME_OPTION_SPECIAL_FLAG_COUNT - 2)];
 
-            GameModeMap gameModeMap = GameModeMaps.Find(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1);
+            GameModeMap gameModeMap = GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1);
 
             if (gameModeMap == null)
             {
