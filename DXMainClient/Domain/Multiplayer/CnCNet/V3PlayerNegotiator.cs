@@ -22,11 +22,14 @@ public class V3PlayerNegotiator : IDisposable
     private readonly List<CnCNetTunnel> _tunnels; //list of tunnels to test with
     private readonly TunnelHandler _tunnelHandler;
 
-    // If true, you send ping requests and measure latency.
-    // If false, you reply to ping requests
-    // This is set based on the ID (player1ID < player2ID)
-    // As a negotiator runs for each other player, you may be a decider for
-    // some, and a non-decider for others.
+    /// <summary>
+    /// If true, you send ping requests and measure latency.
+    /// If false, you reply to ping requests.
+    ///
+    /// This is set based on the ID (player1ID < player2ID).
+    /// As a negotiator runs for each other player, you may be a decider for
+    /// some, and a non-decider for others.
+    /// </summary>
     private readonly bool _isDecider;
     private readonly CancellationTokenSource _negotiationCts = new();
 
@@ -131,9 +134,9 @@ public class V3PlayerNegotiator : IDisposable
     // and inform the other player.
     private async Task PerformDeciderNegotiationAsync()
     {
-        var totalTunnels = _remotePlayer.TunnelResults.Count;
-        var completedTunnels = 0;
-        var selectionMade = false;
+        int totalTunnels = _remotePlayer.TunnelResults.Count;
+        int completedTunnels = 0;
+        bool selectionMade = false;
         var completionLock = new object();
         var selectionTcs = new TaskCompletionSource<bool>();
 
