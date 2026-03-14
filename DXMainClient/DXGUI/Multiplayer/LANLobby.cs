@@ -84,7 +84,7 @@ namespace DTAClient.DXGUI.Multiplayer
 
         GameCollection gameCollection;
 
-        private List<GameMode> gameModes => mapLoader.GameModes;
+        private IReadOnlyList<GameMode> gameModes => mapLoader.GameModes;
 
         TimeSpan timeSinceGameRefresh = TimeSpan.Zero;
 
@@ -470,6 +470,16 @@ namespace DTAClient.DXGUI.Multiplayer
                         return;
 
                     playerManager.RemovePlayer(endPoint);
+
+                    break;
+
+                case "GAMECLOSED":
+                    int closedGameIndex = lbGameList.HostedGames.FindIndex(g => ((HostedLANGame)g).EndPoint.Equals(endPoint));
+                    if (closedGameIndex > -1)
+                    {
+                        lbGameList.HostedGames.RemoveAt(closedGameIndex);
+                        lbGameList.Refresh();
+                    }
 
                     break;
 
