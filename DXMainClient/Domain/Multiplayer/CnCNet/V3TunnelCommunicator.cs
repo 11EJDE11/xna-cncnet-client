@@ -63,9 +63,10 @@ public class V3TunnelCommunicator
     private readonly static byte[] MAGIC_BYTES = [0x45, 0x4A, 0x45, 0x4A, 0x45, 0x4A]; //EJEJEJ
 
     private UdpClient? _udpClient;
-    private Thread? _receiveThread; 
+    private Thread? _receiveThread;
     private volatile bool _running;
     private readonly ConcurrentDictionary<IPEndPoint, CnCNetTunnel> _endpointToTunnel = new();
+    private readonly ConcurrentDictionary<CnCNetTunnel, IPEndPoint> _tunnelToEndpoint = new();
     private readonly ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler> _handlers = new();
     private readonly object _initLock = new();
 
@@ -116,8 +117,10 @@ public class V3TunnelCommunicator
     /// <param name="remoteId">The remote player V3PlayerInfo ID.</param>
     public void UnregisterHandler(uint localId, uint remoteId)
     {
-        _handlers.TryRemove((localId, remoteId), out _);
-        Logger.Log($"V3TunnelCommunicator: Unregistered handler for {localId} <-> {remoteId}");
+        if (_handlers.TryRemove((localId, remoteId), out _))
+            Logger.Log($"V3TunnelCommunicator: Unregistered handler for {localId} <-> {remoteId}");
+        else
+            Logger.Log($"V3TunnelCommunicator: Handler not found for {localId} <-> {remoteId} while attempting unregistration");
     }
 
     /// <summary>
@@ -183,9 +186,12 @@ public class V3TunnelCommunicator
         var packet = CreatePacket(localId, 0u, TunnelPacketType.Register);
         foreach (var tunnel in targetTunnels)
         {
+            if (!_tunnelToEndpoint.TryGetValue(tunnel, out IPEndPoint? endpoint))
+                continue;
+
             try
             {
-                _udpClient!.Send(packet, packet.Length, tunnel.Address, tunnel.Port);
+                _udpClient!.Send(packet, packet.Length, endpoint);
                 Logger.Log($"V3TunnelCommunicator: Registration sent to {tunnel.Name}");
             }
             catch (Exception ex)
@@ -212,10 +218,16 @@ public class V3TunnelCommunicator
             return;
         }
 
+        if (!_tunnelToEndpoint.TryGetValue(tunnel, out IPEndPoint? endpoint))
+        {
+            Logger.Log($"V3TunnelCommunicator: Cannot send packet - no cached endpoint for tunnel {tunnel.Name}");
+            return;
+        }
+
         try
         {
             var packet = CreatePacket(senderId, receiverId, packetType, payload);
-            _udpClient!.Send(packet, packet.Length, tunnel.Address, tunnel.Port);
+            _udpClient!.Send(packet, packet.Length, endpoint);
         }
         catch (Exception ex)
         {
@@ -229,10 +241,12 @@ public class V3TunnelCommunicator
         _udpClient.Client.ReceiveTimeout = 500;
 
         _endpointToTunnel.Clear();
+        _tunnelToEndpoint.Clear();
         foreach (var tunnel in tunnels)
         {
             var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
             _endpointToTunnel[endpoint] = tunnel;
+            _tunnelToEndpoint[tunnel] = endpoint;
             Logger.Log($"V3TunnelCommunicator: Added tunnel mapping: {endpoint} -> {tunnel.Name}");
         }
 
