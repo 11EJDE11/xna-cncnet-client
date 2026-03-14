@@ -60,7 +60,7 @@ public delegate void PacketHandler(uint senderId, uint receiverId,
 /// </summary>
 public class V3TunnelCommunicator
 {
-    private readonly static byte[] MAGIC_BYTES = [0x45, 0x4A, 0x45, 0x4A, 0x45, 0x4A]; //EJEJEJ
+    private readonly static byte[] MAGIC_BYTES = [(byte)'C', (byte)'N', (byte)'C', (byte)'N', (byte)'E', (byte)'T']; // CNCNET
 
     private UdpClient? _udpClient;
     private Thread? _receiveThread;
