@@ -227,6 +227,25 @@ TTC (TrueType Collection) files bundle multiple fonts in one file. Only TTF/OTF 
 Tools to extract TTF from TTC:
 
 - Online: [everythingfonts.com/ttc-to-ttf](https://everythingfonts.com/ttc-to-ttf) or [transfonter.org/ttc-unpack](https://transfonter.org/ttc-unpack)
+
+- Extract locally: 
+1. Install the latest Python 3. 
+2. Run `python3 -m venv venv` and `venv\Scripts\activate` (Windows) or `source venv/bin/activate` (Linux/Mac) to create and activate a virtual environment. 
+3. Run `pip install fonttools` (`pip install fonttools==4.62.1` if the latest version causes issues). 
+4. Create `extract_ttc.py` with the following content ([source](https://github.com/fonttools/fonttools/discussions/2647#discussioncomment-3093867)):
+```python
+from fontTools.ttLib.ttCollection import TTCollection
+import os
+import sys
+
+filename = sys.argv[1]
+ttc = TTCollection(filename)
+basename = os.path.basename(filename)
+for i, font in enumerate(ttc):
+    font.save(f"{basename}#{i}.ttf")
+```
+5. Run `python extract_ttc.py yourfont.ttc` to extract TTF files.
+
 - See also: [Stack Overflow — Convert or extract TTC font to TTF](https://stackoverflow.com/questions/15455895/convert-or-extract-ttc-font-to-ttf-how-to)
 
 ## Troubleshooting
