@@ -228,7 +228,7 @@ Tools to extract TTF from TTC:
 
 - Online: [everythingfonts.com/ttc-to-ttf](https://everythingfonts.com/ttc-to-ttf) or [transfonter.org/ttc-unpack](https://transfonter.org/ttc-unpack)
 
-- Extract locally: 
+- Extract locally using Python and fonttools: 
 1. Install the latest Python 3. 
 2. Run `python3 -m venv venv` and `venv\Scripts\activate` (Windows) or `source venv/bin/activate` (Linux/Mac) to create and activate a virtual environment. 
 3. Run `pip install fonttools` (`pip install fonttools==4.62.1` if the latest version causes issues). 
@@ -245,6 +245,12 @@ for i, font in enumerate(ttc):
     font.save(f"{basename}#{i}.ttf")
 ```
 5. Run `python extract_ttc.py yourfont.ttc` to extract TTF files.
+
+- Extract locally using BREAKTTC:
+1. Download Microsoft TrueType SDK from https://archive.org/details/microsoft-truetype-sdk
+2. Extract `TTC\breakttc.exe` from the SDK.
+3. Download and install DosBox from https://www.dosbox.com/
+4. Run `breakttc.exe yourfont.ttc` in DosBox to extract TTF files.
 
 - See also: [Stack Overflow — Convert or extract TTC font to TTF](https://stackoverflow.com/questions/15455895/convert-or-extract-ttc-font-to-ttf-how-to)
 
