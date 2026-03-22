@@ -249,7 +249,8 @@ for i, font in enumerate(ttc):
 - Extract locally using BREAKTTC:
 1. Download Microsoft TrueType SDK from https://archive.org/details/microsoft-truetype-sdk
 2. Extract `TTC\breakttc.exe` from the SDK.
-3. Run `breakttc.exe yourfont.ttc` in a 32-bit Windows (e.g., Windows XP) to extract TTF files.
+3. Download and install DosBox from https://www.dosbox.com/
+4. Run `breakttc.exe yourfont.ttc` in DosBox to extract TTF files.
 
 - See also: [Stack Overflow — Convert or extract TTC font to TTF](https://stackoverflow.com/questions/15455895/convert-or-extract-ttc-font-to-ttf-how-to)
 
