@@ -227,7 +227,6 @@ TTC (TrueType Collection) files bundle multiple fonts in one file. Only TTF/OTF 
 Tools to extract TTF from TTC:
 
 - Online: [everythingfonts.com/ttc-to-ttf](https://everythingfonts.com/ttc-to-ttf) or [transfonter.org/ttc-unpack](https://transfonter.org/ttc-unpack)
-- CLI: [extract_ttc_project](https://github.com/abiyug/extract_ttc_project) on GitHub
 - See also: [Stack Overflow — Convert or extract TTC font to TTF](https://stackoverflow.com/questions/15455895/convert-or-extract-ttc-font-to-ttf-how-to)
 
 ## Troubleshooting
