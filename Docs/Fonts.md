@@ -234,7 +234,7 @@ Please follow the guideline below. We assume you have a Windows 10/11 PC, but si
 
 2. Download and install FontForge from https://fontforge.org/. Open your font file in FontForge. If FontForge shows a warning about "Bad Font Name", you can ignore this dialog.
 
-3. If FontForge shows a "Load Bitmap Font" dialog, this measn your TTF/OTF file must be preprocessed. If you don't see this dialog, your font file should work without preprocessing. You can skip the rest of the steps and use the original TTF/OTF file directly.
+3. If FontForge shows a "Load Bitmap Font" dialog, this means your TTF/OTF file must be preprocessed. If you don't see this dialog, your font file should work without preprocessing. You can skip the rest of the steps and use the original TTF/OTF file directly.
 
 The dialog should look like this:
 
