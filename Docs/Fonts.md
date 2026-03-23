@@ -238,7 +238,7 @@ Please follow the guideline below. We assume you have a Windows 10/11 PC, but si
 
 The dialog should look like this:
 
-![FontForge Load Bitmap Font dialog](Images/ttf-fontforge-bitmap-font-dialog.png)
+![FontForge Load Bitmap Font dialog](Images/ttf-fontforge-preprocess-bitmap-font-dialog.png)
 
 4. Select a font size (e.g. 14 px) and click "OK". Remember the size you chose.
 
