@@ -7,6 +7,8 @@ The client supports two font types:
 
 Font configuration is done via `Fonts.ini` placed in your `Resources` directory.
 
+**Warning:** The TTF/OTF font file might need to be preprocessed for an optimal rendering experience. Please explicitly follow the instructions in "Preprocess font files" section to determine if your font files need preprocessing. Do not just copy existing TTF/OTF files!
+
 ## Fonts.ini location
 
 The client searches for `Fonts.ini` in this order, loading the first one found:
@@ -219,6 +221,56 @@ Path=SpriteFont3
 ```
 
 Files must be `SpriteFont0.xnb`, `SpriteFont1.xnb`, etc. in the Resources folder.
+
+## Preprocess font files
+
+This step is required for a proportion of TTF/OTF fonts to render correctly. 
+
+Please follow the diagram below.
+
+1. What's the extension of your font file?
+   - If it's `.ttc`, follow the instructions in the "TTC fonts" section to extract TTF files first.
+   - If it's `.ttf` or `.otf`, continue to the next question.
+
+2. Download and install FontForge from https://fontforge.org/. Open your font file in FontForge. If FontForge shows a warning about "Bad Font Name", you can ignore this dialog.
+
+3. If FontForge shows a "Load Bitmap Font" dialog, this measn your TTF/OTF file must be preprocessed. If you don't see this dialog, your font file should work without preprocessing. You can skip the rest of the steps and use the original TTF/OTF file directly.
+
+The dialog should look like this:
+
+![FontForge Load Bitmap Font dialog](Images/ttf-fontforge-bitmap-font-dialog.png)
+
+4. Select a font size (e.g. 14 px) and click "OK". Remember the size you chose.
+
+5. File -> Generate Fonts. Select "No Outline Font" and "BDF" as the font type, and save the file as `myfont.bdf`.
+
+![FontForge Generate Fonts dialog](Images/ttf-fontforge-preprocess-generate-font.png)
+
+6. Open `myfont.bdf` in a text editor supporting opening large files, e.g., VSCode and EmEditor. Check if the first line is `STARTFONT 2.1` or `STARTFONT 2.2`.
+
+7. If the first line is `STARTFONT 2.2`, you need to use https://github.com/SadPencil/BdfToolSP to downgrade the BDF file to version 2.1. Even not, you can still use BdfToolSP to clean up the BDF file by running the downgrade command. Besides, it's strongly recommended to run the downgrade command with `--font-name` parameter, so you can set up a new font name, e.g., "My Font 14px", to avoid conflicts with the original TTF/OTF file.
+
+8. Check if `ENCODING 65` exists in the BDF file. This means whether the extracted bitmap font contains basic ASCII characters.
+
+9. If `ENCODING 65` exists, jump to Step 13. Otherwise, `ENCODING 65` does not exist, you need to select a basic font to provide the missing ASCII characters, say `micross.ttf`. Open it with FontForge.
+
+10. Element -> Bitmap Strikes Available. If "Pixel Sizes" is empty or does not contain the size you chose previously, you need to manually fill the pixel size and click "OK". 
+
+![FontForge Bitmap Strikes Available dialog](Images/ttf-fontforge-preprocess-secondary-font-bitmap-available.png)
+
+![FontForge Bitmap Strikes Available dialog with pixel size filled](Images/ttf-fontforge-preprocess-secondary-font-create-bitmap.png)
+
+11. Save the font as `secondary.bdf` as in Step 5.
+
+13. Use https://github.com/SadPencil/BdfToolSP to merge `myfont.bdf` and `secondary.bdf` into `merged.bdf`. Rename `merged.bdf` to `myfont.bdf`. Again, it's strongly recommended to run the merge command with `--font-name` parameter to set up a unique font name, to avoid conflicts.
+
+14. Download and install the latest LTS version of Eclipse Temurin (previously named AdoptOpenJDK). You can skip this step if you already have JRE installed.
+
+15. Download `BitsNPicas.jar` from https://github.com/kreativekorp/bitsnpicas/releases/. Generally speaking, you should download the latest version, but if you encounter issues, try v2.2.
+
+16. Create the preprocessed TTF file by running `java -jar BitsNPicas.jar convertbitmap -f ttf -o myfont.ttf myfont.bdf`.
+
+17. Double-click the TTF file. The sample text should display correctly. You might feel the font looks worse if the font size does not match the size you chose in Step 4, but this means you have successfully preprocessed the font file. You can now use this TTF file in your `Fonts.ini`.
 
 ## TTC fonts
 
