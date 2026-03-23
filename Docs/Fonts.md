@@ -242,7 +242,7 @@ The dialog should look like this:
 
 4. Select a font size (e.g. 14 px) and click "OK". Remember the size you chose.
 
-5. File -> Generate Fonts. Select "No Outline Font" and "BDF" as the font type, and save the file as `myfont.bdf`.
+5. File -> Generate Fonts. Select "No Outline Font" and "BDF" as the font type, and save the file as `myfont.bdf`. Use `96` as the DPI value, if being asked.
 
 ![FontForge Generate Fonts dialog](Images/ttf-fontforge-preprocess-generate-font.png)
 
