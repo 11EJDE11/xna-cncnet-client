@@ -230,7 +230,7 @@ Please follow the guideline below. We assume you have a Windows 10/11 PC, but si
 
 1. What's the extension of your font file?
    - If it's `.ttc`, follow the instructions in the "TTC fonts" section to extract a TTF file first.
-   - If it's `.ttf` or `.otf`, continue to the next question.
+   - If it's `.ttf` or `.otf`, continue to Step 2.
 
 2. Download and install FontForge from https://fontforge.org/. Open your font file in FontForge. If FontForge shows a warning about "Bad Font Name", you can ignore this dialog.
 
