@@ -224,12 +224,12 @@ Files must be `SpriteFont0.xnb`, `SpriteFont1.xnb`, etc. in the Resources folder
 
 ## Preprocess font files
 
-This step is required for a proportion of TTF/OTF fonts to render correctly. 
+This step is required for a proportion of TTF/OTF fonts to render ideally. 
 
-Please follow the diagram below.
+Please follow the guideline below. We assume you have a Windows 10/11 PC, but similar steps should also work on Linux/Mac.
 
 1. What's the extension of your font file?
-   - If it's `.ttc`, follow the instructions in the "TTC fonts" section to extract TTF files first.
+   - If it's `.ttc`, follow the instructions in the "TTC fonts" section to extract a TTF file first.
    - If it's `.ttf` or `.otf`, continue to the next question.
 
 2. Download and install FontForge from https://fontforge.org/. Open your font file in FontForge. If FontForge shows a warning about "Bad Font Name", you can ignore this dialog.
@@ -262,15 +262,15 @@ The dialog should look like this:
 
 11. Save the font as `secondary.bdf` as in Step 5.
 
-13. Use https://github.com/SadPencil/BdfToolSP to merge `myfont.bdf` and `secondary.bdf` into `merged.bdf`. Rename `merged.bdf` to `myfont.bdf`. Again, it's strongly recommended to run the merge command with `--font-name` parameter to set up a unique font name, to avoid conflicts.
+12. Use https://github.com/SadPencil/BdfToolSP to merge `myfont.bdf` and `secondary.bdf` into `merged.bdf`. Rename `merged.bdf` to `myfont.bdf`. Again, it's strongly recommended to run the merge command with `--font-name` parameter to set up a unique font name, to avoid conflicts.
 
-14. Download and install the latest LTS version of Eclipse Temurin (previously named AdoptOpenJDK). You can skip this step if you already have JRE installed.
+13. Download and install the latest LTS version of Eclipse Temurin (previously named AdoptOpenJDK). You can skip this step if you already have JRE installed.
 
-15. Download `BitsNPicas.jar` from https://github.com/kreativekorp/bitsnpicas/releases/. Generally speaking, you should download the latest version, but if you encounter issues, try v2.2.
+14. Download `BitsNPicas.jar` from https://github.com/kreativekorp/bitsnpicas/releases/. Generally speaking, you should download the latest version, but if you encounter issues, try v2.2.
 
-16. Create the preprocessed TTF file by running `java -jar BitsNPicas.jar convertbitmap -f ttf -o myfont.ttf myfont.bdf`.
+15. Create the preprocessed TTF file by running `java -jar BitsNPicas.jar convertbitmap -f ttf -o myfont.ttf myfont.bdf`.
 
-17. Double-click the TTF file. The sample text should display correctly. You might feel the font looks worse if the font size does not match the size you chose in Step 4, but this means you have successfully preprocessed the font file. You can now use this TTF file in your `Fonts.ini`.
+16. Double-click the TTF file. The sample text should display correctly. You might feel the font looks worse if the font size does not match the size you chose in Step 4, but this means you have successfully preprocessed the font file. You can now use this TTF file in your `Fonts.ini`.
 
 ## TTC fonts
 
