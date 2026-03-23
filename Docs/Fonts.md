@@ -250,7 +250,7 @@ The dialog should look like this:
 
 7. If the first line is `STARTFONT 2.2`, you need to use https://github.com/SadPencil/BdfToolSP to downgrade the BDF file to version 2.1. Even not, you can still use BdfToolSP to clean up the BDF file by running the downgrade command. Besides, it's strongly recommended to run the downgrade command with `--font-name` parameter, so you can set up a new font name, e.g., "My Font 14px", to avoid conflicts with the original TTF/OTF file.
 
-8. Check if `ENCODING 65` exists in the BDF file. This means whether the extracted bitmap font contains basic ASCII characters.
+8. Check if `ENCODING 65` (character 'A') exists in the BDF file. This means whether the extracted bitmap font contains basic ASCII characters.
 
 9. If `ENCODING 65` exists, jump to Step 13. Otherwise, `ENCODING 65` does not exist, you need to select a basic font to provide the missing ASCII characters, say `micross.ttf`. Open it with FontForge.
 
