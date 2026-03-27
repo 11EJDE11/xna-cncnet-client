@@ -10,7 +10,7 @@ using Newtonsoft.Json.Linq;
 
 namespace ClientGUI;
 
-public class XNAClientWebLabel : XNALabel
+public class XNAClientWebLabel : XNAClientLinkLabel
 {
     public string DataSourceID { get; set; }
     public string Template { get; set; }
@@ -26,6 +26,7 @@ public class XNAClientWebLabel : XNALabel
     {
         _dataSourceManager = dataSourceManager;
         FontIndex = 1;
+        DrawUnderline = false;
     }
 
     public override void Initialize()
