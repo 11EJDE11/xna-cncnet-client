@@ -290,46 +290,71 @@ ToolTip=            ; text, tooltip for dropdown.
 
 #### [XNAClientWebLabel](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAClientWebLabel.cs)
 
-_(inherits [XNALabel](#XNALabel))_
+_(inherits [XNAClientLinkLabel](#XNAClientLinkLabel))_
 
-Displays data from a JSON or ini web request. Datasources are defined in ClientDefinitions.
-Uses Newtonsoft.Json for JSONPath queries. JSONPath expressions are embedded directly in the `Template` template as placeholders.
+Displays data fetched from a URL, using JSONPath expressions in a `Template` string. Supports JSON and INI response formats. Data sources are defined in `ClientDefinitions.ini`. Inherits URL click, hover colour, and underline from `XNAClientLinkLabel` — set `URL` and `DrawUnderline=true` to make the label act as a link.
+
+Uses Newtonsoft.Json for JSONPath queries.
 
 ```ini
-[SOMEJSONLABEL]              ; XNAClientWebLabel
-DataSourceID=                ; text,    the datasource ID defined in ClientDefinitions.
-Template=                    ; text,    template string with {JSONPath:Format} placeholders.
-                             ;          JSONPath expressions are evaluated and replaced with values.
+[SOMEWEBLABEL]               ; XNAClientWebLabel
+DataSourceID=                ; text,    data source ID defined in [DataSources] in ClientDefinitions.ini
+Template=                    ; text,    template string with {JSONPath} or {JSONPath:Format} placeholders.
+                             ;          JSONPath expressions are evaluated against the fetched data.
                              ;          Supports .NET format specifiers:
-                             ;          - {path:N0} -> number with thousand separator (1,234)
-                             ;          - {path:F2} -> decimal with 2 places (12.34)
-                             ;          - {path:C} -> currency ($1,234.56)
-                             ;          - {path:P} -> percentage (12.34%)
-                             ;          - {path:yyyy-MM-dd} -> date format
+                             ;          - {path:N0}          -> number with thousands separator (1,234)
+                             ;          - {path:F2}          -> decimal, 2 places (12.34)
+                             ;          - {path:C}           -> currency ($1,234.56)
+                             ;          - {path:P}           -> percentage (12.34%)
+                             ;          - {path:yyyy-MM-dd}  -> date format
                              ;          Example: "{YR[0].player_name} ({YR[0].points:N0} pts)"
-LoadingText=                 ; text,    optional text to display while fetching data.
-                             ;          If not specified, shows the Text template.
-MaxResults=0                 ; integer, maximum number of results per JSONPath query. 0 is all.
-                             ;          Useful when a JSONPath returns multiple values but you only want first N.
-FallbackText=---             ; text,    text to display on error or unavailable data. Default: "---".
+                             ;          For ini format sources, use section.key paths:
+                             ;          Example: "{Settings.Background} | {Settings.ItemMax:N0}"
+LoadingText=                 ; text,    displayed while the first fetch is in progress.
+                             ;          If omitted, Template is shown as-is until data arrives.
+MaxResults=0                 ; integer, max results per JSONPath expression. 0 = unlimited.
+                             ;          Useful when a path matches multiple values but only N are wanted.
+FallbackText=---             ; text,    displayed on fetch error or parse failure. Default: "---".
+URL=                         ; text,    optional URL to open in the browser on click (inherited).
+UnixURL=                     ; text,    Unix override for URL (inherited).
+DrawUnderline=false          ; boolean, whether to underline the label text. Default: false.
+                             ;          Set to true alongside URL to indicate the label is clickable.
+IdleColor=                   ; color,   text colour when not hovered. Replaces RemapColor (inherited).
+HoverColor=                  ; color,   text colour when hovered, only applies if URL is set (inherited).
 ```
 
 **JSONPath Syntax:**
 See Newtonsoft.Json documentation: https://www.newtonsoft.com/json/help/html/QueryJsonSelectToken.htm
 
-**Example Usage:**
+**Example — JSON with link:**
 ```ini
+[ExtraControls]
+0=lblTopPlayer1:XNAClientWebLabel
+
 [lblTopPlayer1]
-$Type=XNAClientWebLabel
 DataSourceID=TopPlayers
 Template=1. {YR[0].player_name} - {YR[0].points:N0} pts
 LoadingText=Loading...
 FallbackText=---
+URL=https://ladder.cncnet.org
+DrawUnderline=true
 FontIndex=1
-RemapColor=230,230,230
+IdleColor=230,230,230
+HoverColor=255,255,255
 Location=360,166
 ```
-This displays: "1. OneSided - 1,500 pts"
+This displays: "1. OneSided - 1,500 pts" and opens the ladder page on click.
+
+**Example — INI format (section.key paths):**
+```ini
+[lblServerStatus]
+DataSourceID=ServerConfig
+Template=Mode: {Settings.GameMode} | Max: {Settings.MaxPlayers:N0}
+FallbackText=---
+FontIndex=1
+IdleColor=230,230,230
+Location=360,186
+```
 
 #### [XNAClientColorDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAClientColorDropDown.cs)
 
