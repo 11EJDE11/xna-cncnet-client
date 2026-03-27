@@ -48,17 +48,8 @@ public class XNAClientWebLabel : XNALabel
                 DataSourceID = value;
                 TrySubscribeToDataSource();
                 return;
-            case "Template":
-                Template = value.FromIniString();
-                return;
-            case "LoadingText":
-                LoadingText = value.FromIniString();
-                return;
             case "MaxResults":
                 MaxResults = Conversions.IntFromString(value, 0);
-                return;
-            case "FallbackText":
-                FallbackText = value.FromIniString();
                 return;
         }
 

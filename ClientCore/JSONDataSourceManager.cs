@@ -61,7 +61,11 @@ public class JSONDataSourceManager
 
             int refreshInterval = dataSourceSection.GetIntValue("RefreshIntervalSeconds", 300);
             int timeout = dataSourceSection.GetIntValue("TimeoutSeconds", 10);
-            string format = dataSourceSection.GetStringValue("Format", "json");
+            IDataSourceFormat format = dataSourceSection.GetStringValue("Format", "json").ToLowerInvariant() switch
+            {
+                "ini" => new IniDataSourceFormat(),
+                _ => new JsonDataSourceFormat()
+            };
 
             var dataSource = new DataSource(dataSourceName, url, refreshInterval, timeout, format);
             _dataSources.Add(dataSourceName, dataSource);
@@ -98,25 +102,63 @@ public class JSONDataSourceManager
             dataSource.Unsubscribe(callback);
     }
 
+    private interface IDataSourceFormat
+    {
+        JToken Convert(string input);
+    }
+
+    private class JsonDataSourceFormat : IDataSourceFormat
+    {
+        public JToken Convert(string input) => JToken.Parse(input);
+    }
+
+    private class IniDataSourceFormat : IDataSourceFormat
+    {
+        public JToken Convert(string input)
+        {
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(input));
+            var iniFile = new IniFile(stream, applyBaseIni: false);
+
+            var result = new JObject();
+            foreach (var sectionName in iniFile.GetSections())
+            {
+                var section = iniFile.GetSection(sectionName);
+                var sectionObj = new JObject();
+                foreach (var key in section.Keys)
+                {
+                    string value = section.GetStringValue(key.Key, string.Empty);
+                    if (int.TryParse(value, out int intValue))
+                        sectionObj[key.Key] = intValue;
+                    else if (double.TryParse(value, out double doubleValue))
+                        sectionObj[key.Key] = doubleValue;
+                    else
+                        sectionObj[key.Key] = value;
+                }
+                result[section.SectionName] = sectionObj;
+            }
+            return result;
+        }
+    }
+
     private class DataSource
     {
         private readonly string _id;
         private readonly string _url;
         private readonly int _refreshIntervalSeconds;
         private readonly int _timeoutSeconds;
-        private readonly string _format;
+        private readonly IDataSourceFormat _format;
         private readonly List<Action<JToken, bool>> _subscribers = new List<Action<JToken, bool>>();
         private CancellationTokenSource _cts;
         private Task _fetchTask;
         private JToken _lastJToken;
 
-        public DataSource(string id, string url, int refreshIntervalSeconds, int timeoutSeconds, string format)
+        public DataSource(string id, string url, int refreshIntervalSeconds, int timeoutSeconds, IDataSourceFormat format)
         {
             _id = id;
             _url = url;
             _refreshIntervalSeconds = refreshIntervalSeconds;
             _timeoutSeconds = timeoutSeconds;
-            _format = format?.ToLowerInvariant() ?? "json";
+            _format = format;
         }
 
         public void Subscribe(Action<JToken, bool> callback)
@@ -200,26 +242,14 @@ public class JSONDataSourceManager
                 return;
             }
 
-            string jsonString;
-            try
-            {
-                jsonString = ConvertToJson(data, _format);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"JSONDataSourceManager: Error converting data to JSON for '{_id}': {ex.Message}");
-                NotifySubscribers(null, true);
-                return;
-            }
-
             JToken jToken;
             try
             {
-                jToken = JToken.Parse(jsonString);
+                jToken = _format.Convert(data);
             }
             catch (Exception ex)
             {
-                Logger.Log($"JSONDataSourceManager: Error parsing JSON for '{_id}': {ex.Message}");
+                Logger.Log($"JSONDataSourceManager: Error parsing data for '{_id}': {ex.Message}");
                 NotifySubscribers(null, true);
                 return;
             }
@@ -279,71 +309,5 @@ public class JSONDataSourceManager
             }
         }
 
-        private string ConvertToJson(string input, string format)
-        {
-            return format switch
-            {
-                "ini" => ConvertIniToJson(input),
-                _ => input  // JSON or unknown - pass through
-            };
-        }
-
-        private string ConvertIniToJson(string iniContent)
-        {
-            IniFile iniFile;
-            using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(iniContent)))
-            {
-                iniFile = new IniFile(stream, applyBaseIni: false);
-            }
-
-            var sb = new StringBuilder();
-            sb.Append("{");
-            bool firstSection = true;
-
-            foreach (var sectionName in iniFile.GetSections())
-            {
-                var section = iniFile.GetSection(sectionName);
-
-                if (!firstSection)
-                    sb.Append(",");
-                firstSection = false;
-
-                sb.Append($"\"{EscapeJsonString(section.SectionName)}\":{{");
-
-                bool firstKey = true;
-                foreach (var key in section.Keys)
-                {
-                    if (!firstKey)
-                        sb.Append(",");
-                    firstKey = false;
-
-                    string value = section.GetStringValue(key.Key, string.Empty);
-
-                    if (int.TryParse(value, out int intValue))
-                        sb.Append($"\"{EscapeJsonString(key.Key)}\":{intValue}");
-                    else if (double.TryParse(value, out double doubleValue))
-                        sb.Append($"\"{EscapeJsonString(key.Key)}\":{doubleValue}");
-                    else
-                        sb.Append($"\"{EscapeJsonString(key.Key)}\":\"{EscapeJsonString(value)}\"");
-                }
-
-                sb.Append("}");
-            }
-
-            sb.Append("}");
-            return sb.ToString();
-        }
-
-        private string EscapeJsonString(string str)
-        {
-            if (string.IsNullOrEmpty(str))
-                return str;
-
-            return str.Replace("\\", "\\\\")
-                      .Replace("\"", "\\\"")
-                      .Replace("\n", "\\n")
-                      .Replace("\r", "\\r")
-                      .Replace("\t", "\\t");
-        }
     }
 }
