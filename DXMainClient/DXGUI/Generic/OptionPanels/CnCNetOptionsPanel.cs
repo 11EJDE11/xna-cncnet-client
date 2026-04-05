@@ -34,6 +34,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
         XNAClientCheckBox chkSteamIntegration;
         XNAClientCheckBox chkAllowGameInvitesFromFriendsOnly;
         XNAClientCheckBox chkDisablePrivateMessagePopup;
+        XNAClientCheckBox chkAutoUploadSyncLogs;
 
         XNAClientDropDown ddAllowPrivateMessagesFrom;
 
@@ -171,6 +172,15 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             chkSteamIntegration.Text = "Show the game being played in Steam".L10N("Client:DTAConfig:SteamStatus");
 
             AddChild(chkSteamIntegration);
+
+            chkAutoUploadSyncLogs = new XNAClientCheckBox(WindowManager);
+            chkAutoUploadSyncLogs.Name = nameof(chkAutoUploadSyncLogs);
+            chkAutoUploadSyncLogs.ClientRectangle = new Rectangle(
+                chkSteamIntegration.X,
+                chkSteamIntegration.Bottom + 12, 0, 0);
+            chkAutoUploadSyncLogs.Text = "Automatically upload desync logs".L10N("Client:DTAConfig:AutoUploadSyncLogs");
+
+            AddChild(chkAutoUploadSyncLogs);
         }
 
         private void InitAllowPrivateMessagesFromDropdown()
@@ -339,6 +349,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
                 && IniSettings.DiscordIntegration;
 
             chkAllowGameInvitesFromFriendsOnly.Checked = IniSettings.AllowGameInvitesFromFriendsOnly;
+            chkAutoUploadSyncLogs.Checked = IniSettings.AutoUploadSyncLogs;
 
             string localGame = ClientConfiguration.Instance.LocalGame.ToUpperInvariant();
 
@@ -377,6 +388,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             }
 
             IniSettings.AllowGameInvitesFromFriendsOnly.Value = chkAllowGameInvitesFromFriendsOnly.Checked;
+            IniSettings.AutoUploadSyncLogs.Value = chkAutoUploadSyncLogs.Checked;
 
             foreach (var chkBox in followedGameChks)
             {

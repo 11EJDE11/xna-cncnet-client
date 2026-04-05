@@ -13,6 +13,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using SixLabors.ImageSharp;
+using DTAClient.Domain.Multiplayer.CnCNet;
 
 namespace DTAClient.DXGUI
 {
@@ -31,6 +32,7 @@ namespace DTAClient.DXGUI
 
         private bool initialized = false;
         private bool nativeCursorUsed = false;
+        private DateTime gameStartTime;
 
         private List<string> debugSnapshotDirectories;
         private DateTime debugLogLastWriteTime;
@@ -102,7 +104,17 @@ namespace DTAClient.DXGUI
                     SafePath.DeleteFileIfExists(ProgramConstants.GamePath, "EXCEPT.TXT");
 
                     for (int i = 0; i < 8; i++)
+                    {
                         SafePath.DeleteFileIfExists(ProgramConstants.GamePath, "SYNC" + i + ".TXT");
+
+                        // Also delete multi-chunk variants like SYNC0_000.TXT, SYNC1_255.TXT, etc.
+                        foreach (FileInfo chunkFile in SafePath.GetDirectory(ProgramConstants.GamePath)
+                            .EnumerateFiles("SYNC" + i + "_*.TXT"))
+                        {
+                            try { chunkFile.Delete(); }
+                            catch { }
+                        }
+                    }
 
                     deletingLogFilesFailed = false;
                 }
@@ -119,6 +131,7 @@ namespace DTAClient.DXGUI
             nativeCursorUsed = Game.IsMouseVisible;
             Game.IsMouseVisible = false;
             ProgramConstants.IsInGame = true;
+            gameStartTime = DateTime.Now;
             Game.TargetElapsedTime = TimeSpan.FromMilliseconds(1000.0 / POWER_SAVING_FPS);
 #if WINFORMS
 
@@ -210,7 +223,11 @@ namespace DTAClient.DXGUI
                     return;
 
                 CopyErrorLog(SafePath.CombineDirectoryPath(ProgramConstants.ClientUserFilesPath, "GameCrashLogs"), "EXCEPT.TXT", dtn);
-                CopySyncErrorLogs(SafePath.CombineDirectoryPath(ProgramConstants.ClientUserFilesPath, "SyncErrorLogs"), dtn);
+                string syncErrorLogsDir = SafePath.CombineDirectoryPath(ProgramConstants.ClientUserFilesPath, "SyncErrorLogs");
+                bool hasSyncLogs = CopySyncErrorLogs(syncErrorLogsDir, dtn);
+
+                if (hasSyncLogs && UserINISettings.Instance.AutoUploadSyncLogs.Value)
+                    SyncLogSharer.UploadSyncLogs(syncErrorLogsDir, gameStartTime);
             }
         }
 
