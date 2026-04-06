@@ -24,14 +24,6 @@ using System.Security.Cryptography;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
-    public enum NegotiationStatus
-    {
-        NotStarted,
-        InProgress,
-        Succeeded,
-        Failed
-    }
-
     public class CnCNetGameLobby : MultiplayerGameLobby
     {
         private const int HUMAN_PLAYER_OPTIONS_LENGTH = 3;
@@ -113,7 +105,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(NEGOTIATION_INFO_MESSAGE, HandleNegotiationInfoMessage),
                 new StringCommandHandler(TUNNEL_RENEGOTIATE_MESSAGE, HandleTunnelRenegotiateMessage),
                 new StringCommandHandler(TUNNEL_FAILED_MESSAGE, HandleTunnelFailedMessage),
-                new StringCommandHandler(CHANGE_TUNNEL_SERVER_MESSAGE, HandleTunnelServerChangeMessage),
                 new StringCommandHandler("GSETTINGS", ApplyGameLobbySettings)
             };
 
@@ -2801,6 +2792,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
 
             CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
+
+            if (tunnel == null)
+            {
+                Logger.Log($"HandlePlayerTunnelMessage: Tunnel not found for {tunnelAddress}:{tunnelPort}");
+                return;
+            }
+
             AddNotice($"{sender} is using tunnel: {tunnel.Name}");
 
             if (!IsHost)
