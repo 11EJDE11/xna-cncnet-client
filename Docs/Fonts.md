@@ -116,9 +116,9 @@ myLabel.FontIndex = 1;
 For English text, [MozillaText-Bold.ttf](https://fonts.google.com/specimen/Mozilla+Text) provides a good match in style to the existing SpriteFont appearance.
 
 For CJK fallback, consider one of the following options:
-- [GNU Unifont](https://unifoundry.com/unifont/). It has broad Unicode coverage and has pixel-perfect rendering. It supports 16 px as the font size ONLY. Do not have bold/italic variants.
+- [GNU Unifont](https://unifoundry.com/unifont/). It has broad Unicode coverage and has pixel-perfect rendering. It supports 16 px as the font size ONLY. Does not have bold/italic variants.
 - A Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese).
-- The default Windows Chinese font, SimSum. It has pixel-perfect rendering on multiple sizes but you MUST follow the "Preprocess font files" instructions below to preprocess the font file before use. Do not have bold/italic variants.
+- The default Windows Chinese font, SimSum. It has pixel-perfect rendering on multiple sizes but you MUST follow the "Preprocess font files" instructions below to preprocess the font file before use. Does not have bold/italic variants.
 
 ## Examples
 
