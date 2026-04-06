@@ -336,13 +336,14 @@ Tools to extract TTF from TTC:
 3. Run `pip install fonttools` (`pip install fonttools==4.62.1` if the latest version causes issues). 
 4. Create `extract_ttc.py` with the following content ([source](https://github.com/fonttools/fonttools/discussions/2647#discussioncomment-3093867)):
 ```python
+#!/usr/bin/env python
 from fontTools.ttLib.ttCollection import TTCollection
 import os
 import sys
 
 filename = sys.argv[1]
 ttc = TTCollection(filename)
-basename = os.path.basename(filename)
+basename = os.path.splitext(os.path.basename(filename))[0]
 for i, font in enumerate(ttc):
     font.save(f"{basename}_{i}.ttf")
 ```
