@@ -400,7 +400,7 @@ Unfortunately, not all TTF/OTF fonts perform well when rendered in a small font 
 
 ### Must I preprocess TTF/OTF font files? Can't I just use the original TTF/OTF files directly?
 
-Technically you can, but you might find that fonts look blurrier than expected due to the reasons explained in the "Known limitations" section. Preprocessing generates a new TTF file with vector outlines optimized for a specific pixel size, which can significantly improve the rendering quality for certain fonts.
+Technically you can, but you might find that fonts look blurrier than expected due to the reasons explained in the "Known limitations" section. Preprocessing generates a new TTF file with vector outlines optimized for a specific pixel size, which can significantly improve the rendering quality for certain fonts. However, not all fonts look better after preprocessing. Some might have a weird appearance.
 
 ### Can I use the preprocessed TTF font files as regular TTF fonts for other applications?
 
