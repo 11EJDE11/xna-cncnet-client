@@ -9,7 +9,7 @@ The client supports two font types:
 
 Font configuration is done via `Fonts.ini` placed in your `Resources` directory.
 
-**Warning:** The TTF/OTF font file might need to be preprocessed for an optimal rendering experience. Please explicitly follow the instructions in "Preprocess font files" section to determine if your font files need preprocessing. Do not just copy existing TTF/OTF files!
+**Warning:** The TTF/OTF font file might need to be preprocessed for an optimal rendering experience. Please explicitly follow the instructions in "Preprocess font files" section to preprocess your font files. **Do not just copy existing TTF/OTF files!***
 
 ## Fonts.ini location
 
@@ -121,6 +121,8 @@ For CJK fallback, consider one of the following options:
 - The default Windows Chinese font, SimSum. It has pixel-perfect rendering on multiple sizes but you MUST follow the "Preprocess font files" instructions below to preprocess the font file before use. Does not have bold/italic variants.
 
 ## Examples
+
+The following examples show how to set up `Fonts.ini`.
 
 ### English only
 
@@ -272,23 +274,29 @@ The `.xnb` extension is optional in the `Path` — it will be added automaticall
 
 ## Preprocess font files
 
-This preprocessing is required for a proportion of TTF/OTF fonts to render ideally. 
+We recommend preprocessing TTF/OTF font files for the best rendering quality at a fixed size only.
 
 Please follow the guideline below. We assume you have a Windows 10/11 PC, but similar steps should also work on Linux/Mac.
 
 1. What's the extension of your font file?
-   - If it's `.ttc`, follow the instructions in the "TTC fonts" section to extract a TTF file first.
-   - If it's `.ttf` or `.otf`, continue to Step 2.
+    - If it's `.ttc`, follow the instructions in the "TTC fonts" section to extract a TTF file first.
+    - If it's `.ttf` or `.otf`, continue to Step 2.
 
 2. Download and install FontForge from https://fontforge.org/. Open your font file in FontForge. If FontForge shows a warning about "Bad Font Name", you can ignore this dialog.
 
-3. If FontForge shows a "Load Bitmap Font" dialog, this means your TTF/OTF file must be preprocessed. If you don't see this dialog, your font file should work without preprocessing. You can skip the rest of the steps and use the original TTF/OTF file directly.
+3. Is there a "Load Bitmap Font" dialog?
+    - Yes. This means your TTF/OTF file MUST be preprocessed. Select a font size (e.g. 14 px) and click "OK". Remember the size you chose. Jump to Step 5.
+    - No. Your font file should work fine without preprocessing *under a 100% scaling only*. However, considered that users might have a high DPI monitor, the client might displays itself at a different scaling like 200%, and in this case, a non-preprocessed font file may look blurrier than expected.
 
 The dialog should look like this:
 
 ![FontForge Load Bitmap Font dialog](Images/ttf-fontforge-preprocess-bitmap-font-dialog.png)
 
-4. Select a font size (e.g. 14 px) and click "OK". Remember the size you chose.
+4. This step is only for users whose font file does not show the "Load Bitmap Font" dialog or the dialog does not contain the font size you expect. Select Element -> Bitmap Strikes Available. If "Pixel Sizes" is empty or does not contain the size you chose previously, you need to manually fill the pixel size and click "OK". 
+
+![FontForge Bitmap Strikes Available dialog](Images/ttf-fontforge-preprocess-secondary-font-bitmap-available.png)
+
+![FontForge Bitmap Strikes Available dialog with pixel size filled](Images/ttf-fontforge-preprocess-secondary-font-create-bitmap.png)
 
 5. File -> Generate Fonts. Select "No Outline Font" and "BDF" as the font type, and save the file as `myfont.bdf`. Use 96 DPI as the BDF resolution, if being asked.
 
@@ -299,26 +307,20 @@ The dialog should look like this:
 7. If the first line is `STARTFONT 2.2`, you need to use https://github.com/SadPencil/BdfToolSP to downgrade the BDF file to version 2.1. Even not, you can still use BdfToolSP to clean up the BDF file by running the downgrade command. Besides, it's strongly recommended to run the downgrade command with `--font-name` parameter, so you can set up a new font name, e.g., "My Font 14px", to avoid conflicts with the original TTF/OTF file.
 
 8. Check if `ENCODING 65` (character 'A') exists in the BDF file. This means whether the extracted bitmap font contains basic ASCII characters.
+    - Yes. Jump to Step 11.
+    - No. This means the extracted bitmap font does not contain basic ASCII characters, and you need to merge it with another font that contains the missing characters as a fallback target.
 
-9. If `ENCODING 65` exists, jump to Step 13. Otherwise, `ENCODING 65` does not exist, you need to select a basic font to provide the missing ASCII characters, say `micross.ttf`. Open it with FontForge.
+9. This step is only for users who need to provide fallback characters. Select a basic font, e.g., `micross.ttf`, `arial.ttf`. Open it with FontForge. Repeat Step 2 to Step 8 for this font, saving the font as `secondary.bdf`.
 
-10. Element -> Bitmap Strikes Available. If "Pixel Sizes" is empty or does not contain the size you chose previously, you need to manually fill the pixel size and click "OK". 
+10. Use https://github.com/SadPencil/BdfToolSP to merge `myfont.bdf` and `secondary.bdf` into `merged.bdf`. Rename `merged.bdf` to `myfont.bdf`. Again, it's strongly recommended to run the merge command with `--font-name` parameter to set up a unique font name, to avoid conflicts.
 
-![FontForge Bitmap Strikes Available dialog](Images/ttf-fontforge-preprocess-secondary-font-bitmap-available.png)
+11. Download and install the latest LTS version of Eclipse Temurin (previously named AdoptOpenJDK). You can skip this step if you already have JRE installed.
 
-![FontForge Bitmap Strikes Available dialog with pixel size filled](Images/ttf-fontforge-preprocess-secondary-font-create-bitmap.png)
+12. Download `BitsNPicas.jar` from https://github.com/kreativekorp/bitsnpicas/releases/. Generally speaking, you should download the latest version, but if you encounter issues, try v2.2. Backup link [here](https://web.archive.org/web/20260323030634/https://release-assets.githubusercontent.com/github-production-release-asset/43279520/e23e2667-b049-4bc6-9bd7-d368f2ff1efa?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-03-23T03%3A48%3A12Z&rscd=attachment%3B+filename%3DBitsNPicas.jar&rsct=application%2Foctet-stream&skoid=96c2d410-5711-43a1-aedd-ab1947aa7ab0&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skt=2026-03-23T02%3A47%3A48Z&ske=2026-03-23T03%3A48%3A12Z&sks=b&skv=2018-11-09&sig=jk3XNrzfJ2Cqvu5h4KaUKDSihNHRsq2BjzfLApVbEoQ%3D&jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmVsZWFzZS1hc3NldHMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwia2V5Ijoia2V5MSIsImV4cCI6MTc3NDIzNTQ3NiwibmJmIjoxNzc0MjM1MTc2LCJwYXRoIjoicmVsZWFzZWFzc2V0cHJvZHVjdGlvbi5ibG9iLmNvcmUud2luZG93cy5uZXQifQ.IOoejI6Q2tKBi6IZz8rsv-MoCkh81NKtPYfycflzzbg&response-content-disposition=attachment%3B%20filename%3DBitsNPicas.jar&response-content-type=application%2Foctet-stream).
 
-11. Save the font as `secondary.bdf` as in Step 5.
+13. Create the preprocessed TTF file by running `java -jar BitsNPicas.jar convertbitmap -f ttf -o myfont.ttf myfont.bdf`.
 
-12. Use https://github.com/SadPencil/BdfToolSP to merge `myfont.bdf` and `secondary.bdf` into `merged.bdf`. Rename `merged.bdf` to `myfont.bdf`. Again, it's strongly recommended to run the merge command with `--font-name` parameter to set up a unique font name, to avoid conflicts.
-
-13. Download and install the latest LTS version of Eclipse Temurin (previously named AdoptOpenJDK). You can skip this step if you already have JRE installed.
-
-14. Download `BitsNPicas.jar` from https://github.com/kreativekorp/bitsnpicas/releases/. Generally speaking, you should download the latest version, but if you encounter issues, try v2.2. Backup link [here](https://web.archive.org/web/20260323030634/https://release-assets.githubusercontent.com/github-production-release-asset/43279520/e23e2667-b049-4bc6-9bd7-d368f2ff1efa?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-03-23T03%3A48%3A12Z&rscd=attachment%3B+filename%3DBitsNPicas.jar&rsct=application%2Foctet-stream&skoid=96c2d410-5711-43a1-aedd-ab1947aa7ab0&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skt=2026-03-23T02%3A47%3A48Z&ske=2026-03-23T03%3A48%3A12Z&sks=b&skv=2018-11-09&sig=jk3XNrzfJ2Cqvu5h4KaUKDSihNHRsq2BjzfLApVbEoQ%3D&jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmVsZWFzZS1hc3NldHMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwia2V5Ijoia2V5MSIsImV4cCI6MTc3NDIzNTQ3NiwibmJmIjoxNzc0MjM1MTc2LCJwYXRoIjoicmVsZWFzZWFzc2V0cHJvZHVjdGlvbi5ibG9iLmNvcmUud2luZG93cy5uZXQifQ.IOoejI6Q2tKBi6IZz8rsv-MoCkh81NKtPYfycflzzbg&response-content-disposition=attachment%3B%20filename%3DBitsNPicas.jar&response-content-type=application%2Foctet-stream).
-
-15. Create the preprocessed TTF file by running `java -jar BitsNPicas.jar convertbitmap -f ttf -o myfont.ttf myfont.bdf`.
-
-16. Double-click the TTF file. The sample text should display correctly. You might feel the font looks worse if the font size does not match the size you chose in Step 4, but this means you have successfully preprocessed the font file. You can now use this TTF file in your `Fonts.ini`, with the font size you chose in Step 4.
+14. Double-click the TTF file. The sample text should display correctly. You might feel the font looks worse if the font size does not match the size you chose in Step 4, but this means you have successfully preprocessed the font file. You can now use this TTF file in your `Fonts.ini`, with the font size you chose in Step 4.
 
 ## TTC fonts
 
@@ -361,6 +363,8 @@ for i, font in enumerate(ttc):
 Some TTF/OTF fonts (especially CJK fonts like SimSun or WenQuanYi Zen Hei) contain embedded bitmap glyphs optimised for specific sizes. FontStashSharp does not use these embedded bitmaps — it always rasterizes from the vector outlines. This means these fonts may look blurrier than expected at their intended pixel sizes.
 
 If you need pixel-perfect CJK rendering, either use a font whose vector outlines are already optimized for a specific pixel size (e.g., [Unifont](https://unifoundry.com/unifont/index.html) in 16 px, which has its bitmap data converted to vector outlines), or follow the "Preprocess font files" instructions above. In either case, there is only one optimal size for the font, and using it at other sizes may look worse.
+
+Even if your font does not contain embedded bitmaps, preprocessing can still improve the rendering quality, and therefore we recommend preprocessing for all fonts.
 
 ### SpriteFont has no fallback
 
