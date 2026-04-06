@@ -113,12 +113,17 @@ myLabel.FontIndex = 1;
 
 ## Recommended fonts
 
-For English text, [MozillaText-Bold.ttf](https://fonts.google.com/specimen/Mozilla+Text) provides a good match in style to the existing SpriteFont appearance.
+Due to our technical limitations, only a small subset of TTF/OTF fonts render well in the client. The recommendation does not mean other fonts are "bad" -- it's our rendering engine just happens to work better with certain font designs than others.
+
+For English text:
+- arial.ttf provided by Windows. It looks good after preprocessing at 14 px.
+- micross.ttf provided by Windows. It looks good after preprocessing at 14 px.
+- [MozillaText-Bold.ttf](https://fonts.google.com/specimen/Mozilla+Text). However, it looks worse after preprocessing, and without preprocessing it looks blurry, especially when the client scales.
 
 For CJK fallback, consider one of the following options:
 - [GNU Unifont](https://unifoundry.com/unifont/). It has broad Unicode coverage and has pixel-perfect rendering. It supports 16 px as the font size ONLY. Does not have bold/italic variants.
-- A Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese).
-- The default Windows Chinese font, SimSum. It has pixel-perfect rendering on multiple sizes but you MUST follow the "Preprocess font files" instructions below to preprocess the font file before use. Does not have bold/italic variants.
+- The default Windows Chinese font, SimSum. It has pixel-perfect rendering on multiple sizes (we recommend 14 pixel) but you MUST follow the "Preprocess font files" instructions below to preprocess the font file before use. Does not have bold/italic variants.
+- A Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese). However, they look worse after preprocessing, and without preprocessing they look blurry, especially when the client scales.
 
 ## Examples
 
@@ -380,6 +385,10 @@ Different from TTC files, variable fonts (with `.ttf` or `.otf` extension) conta
 Some fonts, especially CJK fonts like SimSun, only provide a regular weight without a bold variant. Windows provides a "fake bold" effect by algorithmically thickening the regular font when bold is requested. However, FontStashSharp does not support this fake bold effect. If you need a bold variant, you must choose a font file that includes an actual bold weight.
 
 ## Frequently Asked Questions
+
+### Are all TTF/OTF fonts supported? Why do some fonts look blurrier than others?
+
+Unfortunately, not all TTF/OTF fonts perform well when rendered in a small font size. You can try preprocessing the font file as described in the "Preprocess font files" section to improve the rendering quality. If the font looks weird after preprocessing, we have no solutions. Note that this is a technical limitation of our rendering engine, not a problem with the font file itself.
 
 ### Why do I need to use a TTF/OTF font over SpriteFont? Especially considering that I need to manually preprocess the font file to a fixed size, which means they are bitmap fonts in practice.
 
