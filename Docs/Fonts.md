@@ -399,7 +399,7 @@ Definitely not! The preprocessed TTF files are essentially vectorized bitmap fon
 
 ### Why can other applications use the original TTF/OTF files but the client requires preprocessing? That's so inconvenient!
 
-Well, the client is built on Rampastring.XNAUI, so we have to rebuild all kinds of GUI elements from scratch, including font rendering. The preprocessing step is the only feasible way to achieve good rendering quality within a reasonable amount of development time. Due to historical reasons, the client does not follow MVVM architecture and does not have a clear separation between UI and logic. It would take many man-hours and LLM tokens to refactor the entire codebase to integrate the client with a modern UI library; therefore, we don't think it's worth doing, especially considering that the games the client serves also work on bitmap assets.
+Well, the client is built on Rampastring.XNAUI, rebuilding all kinds of GUI elements from scratch, including font rendering. The preprocessing step is the only feasible way to achieve good rendering quality within a reasonable amount of development time. Due to historical reasons, the client does not follow MVVM architecture and does not have a clear separation between UI and logic. It would take many man-hours and LLM tokens to refactor the entire codebase to integrate the client with a modern UI library; therefore, we don't think it's worth doing, especially considering that the games the client serves also work on bitmap assets.
 
 ## Troubleshooting
 
