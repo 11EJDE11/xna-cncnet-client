@@ -304,7 +304,7 @@ The dialog should look like this:
 
 6. Open `myfont.bdf` in a text editor supporting opening large files, e.g., VSCode and EmEditor. Check if the first line is `STARTFONT 2.1` or `STARTFONT 2.2`.
 
-7. If the first line is `STARTFONT 2.2`, you need to use https://github.com/SadPencil/BdfToolSP to downgrade the BDF file to version 2.1. Even not, you can still use BdfToolSP to clean up the BDF file by running the downgrade command. Besides, it's strongly recommended to run the downgrade command with `--font-name` parameter, so you can set up a new font name, e.g., "My Font 14px", to avoid conflicts with the original TTF/OTF file.
+7. If the first line is `STARTFONT 2.2`, you need to use https://github.com/SadPencil/BdfToolSP to downgrade the BDF file to version 2.1. Even not, you can still use BdfToolSP to clean up the BDF file by running the downgrade command. Besides, it's strongly recommended to run the downgrade command with `--font-name` parameter, so you can set up a new font name, e.g., "My Font 14px", to avoid conflicts with the original TTF/OTF file. We also stored a copy of BdfToolSP in `/AdditionalFiles/PreprocessFont` directory, but it might be outdated.
 
 8. Check if `ENCODING 65` (character 'A') exists in the BDF file. This means whether the extracted bitmap font contains basic ASCII characters.
     - Yes. Jump to Step 11.
@@ -316,7 +316,7 @@ The dialog should look like this:
 
 11. Download and install the latest LTS version of Eclipse Temurin (previously named AdoptOpenJDK). You can skip this step if you already have JRE installed.
 
-12. Download `BitsNPicas.jar` from https://github.com/kreativekorp/bitsnpicas/releases/. Generally speaking, you should download the latest version, but if you encounter issues, try v2.2. Backup link [here](https://web.archive.org/web/20260323030634/https://release-assets.githubusercontent.com/github-production-release-asset/43279520/e23e2667-b049-4bc6-9bd7-d368f2ff1efa?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-03-23T03%3A48%3A12Z&rscd=attachment%3B+filename%3DBitsNPicas.jar&rsct=application%2Foctet-stream&skoid=96c2d410-5711-43a1-aedd-ab1947aa7ab0&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skt=2026-03-23T02%3A47%3A48Z&ske=2026-03-23T03%3A48%3A12Z&sks=b&skv=2018-11-09&sig=jk3XNrzfJ2Cqvu5h4KaUKDSihNHRsq2BjzfLApVbEoQ%3D&jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmVsZWFzZS1hc3NldHMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwia2V5Ijoia2V5MSIsImV4cCI6MTc3NDIzNTQ3NiwibmJmIjoxNzc0MjM1MTc2LCJwYXRoIjoicmVsZWFzZWFzc2V0cHJvZHVjdGlvbi5ibG9iLmNvcmUud2luZG93cy5uZXQifQ.IOoejI6Q2tKBi6IZz8rsv-MoCkh81NKtPYfycflzzbg&response-content-disposition=attachment%3B%20filename%3DBitsNPicas.jar&response-content-type=application%2Foctet-stream).
+12. Download `BitsNPicas.jar` from https://github.com/kreativekorp/bitsnpicas/releases/. Generally speaking, you should download the latest version, but if you encounter issues, try v2.2. We also stored a copy in `/AdditionalFiles/PreprocessFont` directory, but it might be outdated.
 
 13. Create the preprocessed TTF file by running `java -jar BitsNPicas.jar convertbitmap -f ttf -o myfont.ttf myfont.bdf`.
 
