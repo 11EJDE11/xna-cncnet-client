@@ -123,6 +123,7 @@ For English text:
 For CJK fallback, consider one of the following options:
 - [GNU Unifont](https://unifoundry.com/unifont/). It has broad Unicode coverage and has pixel-perfect rendering. It supports 16 px as the font size ONLY. Does not have bold/italic variants.
 - The default Windows Chinese font, SimSum. It has pixel-perfect rendering on multiple sizes (we recommend 14 pixel) but you MUST follow the "Preprocess font files" instructions below to preprocess the font file before use. Does not have bold/italic variants.
+- [WenQuanYi Bitmap Song TTF](https://github.com/AmusementClub/WenQuanYi-Bitmap-Song-TTF). This is already a "preprocessed" font with pixel-perfect rendering. Note that the font size does not correspond to the claimed size in the filename, say you need to specifiy `Size=15` for `WenQuanYi.Bitmap.Song.14px.ttf`. Does not have bold/italic variants.
 - A Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese). However, they look worse after preprocessing, and without preprocessing they look blurry, especially when the client scales.
 
 ## Examples
