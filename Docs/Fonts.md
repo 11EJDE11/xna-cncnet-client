@@ -380,25 +380,25 @@ Some fonts, especially CJK fonts like SimSun, only provide a regular weight with
 
 ## Frequently Asked Questions
 
-### Why do I need to use a TTF/OTF font over SpriteFont? Especially consider that I need to manually preprocess the font file to a fixed size, which means they are bitmap fonts in practice.
+### Why do I need to use a TTF/OTF font over SpriteFont? Especially considering that I need to manually preprocess the font file to a fixed size, which means they are bitmap fonts in practice.
 
-1. TrueType fonts support fallback, which is essential for rendering characters not covered by the primary font (e.g. CJK characters in an English font). SpriteFont has no fallback mechanism.
+1. TrueType fonts support fallback, which is essential for rendering characters not covered by the primary font (e.g., CJK characters in an English font). SpriteFont has no fallback mechanism.
 
-2. We have HarfBuzz text shaping support for TrueType fonts, which is required for proper rendering of complex scripts (Arabic, Hebrew) and emoji. SpriteFont does not support HarfBuzz shaping.
+2. We have HarfBuzz text shaping support for TrueType fonts, which is required for proper rendering of complex scripts (Arabic, Hebrew) and emojis. SpriteFont does not support HarfBuzz shaping.
 
-3. Even you have to preprocessing TTF/OTF font files, the overall workflow is notiably faster compared to making a SpriteFont using XNAContentCompiler. Generating a SpriteFont can take a few days if you need to cover a large character set like Chinese, while preprocessing a TTF file only takes a few minutes.
+3. Even if you have to preprocess TTF/OTF font files, the overall workflow is notably faster compared to making a SpriteFont using XNAContentCompiler. Generating a SpriteFont can take a few days if you need to cover a large character set like Chinese, while preprocessing a TTF file only takes a few minutes.
 
 ### Must I preprocess TTF/OTF font files? Can't I just use the original TTF/OTF files directly?
 
-Technically you can, but you might find that fonts may look blurrier than expected due to the reasons explained in the "Known limitations" section. Preprocessing generates a new TTF file with vector outlines optimized for a specific pixel size, which can significantly improve the rendering quality for certain fonts.
+Technically you can, but you might find that fonts look blurrier than expected due to the reasons explained in the "Known limitations" section. Preprocessing generates a new TTF file with vector outlines optimized for a specific pixel size, which can significantly improve the rendering quality for certain fonts.
 
 ### Can I use the preprocessed TTF font files as regular TTF fonts for other applications?
 
 Definitely not! The preprocessed TTF files are essentially vectorized bitmap fonts that only look good at the specific size they were preprocessed for. Using them at other sizes or in other applications will likely result in poor rendering quality.
 
-### Why other applications can use the original TTF/OTF files but the client requires preprocessing? That's so inconvenient!
+### Why can other applications use the original TTF/OTF files but the client requires preprocessing? That's so inconvenient!
 
-Well, the client is built on Rampastring.XNAUI so we have to re-built all kinds of GUI things from scratch, including font rendering. The preprocessing step is the only feasible way to achieve good rendering quality within a reasonable amount of development time. Due to history reasons, the client does not follow MVVM architecture and does not have a clear separation between UI and logic. It would take so many man-hours and LLM tokens to refactor the entire codebase to integrate the client with a modern UI library, and therefore we don't think it's worth doing, especially considering that the games the client serves for also work on bitmap assets.
+Well, the client is built on Rampastring.XNAUI, so we have to rebuild all kinds of GUI elements from scratch, including font rendering. The preprocessing step is the only feasible way to achieve good rendering quality within a reasonable amount of development time. Due to historical reasons, the client does not follow MVVM architecture and does not have a clear separation between UI and logic. It would take many man-hours and LLM tokens to refactor the entire codebase to integrate the client with a modern UI library; therefore, we don't think it's worth doing, especially considering that the games the client serves also work on bitmap assets.
 
 ## Troubleshooting
 
