@@ -144,6 +144,12 @@ public class V3GameTunnelBridge
                         byte[] gameData = _localGameClient.Receive(ref remoteEndPoint);
                         _gameEndpoint = remoteEndPoint;
 
+                        if (gameData.Length < 4)
+                        {
+                            Logger.Log($"V3GameTunnelBridge: Ignoring too-short game packet (length={gameData.Length})");
+                            continue;
+                        }
+
                         ushort receiverId = BinaryPrimitives.ReadUInt16BigEndian(gameData.AsSpan(2));
                         var recipient = _otherPlayers.FirstOrDefault(p => p.PlayerGameId == receiverId);
 
