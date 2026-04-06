@@ -115,7 +115,10 @@ myLabel.FontIndex = 1;
 
 For English text, [MozillaText-Bold.ttf](https://fonts.google.com/specimen/Mozilla+Text) provides a good match in style to the existing SpriteFont appearance.
 
-For CJK fallback, consider [unifont](https://unifoundry.com/unifont/) (broad Unicode coverage) or a Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese).
+For CJK fallback, consider one of the following options:
+- [GNU Unifont](https://unifoundry.com/unifont/). It has broad Unicode coverage and has pixel-perfect rendering. It supports 16 px as the font size ONLY. Do not have bold/italic variants.
+- A Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese).
+- The default Windows Chinese font, SimSum. It has pixel-perfect rendering on multiple sizes but you MUST follow the "Preprocess font files" instructions below to preprocess the font file before use. Do not have bold/italic variants.
 
 ## Examples
 
@@ -269,7 +272,7 @@ The `.xnb` extension is optional in the `Path` — it will be added automaticall
 
 ## Preprocess font files
 
-This step is required for a proportion of TTF/OTF fonts to render ideally. 
+This preprocessing is required for a proportion of TTF/OTF fonts to render ideally. 
 
 Please follow the guideline below. We assume you have a Windows 10/11 PC, but similar steps should also work on Linux/Mac.
 
@@ -339,7 +342,7 @@ filename = sys.argv[1]
 ttc = TTCollection(filename)
 basename = os.path.basename(filename)
 for i, font in enumerate(ttc):
-    font.save(f"{basename}#{i}.ttf")
+    font.save(f"{basename}_{i}.ttf")
 ```
 5. Run `python extract_ttc.py yourfont.ttc` to extract TTF files.
 
@@ -357,11 +360,19 @@ for i, font in enumerate(ttc):
 
 Some TTF/OTF fonts (especially CJK fonts like SimSun or WenQuanYi Zen Hei) contain embedded bitmap glyphs optimised for specific sizes. FontStashSharp does not use these embedded bitmaps — it always rasterizes from the vector outlines. This means these fonts may look blurrier than expected at their intended pixel sizes.
 
-If you need pixel-perfect CJK rendering, use a font whose vector outlines are already optimized for screen display (e.g. [WenQuanYi Bitmap Song TTF](https://github.com/AmusementClub/WenQuanYi-Bitmap-Song-TTF), which has its bitmap data converted to vector outlines), or follow the "Preprocess font files" instructions above.
+If you need pixel-perfect CJK rendering, either use a font whose vector outlines are already optimized for a specific pixel size (e.g., [Unifont](https://unifoundry.com/unifont/index.html) in 16 px, which has its bitmap data converted to vector outlines), or follow the "Preprocess font files" instructions above. In either case, there is only one optimal size for the font, and using it at other sizes may look worse.
 
 ### SpriteFont has no fallback
 
 SpriteFont indexes cannot use the `Fallback` property. If you need fallback for missing characters, use TrueType fonts for all your font indexes.
+
+### No support for variable fonts
+
+Different from TTC files, variable fonts (with `.ttf` or `.otf` extension) contain multiple font variations (e.g. different weights) in one file. The client does not support variable fonts.
+
+### No support for fake-bold
+
+Some fonts, especially CJK fonts like SimSun, only provide a regular weight without a bold variant. Windows provides a "fake bold" effect by algorithmically thickening the regular font when bold is requested. However, FontStashSharp does not support this fake bold effect. If you need a bold variant, you must choose a font file that includes an actual bold weight.
 
 ## Troubleshooting
 
