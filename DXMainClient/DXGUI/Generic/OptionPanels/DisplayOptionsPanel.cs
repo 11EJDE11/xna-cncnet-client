@@ -664,37 +664,15 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
 
             IniSettings.ClientTheme.Value = (string)ddClientTheme.SelectedItem.Tag;
 
-            restartRequired = restartRequired || !IniSettings.Translation.ToString().Equals((string)ddTranslation.SelectedItem.Tag, StringComparison.InvariantCultureIgnoreCase);
-
-            IniSettings.Translation.Value = (string)ddTranslation.SelectedItem.Tag;
-
-            ClientConfiguration.Instance.RefreshTranslationGameFiles();
-
-            // copy translation files to the game directory
-            foreach (var tgf in ClientConfiguration.Instance.TranslationGameFiles)
             {
-                string sourcePath = SafePath.CombineFilePath(IniSettings.TranslationFolderPath, tgf.Source);
-                string targetPath = SafePath.CombineFilePath(ProgramConstants.GamePath, tgf.Target);
+                bool updateTranslation = !IniSettings.Translation.ToString().Equals((string)ddTranslation.SelectedItem.Tag, StringComparison.InvariantCultureIgnoreCase);
 
-                if (File.Exists(sourcePath))
-                {
-                    string sourceHash = Utilities.CalculateSHA1ForFile(sourcePath);
-                    string destinationHash = Utilities.CalculateSHA1ForFile(targetPath);
+                restartRequired = restartRequired || updateTranslation;
 
-                    if (sourceHash != destinationHash)
-                    {
-                        FileExtensions.CreateHardLinkFromSource(sourcePath, targetPath);
-                        new FileInfo(targetPath).IsReadOnly = true;
-                    }
-                }
-                else
-                {
-                    if (File.Exists(targetPath))
-                    {
-                        new FileInfo(targetPath).IsReadOnly = false;
-                        File.Delete(targetPath);
-                    }
-                }
+                IniSettings.Translation.Value = (string)ddTranslation.SelectedItem.Tag;
+
+                if (updateTranslation)
+                    IniSettings.TranslationGameFilesVersion.Value = string.Empty;
             }
 
             if (ClientConfiguration.Instance.ClientGameType == ClientType.TS)
