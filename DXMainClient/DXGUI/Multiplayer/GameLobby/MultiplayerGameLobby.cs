@@ -1094,8 +1094,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// <param name="negotiationStatus">Optional negotiation status to override ping display</param>
         /// <param name="tooltipText">Optional custom tooltip text</param>
         protected virtual void UpdatePlayerPingIndicator(PlayerInfo pInfo,
-            NegotiationStatus? negotiationStatus,
-            string tooltipText)
+            NegotiationStatus? negotiationStatus = null,
+            string? tooltipText = null)
         {
             XNAClientDropDown ddPlayerName = ddPlayerNames[pInfo.Index];
 
