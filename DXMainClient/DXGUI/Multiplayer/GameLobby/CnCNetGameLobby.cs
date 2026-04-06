@@ -349,6 +349,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void OnPlayerNegotiationResult(object sender, TunnelChosenEventArgs e)
         {
+            var negotiator = sender as V3PlayerNegotiator;
             var v3PlayerInfo = _v3PlayerInfos.FirstOrDefault(p => p.Id == e.PlayerId);
             if (v3PlayerInfo == null) return;
 
@@ -389,12 +390,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
-            if (v3PlayerInfo.Negotiator != null)
-            {
-                v3PlayerInfo.Negotiator.NegotiationResult -= OnPlayerNegotiationResult;
-                v3PlayerInfo.Negotiator.NegotiationComplete -= OnPlayerNegotiationComplete;
-                v3PlayerInfo.StopNegotiation();
-            }
+            if (negotiator != null)
+                negotiator.NegotiationResult -= OnPlayerNegotiationResult;
         }
 
         private void OnPlayerNegotiationComplete(object sender, EventArgs e)
@@ -410,10 +407,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 BroadcastNegotiationInfo(player.Name, NegotiationStatus.Failed);
             }
 
-            if (player.Negotiator != null)
+            negotiator.NegotiationResult -= OnPlayerNegotiationResult;
+            negotiator.NegotiationComplete -= OnPlayerNegotiationComplete;
+
+            if (ReferenceEquals(player.Negotiator, negotiator))
             {
-                player.Negotiator.NegotiationResult -= OnPlayerNegotiationResult;
-                player.Negotiator.NegotiationComplete -= OnPlayerNegotiationComplete;
+                player.StopNegotiation();
             }
         }
 
@@ -1384,6 +1383,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 if (!_useLegacyTunnels && !_useDynamicTunnels)
                     v3PlayerInfo.Tunnel = tunnelHandler.CurrentTunnel;
                 v3PlayerInfo.PlayerGameId = (ushort)port;
+            }
+
+            if (v3PlayerInfo == null)
+            {
+                Logger.Log($"PreparePlayerGameData: Missing V3 player info for {player.Name}, using fallback tunnel address.");
+                return (id, player.Name, IPAddress.Any + ":0");
             }
 
             string address = v3PlayerInfo.Tunnel == null ? IPAddress.Any + ":0" : v3PlayerInfo.Tunnel.Address + ":" + v3PlayerInfo.Tunnel.Port;
