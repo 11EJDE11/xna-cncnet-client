@@ -9,7 +9,7 @@ The client supports two font types:
 
 Font configuration is done via `Fonts.ini` placed in your `Resources` directory.
 
-**Warning:** The TTF/OTF font file might need to be preprocessed for an optimal rendering experience. Please explicitly follow the instructions in "Preprocess font files" section to preprocess your font files. **Do not just copy existing TTF/OTF files!***
+**Warning:** The TTF/OTF font file might need to be preprocessed for an optimal rendering experience. Please explicitly follow the instructions in "Preprocess font files" section to preprocess your font files. **Do not just copy existing TTF/OTF files!**
 
 ## Fonts.ini location
 
