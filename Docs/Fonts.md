@@ -5,6 +5,8 @@ The client supports two font types:
 - **TrueType** – TTF/OTF fonts rendered via FontStashSharp
 - **SpriteFont** – precompiled XNA/MonoGame bitmap fonts (.xnb files)
 
+> **Important:** TrueType and SpriteFont fonts cannot be mixed within a fallback chain. Fallback only works between TrueType fonts. A SpriteFont font index cannot fall back to a TrueType font, and vice versa. Each font index is entirely one type or the other.
+
 Font configuration is done via `Fonts.ini` placed in your `Resources` directory.
 
 **Warning:** The TTF/OTF font file might need to be preprocessed for an optimal rendering experience. Please explicitly follow the instructions in "Preprocess font files" section to determine if your font files need preprocessing. Do not just copy existing TTF/OTF files!
@@ -30,49 +32,71 @@ Enabled=true
 EnableBiDi=true       ; Bidirectional text support (mixed LTR/RTL)
 CacheSize=1000        ; Shaped text cache entries. Use 1000+ for CJK languages.
 
-[FallbackFonts]
-; Fonts tried in order when the primary font is missing a character.
-; Optional.
-Count=2
-Fallback0=NotoSans-Regular.ttf
-Fallback1=AnotherFont.ttf
-
 [Fonts]
-Count=4   ; Number of font indexes to define
+Count=6   ; Total number of font indexes to define
 
 [Font0]
 ; Type: "TrueType" or "SpriteFont"
 Type=TrueType
-Path=myfont.ttf   ; Path relative to the directory containing Fonts.ini
-Size=14           ; Size in pixels (TrueType only; ignored for SpriteFont)
+Path=MozillaText-Bold.ttf   ; Path relative to the directory containing Fonts.ini
+Size=14           ; Font height in pixels (TrueType only; ignored for SpriteFont)
+Fallback=4        ; Optional. Index of the font to try when a character is missing.
+                  ; The fallback font's own Fallback is followed recursively.
 
 [Font1]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=16
+Fallback=4
 
 [Font2]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=18
+Fallback=5
 
 [Font3]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=20
+Fallback=5
+
+; Font indexes used only as fallback targets — not referenced directly by UI controls.
+[Font4]
+Type=TrueType
+Path=NotoSansSC-Regular.ttf
+Size=14
+
+[Font5]
+Type=TrueType
+Path=NotoSansSC-Regular.ttf
+Size=18
 ```
 
 Font paths are relative to the directory containing `Fonts.ini`. Both `/` and `\` are accepted.
 
+### Properties reference
+
+| Property | Applies to | Description |
+|----------|-----------|-------------|
+| `Type` | Both | `TrueType` or `SpriteFont` |
+| `Path` | Both | File path relative to `Fonts.ini` directory. For SpriteFont, the `.xnb` extension is optional — it is stripped and re-appended automatically. |
+| `Size` | TrueType | Font height in pixels. This is the em-square height passed to FreeType via `FT_Set_Pixel_Sizes`. The actual rendered height of characters may be slightly smaller depending on the font's metrics. |
+| `Fallback` | TrueType | Index of another TrueType font to use when a character is not found. The chain is followed recursively. Circular references are detected and ignored. |
+
 ## Character fallback
 
-When rendering a character at FontIndex=1:
+Fallback is configured **per font index** via the `Fallback` property. When rendering a character:
 
-1. Try the primary font defined in `[Font1]`
-2. If not found, try `Fallback0`, then `Fallback1`, etc.
-3. If still not found, renders as `?`
+1. Try the primary font defined in the font index
+2. If not found, follow the `Fallback` chain — load the font file from the referenced index, then that index's fallback, and so on
+3. If still not found after the entire chain, renders as `?`
 
-All fonts in the fallback chain render at the size specified in `[Font1]`.
+All fonts in a fallback chain render at the size specified in the **originating** font index, not the fallback target's size. The fallback target's `Size` is only used when that font index is itself the primary.
+
+This per-font design allows different font indexes to have different fallback chains. For example, a bold font at size 20 can fall back to a different font than a regular font at size 14.
+
+> **Note:** Fallback only works between TrueType fonts. SpriteFont indexes do not support fallback — if a character is missing from a SpriteFont, it renders as the default character (`?`).
 
 ## Font indexes
 
@@ -86,6 +110,12 @@ FontIndex=1
 ```csharp
 myLabel.FontIndex = 1;
 ```
+
+## Recommended fonts
+
+For English text, [MozillaText-Bold.ttf](https://fonts.google.com/specimen/Mozilla+Text) provides a good match in style to the existing SpriteFont appearance.
+
+For CJK fallback, consider [unifont](https://unifoundry.com/unifont/) (broad Unicode coverage) or a Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese).
 
 ## Examples
 
@@ -102,22 +132,22 @@ Count=4
 
 [Font0]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=14
 
 [Font1]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=16
 
 [Font2]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=18
 
 [Font3]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=20
 ```
 
@@ -131,32 +161,42 @@ Enabled=true
 EnableBiDi=false
 CacheSize=1000
 
-[FallbackFonts]
-Count=1
-Fallback0=NotoSansSC-Regular.ttf
-
 [Fonts]
-Count=4
+Count=6
 
 [Font0]
 Type=TrueType
 Path=NotoSansKR-Regular.ttf
 Size=14
+Fallback=4
 
 [Font1]
 Type=TrueType
 Path=NotoSansKR-Regular.ttf
 Size=16
+Fallback=4
 
 [Font2]
 Type=TrueType
 Path=NotoSansKR-Regular.ttf
 Size=18
+Fallback=5
 
 [Font3]
 Type=TrueType
 Path=NotoSansKR-Bold.ttf
 Size=20
+Fallback=5
+
+[Font4]
+Type=TrueType
+Path=NotoSansSC-Regular.ttf
+Size=14
+
+[Font5]
+Type=TrueType
+Path=NotoSansSC-Regular.ttf
+Size=18
 ```
 
 ### English with CJK fallback
@@ -169,32 +209,37 @@ Enabled=false
 EnableBiDi=false
 CacheSize=100
 
-[FallbackFonts]
-Count=1
-Fallback0=NotoSansSC-Regular.ttf
-
 [Fonts]
-Count=4
+Count=5
 
 [Font0]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=14
+Fallback=4
 
 [Font1]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=16
+Fallback=4
 
 [Font2]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=18
+Fallback=4
 
 [Font3]
 Type=TrueType
-Path=myfont.ttf
+Path=MozillaText-Bold.ttf
 Size=20
+Fallback=4
+
+[Font4]
+Type=TrueType
+Path=NotoSansSC-Regular.ttf
+Size=16
 ```
 
 ### SpriteFont (legacy)
@@ -220,7 +265,7 @@ Type=SpriteFont
 Path=SpriteFont3
 ```
 
-Files must be `SpriteFont0.xnb`, `SpriteFont1.xnb`, etc. in the Resources folder.
+The `.xnb` extension is optional in the `Path` — it will be added automatically if omitted. The files `SpriteFont0.xnb`, `SpriteFont1.xnb`, etc. must exist in the Resources folder.
 
 ## Preprocess font files
 
@@ -306,12 +351,24 @@ for i, font in enumerate(ttc):
 
 - See also: [Stack Overflow — Convert or extract TTC font to TTF](https://stackoverflow.com/questions/15455895/convert-or-extract-ttc-font-to-ttf-how-to)
 
+## Known limitations
+
+### No pixel-perfect rendering for embedded bitmap fonts
+
+Some TTF/OTF fonts (especially CJK fonts like SimSun or WenQuanYi Zen Hei) contain embedded bitmap glyphs optimised for specific sizes. FontStashSharp does not use these embedded bitmaps — it always rasterizes from the vector outlines. This means these fonts may look blurrier than expected at their intended pixel sizes.
+
+If you need pixel-perfect CJK rendering, use a font whose vector outlines are already optimized for screen display (e.g. [WenQuanYi Bitmap Song TTF](https://github.com/AmusementClub/WenQuanYi-Bitmap-Song-TTF), which has its bitmap data converted to vector outlines), or follow the "Preprocess font files" instructions above.
+
+### SpriteFont has no fallback
+
+SpriteFont indexes cannot use the `Fallback` property. If you need fallback for missing characters, use TrueType fonts for all your font indexes.
+
 ## Troubleshooting
 
 **Font doesn't load** — check `client.log` for `FontManager:` messages and verify the file path and that it's a valid TTF/OTF.
 
-**Wrong font used** — remember the primary font is tried first, then fallbacks in order. Check no other `Fonts.ini` is being loaded from a different location.
+**Wrong font used** — remember the primary font is tried first, then the fallback chain in order. Check no other `Fonts.ini` is being loaded from a different location.
 
-**Characters render as `?`** — the character isn't in any of your fonts. Add a font that covers it to `[FallbackFonts]`.
+**Characters render as `?`** — the character isn't in any font in the fallback chain. Add a font that covers it as a fallback target and set `Fallback` on the font index.
 
-**Performance issues** — disable `TextShaping` if not needed, reduce fallback font count, and lower `CacheSize` if memory is tight.
+**Performance issues** — disable `TextShaping` if not needed, reduce fallback chain length, and lower `CacheSize` if memory is tight.
