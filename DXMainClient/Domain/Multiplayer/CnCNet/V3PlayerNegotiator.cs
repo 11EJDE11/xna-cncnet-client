@@ -99,10 +99,11 @@ public class V3PlayerNegotiator : IDisposable
             else
                 await PerformNonDeciderNegotiationAsync();
 
+            bool negotiationSucceeded = await _negotiationCompletionSource.Task;
+
             PrintNegotiationResults();
-            _negotiationCompletionSource.TrySetResult(true);
             NegotiationComplete?.Invoke(this, EventArgs.Empty);
-            return true;
+            return negotiationSucceeded;
         }
         catch (Exception ex)
         {
@@ -148,7 +149,8 @@ public class V3PlayerNegotiator : IDisposable
                 lock (completionLock)
                 {
                     completedTunnels++;
-                    if (!selectionMade && completedTunnels >= Math.Max(2, totalTunnels * EARLY_SELECTION_THRESHOLD))
+                    if (!selectionMade && (completedTunnels >= totalTunnels ||
+                        completedTunnels >= Math.Max(1, totalTunnels * EARLY_SELECTION_THRESHOLD)))
                     {
                         selectionMade = true;
                         selectionTcs.TrySetResult(true);
@@ -169,12 +171,14 @@ public class V3PlayerNegotiator : IDisposable
                 int halvedPing = (int)Math.Round(bestResult.AverageRtt.Value / 2.0);
                 await SendTunnelChoiceAsync(bestTunnel, halvedPing);
                 RaiseNegotiationResult(bestTunnel, halvedPing);
+                _negotiationCompletionSource.TrySetResult(true);
             }
         }
         else
         {
             Logger.Log("V3TunnelNegotiator: No tunnels had any ping responses");
             RaiseNegotiationResult(null, 0, "No viable tunnel found");
+            _negotiationCompletionSource.TrySetResult(false);
             throw new Exception("No viable tunnel");
         }
     }
