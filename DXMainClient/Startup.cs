@@ -128,9 +128,6 @@ namespace DTAClient
 
             ClientConfiguration.Instance.RefreshSettings();
 
-            // Start INI file preprocessor
-            PreprocessorBackgroundTask.Instance.Run();
-
             using GameClass gameClass = new GameClass();
 
             if (!UserINISettings.Instance.BorderlessWindowedClient)
