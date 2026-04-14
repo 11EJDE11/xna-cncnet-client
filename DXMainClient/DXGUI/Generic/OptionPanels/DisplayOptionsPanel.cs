@@ -628,7 +628,10 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             (IniSettings.IngameScreenWidth.Value, IniSettings.IngameScreenHeight.Value) = ingameRes;
 
             // Calculate drag selection distance, scale it with resolution width
-            int dragDistance = ingameRes.Width / ORIGINAL_RESOLUTION_WIDTH * DRAG_DISTANCE_DEFAULT;
+            // CustomDragDistance > 0 overrides auto-scaling for players who need a specific value
+            int dragDistance = IniSettings.CustomDragDistance.Value > 0
+                ? IniSettings.CustomDragDistance.Value
+                : ingameRes.Width / ORIGINAL_RESOLUTION_WIDTH * DRAG_DISTANCE_DEFAULT;
             IniSettings.DragDistance.Value = dragDistance;
 
             var newSelectedRenderer = (DirectDrawWrapper)ddRenderer.SelectedItem.Tag;

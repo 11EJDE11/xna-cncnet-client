@@ -139,6 +139,7 @@ namespace ClientCore
 
             ScrollRate = new IntSetting(iniFile, OPTIONS, "ScrollRate", 3);
             DragDistance = new IntSetting(iniFile, OPTIONS, "DragDistance", 4);
+            CustomDragDistance = new IntSetting(iniFile, OPTIONS, "CustomDragDistance", 0);
             DoubleTapInterval = new IntSetting(iniFile, OPTIONS, "DoubleTapInterval", 30);
             Win8CompatMode = new StringSetting(iniFile, OPTIONS, "Win8Compat", "No");
 
@@ -239,6 +240,7 @@ namespace ClientCore
 
         public IntSetting ScrollRate { get; private set; }
         public IntSetting DragDistance { get; private set; }
+        public IntSetting CustomDragDistance { get; private set; }
         public IntSetting DoubleTapInterval { get; private set; }
         public StringSetting Win8CompatMode { get; private set; }
 
