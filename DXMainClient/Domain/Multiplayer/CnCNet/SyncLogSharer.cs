@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -8,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using ClientCore;
+using ClientCore.PlatformShim;
 using Rampastring.Tools;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet
@@ -19,11 +21,8 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
     /// </summary>
     public static class SyncLogSharer
     {
-        public static event EventHandler SyncLogUploadStarted;
-        public static event EventHandler SyncLogUploadComplete;
-        public static event EventHandler SyncLogUploadFailed;
-
         private const int UPLOAD_TIMEOUT = 30000; // ms
+        private const int FILE_BUFFER_SIZE = 65536;
 
         // Set by CnCNetGameLobby before game start. All values are shared across every
         // client in the same game session, so they can be used to derive the game_hash.
@@ -76,17 +75,17 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             string gameHash = ComputeGameHash(_lastMapSha1, _lastRandomSeed, _lastGameSlug);
 
             // Collect the SYNC files that were just copied (one per player slot, index 0–7).
-            // CopySyncErrorLogs renames them to SYNC{n}_yyyy_MM_dd_HH_mm.TXT, so we match
-            // by prefix and pick only files created after gameStarted.
+            // Non-Ares: CopySyncErrorLogs names them SYNC{n}_yyyy_MM_dd_HH_mm.TXT.
+            // Ares: files are copied as SYNC{n}.TXT into the snapshot directory.
+            // SYNC{i}*.TXT matches both; the CreationTime filter isolates this session.
             var filesToUpload = new List<(int index, string path)>();
             for (int i = 0; i < 8; i++)
             {
-                string prefix = $"SYNC{i}_";
                 DirectoryInfo dir = new DirectoryInfo(syncErrorLogsDirectory);
                 if (!dir.Exists) break;
 
                 FileInfo found = dir
-                    .EnumerateFiles($"{prefix}*.TXT")
+                    .EnumerateFiles($"SYNC{i}*.TXT")
                     .Where(f => f.CreationTime >= gameStarted.AddSeconds(-5))
                     .OrderByDescending(f => f.CreationTime)
                     .FirstOrDefault();
@@ -105,9 +104,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                SyncLogUploadStarted?.Invoke(null, EventArgs.Empty);
-                bool anyFailed = false;
-
                 foreach ((int index, string path) in filesToUpload)
                 {
                     try
@@ -118,14 +114,8 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                     catch (Exception ex)
                     {
                         Logger.Log($"SyncLogSharer: Failed to upload SYNC{index}: {ex.Message}");
-                        anyFailed = true;
                     }
                 }
-
-                if (anyFailed)
-                    SyncLogUploadFailed?.Invoke(null, EventArgs.Empty);
-                else
-                    SyncLogUploadComplete?.Invoke(null, EventArgs.Empty);
             });
         }
 
@@ -168,7 +158,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 $"Content-Type: text/plain\r\n\r\n");
             requestStream.Write(header, 0, header.Length);
 
-            byte[] buffer = new byte[65536];
+            byte[] buffer = new byte[FILE_BUFFER_SIZE];
             int read;
             while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
                 requestStream.Write(buffer, 0, read);
@@ -183,7 +173,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         private static void WriteFormField(Stream stream, string boundary, string name, string value)
         {
-            byte[] bytes = Encoding.UTF8.GetBytes(
+            byte[] bytes = EncodingExt.UTF8NoBOM.GetBytes(
                 $"{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n");
             stream.Write(bytes, 0, bytes.Length);
         }
@@ -191,12 +181,13 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// <summary>
         /// Derives a stable, session-unique identifier from values shared by all game clients.
         /// The random seed is set once per game and is identical on every machine.
+        /// Format: <c>SHA1("{mapSha1}|{randomSeed}|{gameSlug}")</c> as a lowercase hex string.
         /// </summary>
         private static string ComputeGameHash(string mapSha1, int randomSeed, string gameSlug)
         {
             string input = $"{mapSha1}|{randomSeed}|{gameSlug}";
             using SHA1 sha1 = SHA1.Create();
-            byte[] hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(input));
+            byte[] hash = sha1.ComputeHash(EncodingExt.UTF8NoBOM.GetBytes(input));
             return Convert.ToHexString(hash).ToLowerInvariant();
         }
     }

@@ -207,7 +207,8 @@ namespace DTAClient.DXGUI
                     debugLogLastWriteTime = lastWriteTime;
                 }
 
-                if (CopySyncErrorLogs(snapshotDirectory, null) || snapshotCreated)
+                bool hasSyncLogs = CopySyncErrorLogs(snapshotDirectory, null);
+                if (hasSyncLogs || snapshotCreated)
                 {
                     FileInfo snapShotDebugLogFileInfo = SafePath.GetFile(snapshotDirectory, "debug.log");
 
@@ -216,6 +217,9 @@ namespace DTAClient.DXGUI
 
                     CopyErrorLog(snapshotDirectory, "syringe.log", null);
                 }
+
+                if (hasSyncLogs && UserINISettings.Instance.AutoUploadSyncLogs.Value)
+                    SyncLogSharer.UploadSyncLogs(snapshotDirectory, gameStartTime);
             }
             else
             {
