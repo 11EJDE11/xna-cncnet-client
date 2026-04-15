@@ -233,6 +233,11 @@ public class V3PlayerNegotiator : IDisposable
                 Logger.Log($"V3TunnelNegotiator: Timeout waiting for tunnel selection from {_remotePlayer.Name} after {NON_DECIDER_TOTAL_TIMEOUT_MS / 1000} seconds.");
                 _negotiationCompletionSource.TrySetResult(false);
                 cts.Cancel();
+
+                // Notify the decider so it stops retrying TunnelChoice packets
+                foreach (var tunnel in _tunnels)
+                    _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id, TunnelPacketType.NegotiationFailed, null);
+
                 RaiseNegotiationResult(null, 0, "Timeout waiting for tunnel selection");
             }
         }
