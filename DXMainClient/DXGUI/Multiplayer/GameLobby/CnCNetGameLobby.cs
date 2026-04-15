@@ -1813,7 +1813,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void CheckAllNegotiationsComplete()
         {
-            if (!IsHost || !_useDynamicTunnels)
+            if (!_useDynamicTunnels)
                 return;
 
             if (Players.Count <= 1)
