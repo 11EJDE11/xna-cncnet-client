@@ -24,9 +24,9 @@ public readonly record struct PingValue
     /// <exception cref="ArgumentException">Thrown when milliseconds is negative.</exception>
     public static PingValue FromMs(int milliseconds)
     {
-        if (milliseconds < 0)
-            throw new ArgumentException("Ping cannot be negative. Use PingValue.Unknown for unknown pings.", nameof(milliseconds));
-        return new(milliseconds);
+        return milliseconds < 0
+            ? throw new ArgumentException("Ping cannot be negative. Use PingValue.Unknown for unknown pings.", nameof(milliseconds))
+            : new(milliseconds);
     }
 
     /// <summary>

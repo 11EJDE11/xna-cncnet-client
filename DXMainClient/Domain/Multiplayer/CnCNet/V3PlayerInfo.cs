@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Rampastring.Tools;
@@ -84,6 +85,9 @@ public class TunnelTestResult
 /// </summary>
 public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGameID)
 {
+    private const int PACKET_LOSS_WEIGHT = 10;
+    private V3PlayerNegotiator? _negotiator;
+
     public uint Id { get; set; } = id;
     public string Name { get; set; } = name;
     public int PlayerIndex { get; set; } = playerIndex;
@@ -91,9 +95,8 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     public bool HasNegotiated { get; set; }
     public bool IsNegotiating { get; set; }
     public CnCNetTunnel? Tunnel { get; set; }
-    public V3PlayerNegotiator? Negotiator { get; set; }
+    public V3PlayerNegotiator? Negotiator => _negotiator;
     public Dictionary<CnCNetTunnel, TunnelTestResult> TunnelResults { get; } = [];
-    private const int PACKET_LOSS_WEIGHT = 10;
 
     /// <summary>
     /// Creates a fresh set of <see cref="TunnelTestResult"/> entries for all available tunnels.
@@ -130,16 +133,13 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     public void SetNegotiator(V3PlayerNegotiator negotiator)
     {
         StopNegotiation();
-        Negotiator = negotiator;
+        _negotiator = negotiator;
     }
 
     public void StopNegotiation()
     {
-        if (Negotiator != null)
-        {
-            Negotiator.Dispose();
-            Negotiator = null;
-        }
+        V3PlayerNegotiator? negotiator = Interlocked.Exchange(ref _negotiator, null);
+        negotiator?.Dispose();
     }
 
     public void ResetNegotiator()
@@ -152,7 +152,7 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     public bool StartNegotiation(V3PlayerInfo localPlayer, TunnelHandler tunnelHandler, List<CnCNetTunnel> availableTunnels)
     {
         if (this == localPlayer)
-            return true;
+            throw new InvalidOperationException("Cannot start negotiation with yourself.");
 
         HasNegotiated = false;
         IsNegotiating = true;

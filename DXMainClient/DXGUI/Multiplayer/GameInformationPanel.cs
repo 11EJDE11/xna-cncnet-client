@@ -225,16 +225,18 @@ namespace DTAClient.DXGUI.Multiplayer
             lblHost.Text = "Host:".L10N("Client:Main:GameInfoHost") + " " + Renderer.GetSafeString(game.HostName, lblHost.FontIndex);
             lblHost.Visible = true;
 
-            HostedCnCNetGame hostedGame = (HostedCnCNetGame)game;
             string pingText;
 
-            if (hostedGame.TunnelServer == null)
+            if (game is HostedCnCNetGame hostedGame)
             {
-                pingText = "Ping: Dynamic".L10N("Client:Main:GameInfoPingDynamic");
+                if (hostedGame.TunnelServer == null)
+                    pingText = "Ping: Dynamic".L10N("Client:Main:GameInfoPingDynamic");
+                else
+                    pingText = "Ping:".L10N("Client:Main:GameInfoPing") + " " + hostedGame.TunnelServer.Ping.ToString();
             }
             else
             {
-                pingText = "Ping:".L10N("Client:Main:GameInfoPing") + " " + hostedGame.TunnelServer.Ping.ToString();
+                pingText = "Ping:".L10N("Client:Main:GameInfoPing") + " " + game.Ping.ToString();
             }
 
             lblPing.Text = pingText;

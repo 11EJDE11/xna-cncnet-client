@@ -24,14 +24,6 @@ using System.Security.Cryptography;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
-    public enum NegotiationStatus
-    {
-        NotStarted,
-        InProgress,
-        Succeeded,
-        Failed
-    }
-
     public class CnCNetGameLobby : MultiplayerGameLobby
     {
         private const int HUMAN_PLAYER_OPTIONS_LENGTH = 3;
@@ -359,6 +351,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void OnPlayerNegotiationResult(object sender, TunnelChosenEventArgs e)
         {
+            var negotiator = sender as V3PlayerNegotiator;
             var v3PlayerInfo = _v3PlayerInfos.FirstOrDefault(p => p.Id == e.PlayerId);
             if (v3PlayerInfo == null) return;
 
@@ -375,47 +368,32 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
 
                     if (e.IsLocalDecision)
-                    {
-                        AddNotice($"Selected tunnel for {e.PlayerName}: {e.ChosenTunnel.Name} (Ping: {e.NegotiationPing}ms)");
-
                         _negotiationData.UpdatePing(ProgramConstants.PLAYERNAME, e.PlayerName, e.NegotiationPing);
-                    }
                     else
-                    {
-                        AddNotice($"Assigned to tunnel: {e.ChosenTunnel.Name} (Ping: {e.NegotiationPing}ms) from {e.PlayerName}");
-
                         _negotiationData.UpdatePing(e.PlayerName, ProgramConstants.PLAYERNAME, e.NegotiationPing);
-                    }
 
                     playerInfo.Ping = e.NegotiationPing >= 0 ? PingValue.FromMs(e.NegotiationPing) : PingValue.Unknown;
-                    UpdatePlayerPingIndicator(playerInfo);
+                    _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, e.PlayerName, NegotiationStatus.Succeeded);
+                    UpdatePlayerPingIndicator(playerInfo, NegotiationStatus.Succeeded);
                     CopyPlayerDataToUI();
 
-                    _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, e.PlayerName, NegotiationStatus.Succeeded);
                     UpdateNegotiationUI();
                     BroadcastNegotiationInfo(e.PlayerName, NegotiationStatus.Succeeded, e.NegotiationPing);
                 }
                 else
                 {
                     // Failure
-                    string failureMessage = $"Failed to negotiate tunnel with {e.PlayerName}";
-                    if (!string.IsNullOrEmpty(e.FailureReason))
-                        failureMessage += $": {e.FailureReason}";
-                    AddNotice(failureMessage, Color.Yellow);
 
                     _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, e.PlayerName, NegotiationStatus.Failed);
+                    UpdatePlayerPingIndicator(playerInfo, NegotiationStatus.Failed);
                     UpdateNegotiationUI();
 
                     BroadcastNegotiationInfo(e.PlayerName, NegotiationStatus.Failed);
                 }
             }
 
-            if (v3PlayerInfo.Negotiator != null)
-            {
-                v3PlayerInfo.Negotiator.NegotiationResult -= OnPlayerNegotiationResult;
-                v3PlayerInfo.Negotiator.NegotiationComplete -= OnPlayerNegotiationComplete;
-                v3PlayerInfo.StopNegotiation();
-            }
+            if (negotiator != null)
+                negotiator.NegotiationResult -= OnPlayerNegotiationResult;
         }
 
         private void OnPlayerNegotiationComplete(object sender, EventArgs e)
@@ -431,10 +409,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 BroadcastNegotiationInfo(player.Name, NegotiationStatus.Failed);
             }
 
-            if (player.Negotiator != null)
+            negotiator.NegotiationResult -= OnPlayerNegotiationResult;
+            negotiator.NegotiationComplete -= OnPlayerNegotiationComplete;
+
+            if (ReferenceEquals(player.Negotiator, negotiator))
             {
-                player.Negotiator.NegotiationResult -= OnPlayerNegotiationResult;
-                player.Negotiator.NegotiationComplete -= OnPlayerNegotiationComplete;
+                player.StopNegotiation();
             }
         }
 
@@ -606,6 +586,57 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 StatusIndicators[i].SwitchTexture(
                     i < playerLimit ? PlayerSlotState.Empty : PlayerSlotState.Unavailable);
             }
+        }
+
+        /// <summary>
+        /// Updates player ping indicator with V3 tunnel information if available.
+        /// </summary>
+        protected override void UpdatePlayerPingIndicator(PlayerInfo pInfo,
+            NegotiationStatus? negotiationStatus = null,
+            string tooltipText = null)
+        {
+            if (tooltipText != null)
+            {
+                base.UpdatePlayerPingIndicator(pInfo, negotiationStatus, tooltipText);
+                return;
+            }
+
+            if (!_useLegacyTunnels && _useDynamicTunnels)
+            {
+                var v3Info = _v3PlayerInfos.FirstOrDefault(p => p.Name == pInfo.Name);
+                tooltipText = BuildV3Tooltip(pInfo, v3Info, negotiationStatus);
+            }
+            else
+            {
+                tooltipText = "Ping:".L10N("Client:Main:PlayerInfoPing") + " " + pInfo.Ping.ToString();
+            }
+
+            base.UpdatePlayerPingIndicator(pInfo, negotiationStatus, tooltipText);
+        }
+
+        /// <summary>
+        /// Builds a tooltip for V3 dynamic tunnel ping indicator
+        /// </summary>
+        private string BuildV3Tooltip(PlayerInfo pInfo, V3PlayerInfo v3Info, NegotiationStatus? status)
+        {
+            if (status == NegotiationStatus.InProgress)
+                return "Negotiating tunnel...".L10N("Client:Main:NegotiatingTunnel");
+
+            if (status == NegotiationStatus.Failed)
+                return "Tunnel negotiation failed".L10N("Client:Main:TunnelNegotiationFailed");
+
+            if (v3Info?.Tunnel != null && status == NegotiationStatus.Succeeded)
+            {
+                var tunnelResult = v3Info.GetTunnelResult(v3Info.Tunnel);
+                var packetLoss = tunnelResult?.PacketLoss ?? 0;
+
+                return "Ping:".L10N("Client:Main:PlayerInfoPing") + " " + pInfo.Ping.ToString() + "\n" +
+                       "Tunnel:".L10N("Client:Main:Tunnel") + " " + v3Info.Tunnel.Name + "\n" +
+                       "Packet Loss:".L10N("Client:Main:PacketLoss") + " " + $"{packetLoss:F1}%";
+            }
+
+            // NotStarted or no tunnel assigned
+            return "Ping:".L10N("Client:Main:PlayerInfoPing") + " " + pInfo.Ping.ToString();
         }
 
         private void PrintTunnelServerInformation(string s)
@@ -1117,12 +1148,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
+            _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, player.Name, NegotiationStatus.InProgress);
             BroadcastNegotiationInfo(player.Name, NegotiationStatus.InProgress);
+
+            // Update visual indicator to show negotiating icon
+            var pInfo = Players.Find(p => p.Name == player.Name);
+            if (pInfo != null)
+                UpdatePlayerPingIndicator(pInfo, NegotiationStatus.InProgress);
 
             try
             {
-                AddNotice($"Negotiating tunnel with {player.Name}...");
-
                 bool success = player.StartNegotiation(localV3Player, tunnelHandler, availableTunnels);
 
                 if (success && player.Negotiator != null)
@@ -1133,15 +1168,22 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                 if (!success)
                 {
-                    AddNotice($"Failed to negotiate tunnel with {player.Name}", Color.Yellow);
+                    _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, player.Name, NegotiationStatus.Failed);
                     BroadcastNegotiationInfo(player.Name, NegotiationStatus.Failed);
+
+                    if (pInfo != null)
+                        UpdatePlayerPingIndicator(pInfo, NegotiationStatus.Failed);
                 }
             }
             catch (Exception ex)
             {
                 Logger.Log($"Error negotiating with player {player.Name}: {ex.Message}");
-                AddNotice($"Error negotiating tunnel with {player.Name}", Color.Red);
+                _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, player.Name, NegotiationStatus.Failed);
                 BroadcastNegotiationInfo(player.Name, NegotiationStatus.Failed);
+
+                // Update visual indicator to show failed icon
+                if (pInfo != null)
+                    UpdatePlayerPingIndicator(pInfo, NegotiationStatus.Failed);
             }
         }
 
@@ -1292,7 +1334,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
-            cncnetUserData.AddRecentPlayers(Players.Select(p => p.Name), gameRoomName);
+            cncnetUserData.AddRecentPlayers(Players.Select(p => p.Name), channel.UIName);
 
             StartGame();
         }
@@ -1355,7 +1397,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 v3PlayerInfo.PlayerGameId = (ushort)port;
             }
 
-            string address = v3PlayerInfo?.Tunnel == null ? IPAddress.Any + ":0" : v3PlayerInfo.Tunnel.Address + ":" + v3PlayerInfo.Tunnel.Port;
+            if (v3PlayerInfo == null)
+            {
+                Logger.Log($"PreparePlayerGameData: Missing V3 player info for {player.Name}, using fallback tunnel address.");
+                return (id, player.Name, IPAddress.Any + ":0");
+            }
+
+            string address = v3PlayerInfo.Tunnel == null ? IPAddress.Any + ":0" : v3PlayerInfo.Tunnel.Address + ":" + v3PlayerInfo.Tunnel.Port;
             return (id, player.Name, address);
         }
 
@@ -1792,7 +1840,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     if (pInfo != null)
                     {
                         pInfo.Ping = PingValue.FromMs(ping);
-                        UpdatePlayerPingIndicator(pInfo);
+                        UpdatePlayerPingIndicator(pInfo, status);
                         CopyPlayerDataToUI();
                     }
                 }
@@ -1802,9 +1850,20 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     if (pInfo != null)
                     {
                         pInfo.Ping = PingValue.FromMs(ping);
-                        UpdatePlayerPingIndicator(pInfo);
+                        UpdatePlayerPingIndicator(pInfo, status);
                         CopyPlayerDataToUI();
                     }
+                }
+            }
+            else
+            {
+                // No ping present, but status changed
+                if (targetPlayer == ProgramConstants.PLAYERNAME)
+                {
+                    // Another player's status with us changed
+                    PlayerInfo pInfo = Players.Find(p => p.Name == sender);
+                    if (pInfo != null)
+                        UpdatePlayerPingIndicator(pInfo, status);
                 }
             }
 
@@ -1859,12 +1918,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 if (!_allNegotiationsCompleteMessageShown)
                 {
-                    if (failedNegotiations > 0)
-                        AddNotice($"All tunnel negotiations complete. {completedNegotiations} succeeded, {failedNegotiations} failed.",
-                            failedNegotiations > 0 ? Color.Yellow : Color.LightGreen);
-                    else
-                        AddNotice($"All tunnel negotiations successfully completed!", Color.LightGreen);
-
                     _allNegotiationsCompleteMessageShown = true;
                     CheckHighPingPairs();
                 }
@@ -2346,7 +2399,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 pInfo.Port = port;
                 recentPlayers.Add(pName);
             }
-            cncnetUserData.AddRecentPlayers(recentPlayers, gameRoomName);
+            cncnetUserData.AddRecentPlayers(recentPlayers, channel.UIName);
 
             StartGame();
         }
@@ -2757,10 +2810,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
 
-            if (tunnel != null)
-                AddNotice($"{sender} is using tunnel: {tunnel.Name}");
-            else
-                Logger.Log($"CnCNetGameLobby: {sender} reported unknown tunnel {tunnelAddress}:{tunnelPort}");
+            if (tunnel == null)
+            {
+                Logger.Log($"HandlePlayerTunnelMessage: Tunnel not found for {tunnelAddress}:{tunnelPort}");
+                return;
+            }
+
+            AddNotice($"{sender} is using tunnel: {tunnel.Name}");
 
             if (!IsHost)
                 return;

@@ -2,8 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 
-using DTAClient.DXGUI.Multiplayer.GameLobby;
-
 #nullable enable
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
@@ -13,11 +11,17 @@ namespace DTAClient.Domain.Multiplayer.CnCNet;
 /// </summary>
 public class NegotiationDataManager
 {
-    // reportingPlayer -> targetPlayer -> status
-    // This tracks what each player reports about their negotiation with each other player
+    /// <summary>
+    /// This tracks what each player reports about their negotiation with each other player
+    /// reportingPlayer -> targetPlayer -> status
+    /// </summary>
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, NegotiationStatus>> _negotiationStatuses = new();
 
-    // reportingPlayer -> targetPlayer -> ping
+
+    /// <summary>
+    /// This tracks what each player reports about their negotiation with each other player
+    /// // reportingPlayer -> targetPlayer -> ping
+    /// </summary>
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, PingValue>> _playerPingMatrix = new();
 
     /// <summary>
@@ -46,9 +50,8 @@ public class NegotiationDataManager
     /// </summary>
     public NegotiationStatus GetNegotiationStatus(string player1, string player2)
     {
-        // Players don't negotiate with themselves
         if (player1 == player2)
-            return NegotiationStatus.NotStarted;
+            throw new ArgumentException("Cannot get negotiation status between a player and themselves", nameof(player2));
 
         // Either player could be the reporter
         if (_negotiationStatuses.TryGetValue(player1, out var player1Statuses) &&
@@ -68,9 +71,8 @@ public class NegotiationDataManager
     /// </summary>
     public PingValue? GetPing(string player1, string player2)
     {
-        // Players don't have ping to themselves
         if (player1 == player2)
-            return null;
+            throw new ArgumentException("Cannot get ping between a player and themselves", nameof(player2));
 
         if (_playerPingMatrix.TryGetValue(player1, out var player1Pings) &&
             player1Pings.TryGetValue(player2, out var ping) && ping.IsValid())

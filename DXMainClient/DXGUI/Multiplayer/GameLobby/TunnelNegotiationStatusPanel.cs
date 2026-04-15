@@ -103,12 +103,10 @@ public class TunnelNegotiationStatusPanel : XNAPanel
             var headerLabel = new XNALabel(WindowManager);
             string displayName = players[i].Length > 10 ? players[i].Substring(0, 10) + ".." : players[i];
             headerLabel.Text = displayName;
-            headerLabel.ClientRectangle = new Rectangle(
-                PLAYER_NAME_WIDTH_LHS + (i * CELL_WIDTH),
-                0,
-                CELL_WIDTH,
-                HEADER_HEIGHT);
             headerLabel.TextAnchor = LabelTextAnchorInfo.CENTER;
+            headerLabel.AnchorPoint = new Vector2(
+                PLAYER_NAME_WIDTH_LHS + (i * CELL_WIDTH) + (CELL_WIDTH / 2f),
+                HEADER_HEIGHT / 2f);
             headerLabel.TextColor = Color.LightBlue;
             matrixPanel.AddChild(headerLabel);
         }

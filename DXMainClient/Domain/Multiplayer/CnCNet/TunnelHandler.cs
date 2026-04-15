@@ -191,11 +191,11 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// </summary>
         private Task PingAddressAndUpdateTunnelsAsync(string address, List<CnCNetTunnel> tunnelsWithSameAddress)
         {
+            if (tunnelsWithSameAddress.Count == 0)
+                return Task.CompletedTask;
+
             return Task.Run(() =>
             {
-                if (tunnelsWithSameAddress.Count == 0)
-                    return;
-
                 PingValue pingResult = PingValue.Unknown;
 
                 for (int i = 0; i < tunnelsWithSameAddress.Count; i++)
@@ -253,7 +253,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
                         if (CurrentTunnel == null && otherPreviousPing.IsValid() &&
                             (pingResult.IsUnknown() || pingResult.Milliseconds > TUNNEL_FAILED_PING_AMOUNT))
+                        {
                             TunnelFailed?.Invoke(this, otherTunnel);
+                        }
 
                         DoTunnelPinged(otherTunnel.Address, otherTunnel.Port);
                     }
