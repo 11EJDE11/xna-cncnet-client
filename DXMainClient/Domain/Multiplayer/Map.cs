@@ -613,7 +613,7 @@ namespace DTAClient.Domain.Multiplayer
 
             // Debug.WriteLine("Loading map preview from custom map INI for map " + BaseFilePath);
 
-            return MapPreviewExtractor.ExtractMapPreview(GetCustomMapIniFile(loadPreviewTextureSection: true));
+            return MapPreviewExtractor.ExtractMapPreview(customMapFilePath);
         }
 
         public IniFile GetMapIni()

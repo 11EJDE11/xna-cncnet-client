@@ -1,17 +1,14 @@
-﻿using System;
-using System.Buffers;
+using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
 using ClientCore;
-using ClientCore.Extensions;
+using DTAClient.DXGUI.Multiplayer.GameLobby;
 using Rampastring.Tools;
 using lzo.net;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Advanced;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace DTAClient.Domain.Multiplayer
@@ -21,6 +18,8 @@ namespace DTAClient.Domain.Multiplayer
     /// </summary>
     public static class MapPreviewExtractor
     {
+        private const string HiddenPreviewValue = "yAsAIAXQ5PDQ5PDQ6JQATAEE6PDQ4PDI4JgBTAFEAkgAJyAATAG0AydEAEABpAJIA0wBVA";
+
         /// <summary>
         /// Extracts map preview image as a bitmap.
         /// </summary>
@@ -28,45 +27,49 @@ namespace DTAClient.Domain.Multiplayer
         /// <returns>Bitmap of map preview image, or null if preview could not be extracted.</returns>
         public static Image ExtractMapPreview(IniFile mapIni)
         {
-            List<string> sectionKeys = mapIni.GetSectionKeys("PreviewPack");
-
             string baseFilename = mapIni.FileName.Replace(ProgramConstants.GamePath, "");
 
-            if (sectionKeys == null || sectionKeys.Count == 0)
+            if (!TryGetPreviewData(mapIni, out int previewWidth, out int previewHeight, out string previewPackData,
+                out bool isHiddenPreview, out string errorMessage))
             {
-                Logger.Log("MapPreviewExtractor: " + baseFilename + " - no [PreviewPack] exists, unable to extract preview.");
+                Logger.Log("MapPreviewExtractor: " + baseFilename + " - " + errorMessage);
                 return null;
             }
 
-            if (mapIni.GetStringValue("PreviewPack", "1", string.Empty) ==
-                "yAsAIAXQ5PDQ5PDQ6JQATAEE6PDQ4PDI4JgBTAFEAkgAJyAATAG0AydEAEABpAJIA0wBVA")
+            return ExtractMapPreview(baseFilename, previewWidth, previewHeight, previewPackData, isHiddenPreview);
+        }
+
+        /// <summary>
+        /// Extracts a map preview image directly from a map file without constructing an IniFile.
+        /// </summary>
+        public static Image ExtractMapPreview(string mapFilePath)
+        {
+            string baseFilename = mapFilePath.Replace(ProgramConstants.GamePath, "");
+
+            if (!TryReadPreviewData(mapFilePath, out int previewWidth, out int previewHeight, out string previewPackData,
+                out bool isHiddenPreview, out string errorMessage))
+            {
+                Logger.Log("MapPreviewExtractor: " + baseFilename + " - " + errorMessage);
+                return null;
+            }
+
+            return ExtractMapPreview(baseFilename, previewWidth, previewHeight, previewPackData, isHiddenPreview);
+        }
+
+        private static Image ExtractMapPreview(string baseFilename, int previewWidth, int previewHeight,
+            string previewPackData, bool isHiddenPreview)
+        {
+            if (isHiddenPreview)
             {
                 Logger.Log("MapPreviewExtractor: " + baseFilename + " - Hidden preview detected, not extracting preview.");
                 return null;
-            }
-
-            string[] previewSizes = mapIni.GetStringListValue("Preview", "Size", string.Empty);
-            int previewWidth = previewSizes.Length > 3 ? Conversions.IntFromString(previewSizes[2], -1) : -1;
-            int previewHeight = previewSizes.Length > 3 ? Conversions.IntFromString(previewSizes[3], -1) : -1;
-
-            if (previewWidth < 1 || previewHeight < 1)
-            {
-                Logger.Log("MapPreviewExtractor: " + baseFilename + " - [Preview] Size value is invalid, unable to extract preview.");
-                return null;
-            }
-
-            StringBuilder sb = new StringBuilder();
-            if (sectionKeys != null)
-            {
-                foreach (string key in sectionKeys)
-                    sb.Append(mapIni.GetStringValue("PreviewPack", key, string.Empty));
             }
 
             byte[] dataSource;
 
             try
             {
-                dataSource = Convert.FromBase64String(sb.ToString());
+                dataSource = Convert.FromBase64String(previewPackData);
             }
             catch (Exception)
             {
@@ -91,6 +94,174 @@ namespace DTAClient.Domain.Multiplayer
             }
 
             return bitmap;
+        }
+
+        private static bool TryGetPreviewData(IniFile mapIni, out int previewWidth, out int previewHeight,
+            out string previewPackData, out bool isHiddenPreview, out string errorMessage)
+        {
+            IniSection previewPackSection = mapIni.GetSection("PreviewPack");
+            if (previewPackSection == null || previewPackSection.Keys.Count == 0)
+            {
+                previewWidth = -1;
+                previewHeight = -1;
+                previewPackData = null;
+                isHiddenPreview = false;
+                errorMessage = "no [PreviewPack] exists, unable to extract preview.";
+                return false;
+            }
+
+            isHiddenPreview = previewPackSection.GetStringValue("1", string.Empty) == HiddenPreviewValue;
+            previewPackData = ConcatenatePreviewPack(previewPackSection.Keys);
+
+            if (!TryParsePreviewSize(mapIni.GetStringValue("Preview", "Size", string.Empty), out previewWidth, out previewHeight))
+            {
+                errorMessage = "[Preview] Size value is invalid, unable to extract preview.";
+                return false;
+            }
+
+            errorMessage = null;
+            return true;
+        }
+
+        private static bool TryReadPreviewData(string mapFilePath, out int previewWidth, out int previewHeight,
+            out string previewPackData, out bool isHiddenPreview, out string errorMessage)
+        {
+            previewWidth = -1;
+            previewHeight = -1;
+            previewPackData = null;
+            isHiddenPreview = false;
+
+            try
+            {
+                using FileStream stream = SafePath.GetFile(mapFilePath).OpenRead();
+                using var reader = new StreamReader(stream, MapCodeHelper.GetMapEncoding(mapFilePath));
+
+                PreviewSection currentSection = PreviewSection.None;
+                var previewPackBuilder = new StringBuilder();
+
+                while (!reader.EndOfStream)
+                {
+                    string currentLine = reader.ReadLine();
+
+                    int commentStartIndex = currentLine.IndexOf(';');
+                    if (commentStartIndex > -1)
+                        currentLine = currentLine.Substring(0, commentStartIndex);
+
+                    if (string.IsNullOrWhiteSpace(currentLine))
+                        continue;
+
+                    if (currentLine[0] == '[')
+                    {
+                        int sectionNameEndIndex = currentLine.IndexOf(']');
+                        if (sectionNameEndIndex == -1)
+                        {
+                            errorMessage = "Invalid INI section definition encountered while reading preview.";
+                            return false;
+                        }
+
+                        string sectionName = currentLine.Substring(1, sectionNameEndIndex - 1);
+                        currentSection = sectionName switch
+                        {
+                            "Preview" => PreviewSection.Preview,
+                            "PreviewPack" => PreviewSection.PreviewPack,
+                            _ => PreviewSection.Other
+                        };
+
+                        if (previewPackBuilder.Length > 0 &&
+                            currentSection != PreviewSection.PreviewPack &&
+                            previewWidth > 0 &&
+                            previewHeight > 0)
+                        {
+                            break;
+                        }
+
+                        continue;
+                    }
+
+                    GetKeyAndValue(currentLine, out string key, out string value);
+
+                    switch (currentSection)
+                    {
+                        case PreviewSection.Preview when key == "Size":
+                            if (!TryParsePreviewSize(value, out previewWidth, out previewHeight))
+                            {
+                                errorMessage = "[Preview] Size value is invalid, unable to extract preview.";
+                                return false;
+                            }
+                            break;
+                        case PreviewSection.PreviewPack:
+                            if (key == "1" && value == HiddenPreviewValue)
+                                isHiddenPreview = true;
+
+                            previewPackBuilder.Append(value);
+                            break;
+                    }
+                }
+
+                if (previewPackBuilder.Length == 0)
+                {
+                    errorMessage = "no [PreviewPack] exists, unable to extract preview.";
+                    return false;
+                }
+
+                if (previewWidth < 1 || previewHeight < 1)
+                {
+                    errorMessage = "[Preview] Size value is invalid, unable to extract preview.";
+                    return false;
+                }
+
+                previewPackData = previewPackBuilder.ToString();
+                errorMessage = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = "Error encountered reading preview data. Message: " + ex.Message;
+                return false;
+            }
+        }
+
+        private static string ConcatenatePreviewPack(List<KeyValuePair<string, string>> previewPackKeys)
+        {
+            int totalLength = 0;
+            foreach (var (_, value) in previewPackKeys)
+                totalLength += value.Length;
+
+            var builder = new StringBuilder(totalLength);
+            foreach (var (_, value) in previewPackKeys)
+                builder.Append(value);
+
+            return builder.ToString();
+        }
+
+        private static void GetKeyAndValue(string line, out string key, out string value)
+        {
+            int equalsIndex = line.IndexOf('=');
+
+            if (equalsIndex == -1)
+            {
+                key = line.Trim();
+                value = string.Empty;
+                return;
+            }
+
+            key = line.Substring(0, equalsIndex).Trim();
+            value = line.Substring(equalsIndex + 1).Trim();
+        }
+
+        private static bool TryParsePreviewSize(string sizeValue, out int previewWidth, out int previewHeight)
+        {
+            previewWidth = -1;
+            previewHeight = -1;
+
+            string[] previewSizes = sizeValue.Split(',');
+            if (previewSizes.Length <= 3)
+                return false;
+
+            return int.TryParse(previewSizes[2], out previewWidth) &&
+                   int.TryParse(previewSizes[3], out previewHeight) &&
+                   previewWidth > 0 &&
+                   previewHeight > 0;
         }
 
         /// <summary>
@@ -127,7 +298,7 @@ namespace DTAClient.Domain.Multiplayer
                         return null;
                     }
 
-                    LzoStream stream = new LzoStream(new MemoryStream(dataSource, readBytes, sizeCompressed), CompressionMode.Decompress);
+                    using var stream = new LzoStream(new MemoryStream(dataSource, readBytes, sizeCompressed), CompressionMode.Decompress);
                     stream.Read(dataDest, writtenBytes, sizeUncompressed);
                     readBytes += sizeCompressed;
                     writtenBytes += sizeUncompressed;
@@ -153,8 +324,7 @@ namespace DTAClient.Domain.Multiplayer
         /// <returns>Bitmap based on the provided dimensions and raw image data, or null if length of image data does not match the provided dimensions or if something went wrong.</returns>
         private static Image CreatePreviewBitmapFromImageData(int width, int height, byte[] imageData, out string errorMessage)
         {
-            const int pixelFormatBitCount = 24;
-            const int pixelFormatByteCount = pixelFormatBitCount / 8;
+            const int pixelFormatByteCount = 3;
 
             if (imageData.Length != width * height * pixelFormatByteCount)
             {
@@ -164,62 +334,22 @@ namespace DTAClient.Domain.Multiplayer
 
             try
             {
-                int strideWidth = (((width * pixelFormatBitCount) + 31) & ~31) >> 3;
-                int numSkipBytes = strideWidth - (width * pixelFormatByteCount);
-                byte[] bitmapPixelData = new byte[strideWidth * height];
-                int writtenBytes = 0;
-                int readBytes = 0;
-
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        // GDI+ bitmap raw pixel data is in BGR format, red & blue values need to be flipped around for each pixel.
-                        bitmapPixelData[writtenBytes] = imageData[readBytes + 2];
-                        bitmapPixelData[writtenBytes + 1] = imageData[readBytes + 1];
-                        bitmapPixelData[writtenBytes + 2] = imageData[readBytes];
-                        writtenBytes += pixelFormatByteCount;
-                        readBytes += pixelFormatByteCount;
-                    }
-
-                    // GDI+ bitmap stride / scan width has to be a multiple of 4, so the end of each stride / scanline can contain extra bytes
-                    // in the bitmap raw pixel data that are not present in the image data and should be skipped when copying.
-                    writtenBytes += numSkipBytes;
-                }
-
-                // https://github.com/SixLabors/ImageSharp/blob/main/tests/ImageSharp.Tests/TestUtilities/ReferenceCodecs/SystemDrawingBridge.cs
-                var image = new Image<Bgr24>(width, height);
-                Configuration configuration = image.GetConfiguration();
-                Buffer2D<Bgr24> imageBuffer = image.Frames.RootFrame.PixelBuffer;
-                using IMemoryOwner<Bgr24> workBuffer = Configuration.Default.MemoryAllocator.Allocate<Bgr24>(width);
-
-                unsafe
-                {
-                    fixed (byte* sourcePtrBase = &bitmapPixelData[0])
-                    {
-                        fixed (Bgr24* destPtr = &workBuffer.Memory.Span[0])
-                        {
-                            for (int rowCount = 0; rowCount < height; rowCount++)
-                            {
-                                Span<Bgr24> row = imageBuffer.DangerousGetRowSpan(rowCount);
-                                byte* sourcePtr = sourcePtrBase + (strideWidth * rowCount);
-
-                                Buffer.MemoryCopy(sourcePtr, destPtr, strideWidth, strideWidth);
-                                PixelOperations<Bgr24>.Instance.FromBgr24(configuration, workBuffer.Memory.Span[..width], row);
-                            }
-                        }
-                    }
-                }
-
                 errorMessage = null;
-
-                return image;
+                return Image.LoadPixelData<Rgb24>(imageData, width, height);
             }
             catch (Exception ex)
             {
                 errorMessage = "Error encountered creating preview bitmap. Message: " + ex.Message;
                 return null;
             }
+        }
+
+        private enum PreviewSection
+        {
+            None,
+            Preview,
+            PreviewPack,
+            Other
         }
     }
 }

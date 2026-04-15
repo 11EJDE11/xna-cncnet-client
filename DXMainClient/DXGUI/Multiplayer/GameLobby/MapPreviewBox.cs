@@ -439,9 +439,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             mapPreviewTexture = previewTextureImage != null
                 ? AssetLoader.TextureFromImage(previewTextureImage)
-                // This null case indicates a "hidden preview", where the map itself intends not to show a preview, so we just show a black box instead of no texture at all.
-                // Use the same `- 2` to let xRatio and yRatio get calculated as 1.
-                : AssetLoader.CreateTexture(Color.Black, Width - 2, Height - 2);
+                : null;
+
+            if (mapPreviewTexture == null)
+            {
+                // Hidden, malformed, or undecodable previews should degrade to a black placeholder instead of crashing the preview box.
+                // Use the same `- 2` so xRatio and yRatio still evaluate to 1 for the placeholder texture.
+                mapPreviewTexture = AssetLoader.CreateTexture(Color.Black, Math.Max(1, Width - 2), Math.Max(1, Height - 2));
+            }
 
             mapPreviewTextureNeedsDispose = true;
 
