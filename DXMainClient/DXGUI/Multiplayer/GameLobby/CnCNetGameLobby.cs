@@ -1276,7 +1276,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                     SendStartV2ToPlayers(playerPorts);
                 }
-                else if (_useDynamicTunnels || tunnelHandler.CurrentTunnel.Version == 3)
+                else if (_useDynamicTunnels || tunnelHandler.CurrentTunnel?.Version == 3)
                 {
                     SendStartV3ToPlayers();
                 }
@@ -2420,7 +2420,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             channel.SendCTCPMessage("STRTD", QueuedMessageType.SYSTEM_MESSAGE, 20);
 
-            if (_useDynamicTunnels || tunnelHandler.CurrentTunnel.Version == 3)
+            if (_useDynamicTunnels || tunnelHandler.CurrentTunnel?.Version == 3)
             {
                 PlayerInfo localPlayer = FindLocalPlayer();
                 if (localPlayer == null)
@@ -2459,7 +2459,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 iniFile.SetStringValue("Tunnel", "Ip", IPAddress.Loopback.ToString());
                 iniFile.SetIntValue("Tunnel", "Port", localPlayer.Port);
             }
-            else if (tunnelHandler.CurrentTunnel.Version == 2)
+            else if (tunnelHandler.CurrentTunnel?.Version == 2)
             {
                 iniFile.SetStringValue("Tunnel", "Ip", tunnelHandler.CurrentTunnel.Address);
                 iniFile.SetIntValue("Tunnel", "Port", tunnelHandler.CurrentTunnel.Port);
