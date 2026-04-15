@@ -97,9 +97,10 @@ public class V3PlayerNegotiator : IDisposable
                 await PerformNonDeciderNegotiationAsync();
 
             PrintNegotiationResults();
-            _negotiationCompletionSource.TrySetResult(true);
+            bool succeeded = _negotiationCompletionSource.Task.IsCompleted && _negotiationCompletionSource.Task.Result;
+            _negotiationCompletionSource.TrySetResult(succeeded);
             NegotiationComplete?.Invoke(this, EventArgs.Empty);
-            return true;
+            return succeeded;
         }
         catch (Exception ex)
         {
@@ -229,10 +230,10 @@ public class V3PlayerNegotiator : IDisposable
 
             if (completed == negotiationTimeout && !_negotiationCompletionSource.Task.IsCompleted)
             {
-                Logger.Log($"V3TunnelNegotiator: Timeout: No PingRequest received from decider {_remotePlayer.Name} within {NON_DECIDER_TOTAL_TIMEOUT_MS / 1000} seconds.");
+                Logger.Log($"V3TunnelNegotiator: Timeout waiting for tunnel selection from {_remotePlayer.Name} after {NON_DECIDER_TOTAL_TIMEOUT_MS / 1000} seconds.");
                 _negotiationCompletionSource.TrySetResult(false);
                 cts.Cancel();
-                NegotiationComplete?.Invoke(this, EventArgs.Empty);
+                RaiseNegotiationResult(null, 0, "Timeout waiting for tunnel selection");
             }
         }
         catch (OperationCanceledException)
