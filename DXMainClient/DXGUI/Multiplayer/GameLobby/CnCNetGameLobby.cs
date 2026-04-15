@@ -1107,6 +1107,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             var availableTunnels = GetAvailableTunnelsForNegotiation();
 
+            if (availableTunnels.Count == 0)
+            {
+                AddNotice("Cannot negotiate tunnel: no V3 tunnels are available. Wait for the tunnel list to refresh or switch to a different tunnel mode.", Color.Yellow);
+                BroadcastNegotiationInfo(player.Name, NegotiationStatus.Failed);
+                return;
+            }
+
             BroadcastNegotiationInfo(player.Name, NegotiationStatus.InProgress);
 
             try
