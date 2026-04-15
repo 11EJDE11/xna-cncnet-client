@@ -164,8 +164,12 @@ public class V3PlayerNegotiator : IDisposable
             if (bestResult != null && bestResult.AverageRtt.HasValue)
             {
                 int halvedPing = (int)Math.Round(bestResult.AverageRtt.Value / 2.0);
-                await SendTunnelChoiceAsync(bestTunnel, halvedPing);
-                RaiseNegotiationResult(bestTunnel, halvedPing);
+                bool ackReceived = await SendTunnelChoiceAsync(bestTunnel, halvedPing);
+
+                if (ackReceived)
+                    RaiseNegotiationResult(bestTunnel, halvedPing);
+                else
+                    RaiseNegotiationResult(null, 0, $"Failed to receive tunnel acknowledgment after {TUNNEL_CHOICE_MAX_RETRIES} attempts");
             }
         }
         else
@@ -380,8 +384,9 @@ public class V3PlayerNegotiator : IDisposable
         }
     }
 
-    //informs other player of the tunnel to use.
-    private async Task SendTunnelChoiceAsync(CnCNetTunnel tunnel, int ping)
+    // Informs the other player of the tunnel to use.
+    // Returns true if an acknowledgment was received, false if all retries were exhausted.
+    private async Task<bool> SendTunnelChoiceAsync(CnCNetTunnel tunnel, int ping)
     {
         Logger.Log($"V3TunnelNegotiator: Sending tunnel choice to {_remotePlayer.Name}: {tunnel.Name} (Ping: {ping}ms)");
 
@@ -404,19 +409,19 @@ public class V3PlayerNegotiator : IDisposable
                 if (completedTask == _tunnelAckReceived.Task)
                 {
                     Logger.Log($"V3TunnelNegotiator: Acknowledgment received from {_remotePlayer.Name} for {tunnel.Name}");
-                    return; // success
+                    return true;
                 }
                 Logger.Log($"V3TunnelNegotiator: No acknowledgment received, retrying... (attempt {attempt + 1}/{TUNNEL_CHOICE_MAX_RETRIES})");
             }
             catch (OperationCanceledException)
             {
                 Logger.Log($"V3TunnelNegotiator: Cancelled while waiting for acknowledgment from {_remotePlayer.Name}");
-                return;
+                return false;
             }
         }
 
         Logger.Log($"V3TunnelNegotiator: Failed to receive tunnel acknowledgment from {_remotePlayer.Name} after {TUNNEL_CHOICE_MAX_RETRIES} goes");
-        RaiseNegotiationResult(null, 0, $"Failed to receive tunnel acknowledgment after {TUNNEL_CHOICE_MAX_RETRIES} attempts");
+        return false;
     }
 
     private void PrintNegotiationResults()
