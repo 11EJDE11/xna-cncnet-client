@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -8,8 +7,11 @@ using System.Text.Json;
 using System.Threading.Tasks;
 
 using ClientCore;
+using ClientCore.Extensions;
 
 using Rampastring.Tools;
+
+using SixLabors.ImageSharp;
 
 namespace DTAClient.Domain.Multiplayer
 {
@@ -20,16 +22,18 @@ namespace DTAClient.Domain.Multiplayer
         Removed
     }
 
-    public class MapLoader
+    public class MapLoader : IDisposable
     {
         private const string CUSTOM_MAPS_DIRECTORY = "Maps/Custom";
 
-        private const int CurrentCustomMapCacheVersion = 3;
-        private static readonly string CUSTOM_MAPS_CACHE = SafePath.CombineFilePath(ProgramConstants.ClientUserFilesPath, "custom_map_cache_v3");
-        private static readonly IReadOnlyList<string> LEGACY_CUSTOM_MAP_CACHE_FILES = [
-            SafePath.CombineFilePath(ProgramConstants.ClientUserFilesPath, "custom_map_cache"),
-            SafePath.CombineFilePath(ProgramConstants.ClientUserFilesPath, "custom_map_cache_v2"),
-        ];
+        private const int CurrentCustomMapCacheVersion = 5;
+
+        private static string GetCustomMapCacheFileName(int version) => version == 1 ? "custom_map_cache" : $"custom_map_cache_v{version}";
+
+        private static readonly string CUSTOM_MAPS_CACHE = SafePath.CombineFilePath(ProgramConstants.ClientUserFilesPath, GetCustomMapCacheFileName(CurrentCustomMapCacheVersion));
+        private static readonly IReadOnlyList<string> LEGACY_CUSTOM_MAP_CACHE_FILES = Enumerable.Range(0, CurrentCustomMapCacheVersion)
+            .Select(version => SafePath.CombineFilePath(ProgramConstants.ClientUserFilesPath, GetCustomMapCacheFileName(version)))
+            .ToList();
 
         private const string MultiMapsSection = "MultiMaps";
         private const string GameModesSection = "GameModes";
@@ -39,12 +43,15 @@ namespace DTAClient.Domain.Multiplayer
         private readonly object mapModificationLock = new object();
         private const int _mapChangeRetryCount = 3;
 
+        private readonly List<GameMode> _gameModes = [];
+
         /// <summary>
         /// List of game modes.
         /// </summary>
-        public List<GameMode> GameModes = new List<GameMode>();
+        public IReadOnlyList<GameMode> GameModes => _gameModes;
 
-        public GameModeMapCollection GameModeMaps;
+        private GameModeMapCollection _gameModeMaps;
+        public IReadOnlyGameModeMapCollection GameModeMaps => _gameModeMaps;
 
         /// <summary>
         /// An event that is fired when the maps have been loaded.
@@ -77,6 +84,12 @@ namespace DTAClient.Domain.Multiplayer
         /// </summary>
         private string[] AllowedGameModes = ClientConfiguration.Instance.AllowedCustomGameModes.Split(',');
 
+        public const int MapPreviewCacheCapacity = 100;
+
+        private readonly IMapPreviewCacheManager mapPreviewCacheManager = new MapPreviewCacheManager(capacity: MapPreviewCacheCapacity);
+
+        public MapLoader() { }
+
         /// <summary>
         /// Sets up file watching for maps.
         /// </summary>
@@ -93,32 +106,37 @@ namespace DTAClient.Domain.Multiplayer
         }
 
         /// <summary>
-        /// Loads multiplayer map info asynchronously.
+        /// Asynchronously loads maps based on INI info as well as those in the custom maps directory.
         /// </summary>
-        public Task LoadMapsAsync() => Task.Run(LoadMaps);
+        public Task LoadMapsAsync() => Task.Run(LoadMapsInternalAsync);
 
-        /// <summary>
-        /// Load maps based on INI info as well as those in the custom maps directory.
-        /// </summary>
-        public void LoadMaps()
+        private async Task LoadMapsInternalAsync()
         {
+            Logger.Log("MapLoader: Map loading task started.");
+            var stopwatch = Stopwatch.StartNew();
+
             string mpMapsPath = SafePath.CombineFilePath(ProgramConstants.GamePath, ClientConfiguration.Instance.MPMapsIniPath);
 
-            Logger.Log($"Loading maps from {mpMapsPath}.");
+            Logger.Log($"MapLoader: Loading maps from {mpMapsPath}.");
 
             IniFile mpMapsIni = new IniFile(mpMapsPath);
 
             LoadGameModes(mpMapsIni);
             LoadGameModeAliases(mpMapsIni);
-            LoadMultiMaps(mpMapsIni);
-            LoadCustomMaps();
+            // LoadMultiMapsAsync and LoadCustomMapsAsync both modify the game mode map collection. We intend to keep the collection non-thread-safe for performance, so the two methods must not be called simultaneously.
+            await LoadMultiMapsAsync(mpMapsIni);
+            await LoadCustomMapsAsync();
 
-            GameModes.RemoveAll(g => g.Maps.Count < 1);
-            GameModeMaps = new GameModeMapCollection(GameModes);
+            Logger.Log("MapLoader: Post-processing game mode map collections.");
+            _gameModes.RemoveAll(g => g.Maps.Count < 1);
+            _gameModeMaps = new GameModeMapCollection(_gameModes);
 
             // Clean up any name-based favorite entries after migration (legacy: changed from name to sha1)
             CleanupMigratedFavorites();
 
+            stopwatch.Stop();
+
+            Logger.Log($"MapLoader: Map loading complete. Total time: {stopwatch.ElapsedMilliseconds} ms");
             MapLoadingComplete?.Invoke(this, EventArgs.Empty);
         }
 
@@ -159,7 +177,7 @@ namespace DTAClient.Domain.Multiplayer
                     try
                     {
                         map = new Map(baseFilePath, true);
-                        if (map.SetInfoFromCustomMap())
+                        if (map.InitializeFromCustomMap())
                         {
                             success = true;
                             break;
@@ -217,7 +235,7 @@ namespace DTAClient.Domain.Multiplayer
                     try
                     {
                         newMap = new Map(baseFilePath, true);
-                        if (newMap.SetInfoFromCustomMap())
+                        if (newMap.InitializeFromCustomMap())
                         {
                             success = true;
                             break;
@@ -357,11 +375,11 @@ namespace DTAClient.Domain.Multiplayer
 
         private void UpdateGameModeMaps()
         {
-            GameModes.RemoveAll(g => g.Maps.Count < 1);
-            GameModeMaps = new GameModeMapCollection(GameModes);
+            _gameModes.RemoveAll(g => g.Maps.Count < 1);
+            _gameModeMaps = new GameModeMapCollection(_gameModes);
         }
 
-        private void LoadMultiMaps(IniFile mpMapsIni)
+        private async Task LoadMultiMapsAsync(IniFile mpMapsIni)
         {
             List<string> keys = mpMapsIni.GetSectionKeys(MultiMapsSection);
 
@@ -371,29 +389,44 @@ namespace DTAClient.Domain.Multiplayer
                 return;
             }
 
-            List<Map> maps = new List<Map>();
-
-            foreach (string key in keys)
+            Task<Map>[] tasks = keys.Select(key => Task.Run(() =>
             {
-                string mapFilePathValue = mpMapsIni.GetStringValue(MultiMapsSection, key, string.Empty);
-                string mapFilePath = SafePath.CombineFilePath(mapFilePathValue);
-                FileInfo mapFile = SafePath.GetFile(ProgramConstants.GamePath, FormattableString.Invariant($"{mapFilePath}.{ClientConfiguration.Instance.MapFileExtension}"));
-
-                if (!mapFile.Exists)
+                try
                 {
-                    Logger.Log("Map " + mapFile.FullName + " doesn't exist!");
-                    continue;
+                    string mapFilePathValue = mpMapsIni.GetStringValue(MultiMapsSection, key, string.Empty);
+                    string mapFilePath = SafePath.CombineFilePath(mapFilePathValue);
+                    FileInfo mapFile = SafePath.GetFile(ProgramConstants.GamePath, FormattableString.Invariant($"{mapFilePath}.{ClientConfiguration.Instance.MapFileExtension}"));
+
+                    if (!mapFile.Exists)
+                    {
+                        Logger.Log("Map " + mapFile.FullName + " doesn't exist!");
+                        return null;
+                    }
+
+                    var map = new Map(mapFilePathValue, false);
+                    if (!map.InitializeFromMpMapsINI(mpMapsIni))
+                        return null;
+
+                    return map;
                 }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Error loading map for key {key}: {ex}");
+                    return null;
+                }
+            })).ToArray();
 
-                var map = new Map(mapFilePathValue, false);
-
-                if (!map.SetInfoFromMpMapsINI(mpMapsIni))
-                    continue;
-
-                maps.Add(map);
+            Task waitMultiMapsTask = Task.WhenAll(tasks);
+            while (await Task.WhenAny(waitMultiMapsTask, Task.Delay(1000)) != waitMultiMapsTask)
+            {
+                string message = "MapLoader: Waiting for the multiplayer map loading task to complete. Remaining files: " + tasks.Count(t => !t.IsCompleted) + ". Total: " + tasks.Length;
+                Debug.WriteLine(message);
+                Logger.Log(message);
             }
 
-            foreach (Map map in maps)
+            await waitMultiMapsTask;
+
+            foreach (Map map in tasks.Select(t => t.Result).Where(m => m != null))
             {
                 AddMapToGameModes(map, false);
                 _translatedMapNames[map.UntranslatedName] = map.Name;
@@ -411,7 +444,7 @@ namespace DTAClient.Domain.Multiplayer
                     if (!string.IsNullOrEmpty(gameModeName))
                     {
                         GameMode gm = new GameMode(gameModeName);
-                        GameModes.Add(gm);
+                        _gameModes.Add(gm);
                     }
                 }
             }
@@ -431,7 +464,7 @@ namespace DTAClient.Domain.Multiplayer
             }
         }
 
-        private void LoadCustomMaps()
+        private async Task LoadCustomMapsAsync()
         {
             DirectoryInfo customMapsDirectory = SafePath.GetDirectory(ProgramConstants.GamePath, CUSTOM_MAPS_DIRECTORY);
 
@@ -441,44 +474,93 @@ namespace DTAClient.Domain.Multiplayer
                 return;
             }
 
+            Logger.Log("MapLoader: Loading custom maps...");
+
+            // Load custom map cache from file system
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
             IEnumerable<FileInfo> mapFiles = customMapsDirectory.EnumerateFiles($"*.{ClientConfiguration.Instance.MapFileExtension}");
+
+            // Note: using synchronous file I/O here saves a noticeable amount of latency compared to async.
             CustomMapCache customMapCache = LoadCustomMapCache();
-            var localMapSHAs = new ConcurrentBag<string>();
 
-            Task[] tasks = mapFiles.Select(mapFile => Task.Run(() =>
+            stopwatch.Stop();
+            Logger.Log(FormattableString.Invariant($"MapLoader: Loaded custom map cache from file system in {stopwatch.ElapsedMilliseconds} ms"));
+
+            // Process uncached custom maps.
+            stopwatch.Restart();
+
+            List<string> localMapPaths;
             {
-                string baseFilePath = mapFile.FullName.Substring(ProgramConstants.GamePath.Length);
-                baseFilePath = baseFilePath.Substring(0, baseFilePath.Length - 4);
+                int mapFileExtensionWithDotLength = $".{ClientConfiguration.Instance.MapFileExtension}".Length;
 
-                var map = new Map(baseFilePath
-                    .Replace(Path.DirectorySeparatorChar, '/')
-                    .Replace(Path.AltDirectorySeparatorChar, '/'), true);
-                map.CalculateSHA();
-                localMapSHAs.Add(map.SHA1);
-                if (!customMapCache.Items.ContainsKey(map.SHA1) && map.SetInfoFromCustomMap())
-                    customMapCache.Items.TryAdd(map.SHA1, new CustomMapCache.Item(map));
-            })).ToArray();
+                Task<string>[] tasks = mapFiles.Select(mapFile => Task.Run(() =>
+                {
+                    string baseFilePath = mapFile.FullName.Substring(ProgramConstants.GamePath.Length);
+                    baseFilePath = baseFilePath.Substring(0, baseFilePath.Length - mapFileExtensionWithDotLength);
 
-            while (!Task.WaitAll(tasks, millisecondsTimeout: 1000))
-            {
-                string message = "Waiting for the custom map loading task to complete. Remaining files: " + tasks.Count(t => !t.IsCompleted) + ". Total: " + tasks.Length;
-                Debug.WriteLine(message);
-                Logger.Log(message);
+                    string normalizedPath = baseFilePath
+                        .Replace(Path.DirectorySeparatorChar, '/')
+                        .Replace(Path.AltDirectorySeparatorChar, '/');
+
+                    if (customMapCache.Items.TryGetValue(normalizedPath, out var cachedItem) && !cachedItem.IsOutdated())
+                    {
+                        // Use cached map
+                        return normalizedPath;
+                    }
+
+                    // Not in cache or outdated
+                    var map = new Map(normalizedPath, true);
+                    if (map.InitializeFromCustomMap())
+                        customMapCache.Items[normalizedPath] = new CustomMapCache.Item(map);
+
+                    return normalizedPath;
+                })).ToArray();
+
+                Task waitCustomMapsTask = Task.WhenAll(tasks);
+                while (await Task.WhenAny(waitCustomMapsTask, Task.Delay(1000)) != waitCustomMapsTask)
+                {
+                    string message = "MapLoader: Waiting for the custom map loading task to complete. Remaining files: " + tasks.Count(t => !t.IsCompleted) + ". Total: " + tasks.Length;
+                    Debug.WriteLine(message);
+                    Logger.Log(message);
+                }
+
+                await waitCustomMapsTask;
+
+                localMapPaths = tasks.Select(t => t.Result).ToList();
             }
 
-            // remove cached maps that no longer exist locally
-            foreach (var missingSHA in customMapCache.Items.Keys.Where(cachedSHA => !localMapSHAs.Contains(cachedSHA)))
+            stopwatch.Stop();
+            Logger.Log(FormattableString.Invariant($"MapLoader: Processed uncached custom maps in {stopwatch.ElapsedMilliseconds} ms"));
+
+            // Remove cached maps that no longer exist locally
+            stopwatch.Restart();
+
+            HashSet<string> missingMapPaths;
             {
-                customMapCache.Items.TryRemove(missingSHA, out _);
+                HashSet<string> cachedMapPaths = customMapCache.Items.Keys.ToHashSet();
+                cachedMapPaths.ExceptWith(localMapPaths);
+                missingMapPaths = cachedMapPaths;
             }
 
-            // save cache
+            foreach (string missingPath in missingMapPaths)
+                customMapCache.Items.TryRemove(missingPath, out _);
+
+            stopwatch.Stop();
+            Logger.Log(FormattableString.Invariant($"MapLoader: Removed outdated maps from cache in {stopwatch.ElapsedMilliseconds} ms"));
+
+            // Save custom map cache
+            stopwatch.Restart();
             CacheCustomMaps(customMapCache);
+            stopwatch.Stop();
+            Logger.Log(FormattableString.Invariant($"MapLoader: Saved custom map cache to disk in {stopwatch.ElapsedMilliseconds} ms"));
 
             foreach (Map map in customMapCache.Items.Values.Select(item => item.Map))
             {
                 AddMapToGameModes(map, false);
             }
+
+            Logger.Log("MapLoader: Custom maps loaded.");
         }
 
         /// <summary>
@@ -525,11 +607,11 @@ namespace DTAClient.Domain.Multiplayer
                     customMap.Map.AfterDeserialize(recalculateSHA: false);
 
                 // Remove outdated items
-                foreach (var sha1 in customMapCache.Items.Keys.ToList())
+                foreach (var mapPath in customMapCache.Items.Keys.ToList())
                 {
-                    if (customMapCache.Items[sha1].IsOutdated())
+                    if (customMapCache.Items[mapPath].IsOutdated())
                     {
-                        customMapCache.Items.TryRemove(sha1, out _);
+                        customMapCache.Items.TryRemove(mapPath, out _);
                     }
                 }
 
@@ -551,13 +633,23 @@ namespace DTAClient.Domain.Multiplayer
         {
             Debug.Assert(!mapPath.EndsWith($".{ClientConfiguration.Instance.MapFileExtension}", StringComparison.InvariantCultureIgnoreCase), $"Unexpected map path {mapPath}. It should not end with the map extension.");
 
+            if (mapPath != mapPath.ToWin32FileName())
+            {
+                Logger.Log("LoadCustomMap: Map " + FormattableString.Invariant($"{mapPath}.{ClientConfiguration.Instance.MapFileExtension}") + " contains WIN32API reserved characters!");
+
+                // Return "map file does not exist" message to hide technical details towards users
+                resultMessage = string.Format("Map file {0} doesn't exist!".L10N("Client:MapLoader:MapFileDoesNotExist"), FormattableString.Invariant($"{mapPath}.{ClientConfiguration.Instance.MapFileExtension}"));
+
+                return null;
+            }
+
             string customMapFilePath = SafePath.CombineFilePath(ProgramConstants.GamePath, FormattableString.Invariant($"{mapPath}.{ClientConfiguration.Instance.MapFileExtension}"));
             FileInfo customMapFile = SafePath.GetFile(customMapFilePath);
 
             if (!customMapFile.Exists)
             {
                 Logger.Log("LoadCustomMap: Map " + customMapFile.FullName + " not found!");
-                resultMessage = $"Map file {customMapFile.Name} doesn't exist!";
+                resultMessage = string.Format("Map file {0} doesn't exist!".L10N("Client:MapLoader:MapFileDoesNotExist"), customMapFile.Name);
 
                 return null;
             }
@@ -566,14 +658,14 @@ namespace DTAClient.Domain.Multiplayer
 
             var map = new Map(mapPath, true);
 
-            if (map.SetInfoFromCustomMap())
+            if (map.InitializeFromCustomMap())
             {
                 foreach (GameMode gm in GameModes)
                 {
                     if (gm.Maps.Find(m => m.SHA1 == map.SHA1) != null)
                     {
                         Logger.Log("LoadCustomMap: Custom map " + customMapFile.FullName + " is already loaded!");
-                        resultMessage = $"Map {map.Name} is already loaded.";
+                        resultMessage = string.Format("Map {0} is already loaded.".L10N("Client:MapLoader:MapAlreadyLoaded"), map.Name);
 
                         return null;
                     }
@@ -583,15 +675,15 @@ namespace DTAClient.Domain.Multiplayer
 
                 AddMapToGameModes(map, true);
                 var gameModes = GameModes.Where(gm => gm.Maps.Contains(map));
-                GameModeMaps.AddRange(gameModes.Select(gm => new GameModeMap(gm, map, false)));
+                _gameModeMaps.AddRange(gameModes.Select(gm => new GameModeMap(gm, map, false)));
 
-                resultMessage = $"Map {map.Name} loaded successfully.";
+                resultMessage = string.Format("Map {0} loaded successfully.".L10N("Client:MapLoader:MapLoadedSuccessfully"), map.Name);
 
                 return map;
             }
 
             Logger.Log("LoadCustomMap: Loading map " + customMapFile.FullName + " failed!");
-            resultMessage = $"Loading map {Path.GetFileNameWithoutExtension(customMapFile.Name)} failed!";
+            resultMessage = string.Format("Loading map {0} failed!".L10N("Client:MapLoader:MapLoadingFailed"), Path.GetFileNameWithoutExtension(customMapFile.Name));
 
             return null;
         }
@@ -605,7 +697,7 @@ namespace DTAClient.Domain.Multiplayer
                 gameMode.Maps.Remove(gameModeMap.Map);
             }
 
-            GameModeMaps.Remove(gameModeMap);
+            _gameModeMaps.Remove(gameModeMap);
         }
 
         /// <summary>
@@ -625,11 +717,11 @@ namespace DTAClient.Domain.Multiplayer
                     if (!map.Official && !(AllowedGameModes.Contains(gameMode) || AllowedGameModes.Contains(gameModeAlias)))
                         continue;
 
-                    GameMode gm = GameModes.Find(g => g.Name == gameModeAlias);
+                    GameMode gm = GameModes.FirstOrDefault(g => g.Name == gameModeAlias);
                     if (gm == null)
                     {
                         gm = new GameMode(gameModeAlias);
-                        GameModes.Add(gm);
+                        _gameModes.Add(gm);
                     }
 
                     gm.Maps.Add(map);
@@ -682,5 +774,34 @@ namespace DTAClient.Domain.Multiplayer
                 UserINISettings.Instance.WriteFavoriteMaps();
             }
         }
+
+        public void PrefetchCachedPreviewImageFromMap(Map map)
+        {
+            if (map?.IsNonImmediatePreviewImageAvailable() ?? false)
+                _ = mapPreviewCacheManager.Request(map, out Image _, addToQueue: true);
+        }
+
+        public Image GetCachedPreviewImageFromMap(Map map, bool syncLoadOnCacheMiss = false)
+        {
+            if (map?.IsImmediatePreviewImageAvailable() ?? false)
+            {
+                return map.GetImmediatePreviewImage();
+            }
+            else if (map?.IsNonImmediatePreviewImageAvailable() ?? false)
+            {
+                if (mapPreviewCacheManager.Request(map, out Image image, syncComputeOnCacheMiss: syncLoadOnCacheMiss, addToQueue: true))
+                    return image;
+                else
+                    return null;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        public Map FindMapByHash(string mapHash) => GameModeMaps?.FindMapByHash(mapHash);
+
+        public void Dispose() => mapPreviewCacheManager?.Dispose();
     }
 }

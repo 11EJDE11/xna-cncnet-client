@@ -6,7 +6,6 @@ using Rampastring.XNAUI;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using System.Linq;
@@ -258,8 +257,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         private static byte[] GetRawTunnelDataOnline()
         {
-            WebClient client = new ExtendedWebClient();
-            return client.DownloadData(ClientConfiguration.Instance.CnCNetTunnelListURL);
+            return new TimedHttpClient(10000).GetBytes(ClientConfiguration.Instance.CnCNetTunnelListURL);
         }
 
         private static byte[] GetRawTunnelDataOffline()

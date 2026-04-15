@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(find /c/Users/QWE/.nuget/packages/fontstashsharp* -name \"*.cs\")",
+      "Bash(unzip -p stbtruetypesharp.1.26.12.nupkg \"lib/netstandard2.0/StbTrueTypeSharp.dll\")",
+      "Bash(dotnet-ilspycmd /tmp/StbTrueTypeSharp.dll)",
+      "Read(//tmp/**)"
+    ]
+  }
+}
