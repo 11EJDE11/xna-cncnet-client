@@ -84,9 +84,17 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             Enabled = true;
         }
 
-        private void ConnectionManager_ConnectionLost(object sender, Online.EventArguments.ConnectionLostEventArgs e) => Enabled = false;
+        private void ConnectionManager_ConnectionLost(object sender, Online.EventArguments.ConnectionLostEventArgs e)
+        {
+            Enabled = false;
+            _tunnelCommunicator.Shutdown();
+        }
 
-        private void ConnectionManager_Disconnected(object sender, EventArgs e) => Enabled = false;
+        private void ConnectionManager_Disconnected(object sender, EventArgs e)
+        {
+            Enabled = false;
+            _tunnelCommunicator.Shutdown();
+        }
 
         private void RefreshTunnelsAsync()
         {
@@ -174,6 +182,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
 
             InitializeTunnelCommunicator();
+            _tunnelCommunicator.AddTunnels(Tunnels);
         }
 
         /// <summary>

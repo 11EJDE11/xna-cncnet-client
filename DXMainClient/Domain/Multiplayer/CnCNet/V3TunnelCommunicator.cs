@@ -98,6 +98,42 @@ public class V3TunnelCommunicator
     }
 
     /// <summary>
+    /// Stops the receive thread and closes the UDP socket, allowing re-initialization.
+    /// </summary>
+    public void Shutdown()
+    {
+        lock (_initLock)
+        {
+            _running = false;
+            _udpClient?.Close();
+            _udpClient = null;
+            _endpointToTunnel.Clear();
+            Logger.Log("V3TunnelCommunicator: Shut down");
+        }
+    }
+
+    /// <summary>
+    /// Adds endpoint mappings for any tunnels not already known to the communicator.
+    /// Call this after a tunnel list refresh so newly-discovered tunnels are reachable.
+    /// </summary>
+    public void AddTunnels(List<CnCNetTunnel> tunnels)
+    {
+        if (!IsInitialized)
+            return;
+
+        int added = 0;
+        foreach (var tunnel in tunnels.Where(t => t.Version == 3))
+        {
+            var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
+            if (_endpointToTunnel.TryAdd(endpoint, tunnel))
+                added++;
+        }
+
+        if (added > 0)
+            Logger.Log($"V3TunnelCommunicator: Added {added} new tunnel endpoint(s) from refresh");
+    }
+
+    /// <summary>
     /// Registers a handler for packets between the specified local and remote IDs.
     /// </summary>
     /// <param name="localId">The local player's V3PlayerInfo ID.</param>
