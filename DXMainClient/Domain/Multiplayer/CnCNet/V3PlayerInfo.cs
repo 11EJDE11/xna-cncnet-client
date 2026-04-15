@@ -160,7 +160,7 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
         Logger.Log($"V3PlayerInfo: Starting negotiation with {Name} (ID: {Id})");
 
         if (Negotiator != null)
-            return true;
+            return false; // already negotiating; caller must not re-subscribe events
 
         if (availableTunnels.Count == 0)
         {
