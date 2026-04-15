@@ -2746,7 +2746,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
 
             CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
-            AddNotice($"{sender} is using tunnel: {tunnel.Name}");
+
+            if (tunnel != null)
+                AddNotice($"{sender} is using tunnel: {tunnel.Name}");
+            else
+                Logger.Log($"CnCNetGameLobby: {sender} reported unknown tunnel {tunnelAddress}:{tunnelPort}");
 
             if (!IsHost)
                 return;
