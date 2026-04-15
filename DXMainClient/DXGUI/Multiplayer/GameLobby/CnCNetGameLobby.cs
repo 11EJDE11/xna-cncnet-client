@@ -621,6 +621,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                     if (t != null)
                     {
+                        var negotiatedPing = _negotiationData.GetPing(ProgramConstants.PLAYERNAME, v3Player.Name);
+                        string pingDisplay = negotiatedPing.HasValue ? negotiatedPing.Value.ToString() : "Unknown".L10N("Client:Main:UnknownPing");
+
                         AddNotice(string.Format(
                             "{0}: {1} {2} (Ping: {3}) (Players: {4}/{5}) (Official: {6}) Version: {7}"
                                 .L10N("Client:Main:V3TunnelInfo"),
@@ -628,7 +631,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                             v3Player.Name,
                             t.Name,
                             t.Country,
-                            t.Ping.ToString(),
+                            pingDisplay,
                             t.Clients,
                             t.MaxClients,
                             t.Official,
