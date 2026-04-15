@@ -1345,7 +1345,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 v3PlayerInfo.PlayerGameId = (ushort)port;
             }
 
-            string address = v3PlayerInfo.Tunnel == null ? IPAddress.Any + ":0" : v3PlayerInfo.Tunnel.Address + ":" + v3PlayerInfo.Tunnel.Port;
+            string address = v3PlayerInfo?.Tunnel == null ? IPAddress.Any + ":0" : v3PlayerInfo.Tunnel.Address + ":" + v3PlayerInfo.Tunnel.Port;
             return (id, player.Name, address);
         }
 
