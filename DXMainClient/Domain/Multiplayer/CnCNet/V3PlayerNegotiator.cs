@@ -138,6 +138,14 @@ public class V3PlayerNegotiator : IDisposable
     private async Task PerformDeciderNegotiationAsync()
     {
         int totalTunnels = _remotePlayer.TunnelResults.Count;
+        if (totalTunnels == 0)
+        {
+            Logger.Log($"V3TunnelNegotiator: No tunnels available for decider negotiation with {_remotePlayer.Name}");
+            _negotiationCompletionSource.TrySetResult(false);
+            RaiseNegotiationResult(null, 0, "No tunnels available");
+            return;
+        }
+
         int completedTunnels = 0;
         bool selectionMade = false;
         var completionLock = new object();
