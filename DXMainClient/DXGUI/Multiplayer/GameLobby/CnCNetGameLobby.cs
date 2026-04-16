@@ -1158,21 +1158,29 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             try
             {
-                bool success = player.StartNegotiation(localV3Player, tunnelHandler, availableTunnels);
+                var startResult = player.StartNegotiation(localV3Player, tunnelHandler, availableTunnels);
 
-                if (success && player.Negotiator != null)
+                switch (startResult)
                 {
-                    player.Negotiator.NegotiationResult += OnPlayerNegotiationResult;
-                    player.Negotiator.NegotiationComplete += OnPlayerNegotiationComplete;
-                }
+                    case NegotiationStartResult.Started:
+                        if (player.Negotiator != null)
+                        {
+                            player.Negotiator.NegotiationResult += OnPlayerNegotiationResult;
+                            player.Negotiator.NegotiationComplete += OnPlayerNegotiationComplete;
+                        }
+                        break;
 
-                if (!success)
-                {
-                    _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, player.Name, NegotiationStatus.Failed);
-                    BroadcastNegotiationInfo(player.Name, NegotiationStatus.Failed);
+                    case NegotiationStartResult.AlreadyInProgress:
+                        // A negotiation is already running for this player; leave its state untouched.
+                        break;
 
-                    if (pInfo != null)
-                        UpdatePlayerPingIndicator(pInfo, NegotiationStatus.Failed);
+                    case NegotiationStartResult.Failed:
+                        _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, player.Name, NegotiationStatus.Failed);
+                        BroadcastNegotiationInfo(player.Name, NegotiationStatus.Failed);
+
+                        if (pInfo != null)
+                            UpdatePlayerPingIndicator(pInfo, NegotiationStatus.Failed);
+                        break;
                 }
             }
             catch (Exception ex)

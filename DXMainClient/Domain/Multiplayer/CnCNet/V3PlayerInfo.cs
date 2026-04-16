@@ -81,6 +81,16 @@ public class TunnelTestResult
 }
 
 /// <summary>
+/// Outcome of a call to <see cref="V3PlayerInfo.StartNegotiation"/>.
+/// </summary>
+public enum NegotiationStartResult
+{
+    Started,
+    AlreadyInProgress,
+    Failed
+}
+
+/// <summary>
 /// A lobby's player for V3 tunnel-based negotiation and communication.
 /// </summary>
 public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGameID)
@@ -149,33 +159,33 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
         HasNegotiated = false;
     }
 
-    public bool StartNegotiation(V3PlayerInfo localPlayer, TunnelHandler tunnelHandler, List<CnCNetTunnel> availableTunnels)
+    public NegotiationStartResult StartNegotiation(V3PlayerInfo localPlayer, TunnelHandler tunnelHandler, List<CnCNetTunnel> availableTunnels)
     {
         if (this == localPlayer)
             throw new InvalidOperationException("Cannot start negotiation with yourself.");
 
-        HasNegotiated = false;
-        IsNegotiating = true;
-
         Logger.Log($"V3PlayerInfo: Starting negotiation with {Name} (ID: {Id})");
 
         if (Negotiator != null)
-            return false; // already negotiating; caller must not re-subscribe events
+            return NegotiationStartResult.AlreadyInProgress;
 
         if (availableTunnels.Count == 0)
         {
             Logger.Log($"V3PlayerInfo: No available V3 tunnels for negotiation with {Name} (ID: {Id})");
             HasNegotiated = true;
             IsNegotiating = false;
-            return false;
+            return NegotiationStartResult.Failed;
         }
+
+        HasNegotiated = false;
+        IsNegotiating = true;
 
         var negotiator = new V3PlayerNegotiator(localPlayer, this, availableTunnels, tunnelHandler);
         SetNegotiator(negotiator);
 
         _ = NegotiationWorkerAsync(negotiator);
 
-        return true;
+        return NegotiationStartResult.Started;
     }
 
     /// <summary>
