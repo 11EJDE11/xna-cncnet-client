@@ -422,6 +422,13 @@ public class V3PlayerNegotiator : IDisposable
 
         for (int attempt = 0; attempt < TUNNEL_CHOICE_MAX_RETRIES; attempt++)
         {
+            // Bail if NegotiationFailed (or any other completion signal) has already arrived.
+            if (_negotiationCompletionSource.Task.IsCompleted)
+            {
+                Logger.Log($"V3TunnelNegotiator: Negotiation completion signaled before tunnel choice ack from {_remotePlayer.Name}, aborting retries");
+                return false;
+            }
+
             _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
                 TunnelPacketType.TunnelChoice, pingBytes);
 
@@ -429,14 +436,19 @@ public class V3PlayerNegotiator : IDisposable
 
             try
             {
-                //wait for acknowledgment or timeout
+                //wait for acknowledgment, negotiation failure, or timeout
                 var timeoutTask = Task.Delay(TUNNEL_CHOICE_RETRY_INTERVAL_MS, _negotiationCts.Token);
-                var completedTask = await Task.WhenAny(_tunnelAckReceived.Task, timeoutTask);
+                var completedTask = await Task.WhenAny(_tunnelAckReceived.Task, _negotiationCompletionSource.Task, timeoutTask);
 
                 if (completedTask == _tunnelAckReceived.Task)
                 {
                     Logger.Log($"V3TunnelNegotiator: Acknowledgment received from {_remotePlayer.Name} for {tunnel.Name}");
                     return true;
+                }
+                if (completedTask == _negotiationCompletionSource.Task)
+                {
+                    Logger.Log($"V3TunnelNegotiator: Negotiation completion signaled while waiting for ack from {_remotePlayer.Name}, aborting retries");
+                    return false;
                 }
                 Logger.Log($"V3TunnelNegotiator: No acknowledgment received, retrying... (attempt {attempt + 1}/{TUNNEL_CHOICE_MAX_RETRIES})");
             }
