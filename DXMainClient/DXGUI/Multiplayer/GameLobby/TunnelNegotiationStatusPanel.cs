@@ -179,7 +179,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
             case NegotiationStatus.Succeeded:
                 if (ping.HasValue)
                 {
-                    cell.Text = ping.ToString();
+                    cell.Text = ping.Value.ToString();
                     if (ping.Value.Milliseconds < 50)
                         cell.TextColor = Color.LightGreen;
                     else if (ping.Value.Milliseconds < 100)
