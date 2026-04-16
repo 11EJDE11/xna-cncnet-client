@@ -80,6 +80,9 @@ public class V3PlayerNegotiator : IDisposable
         _tunnelHandler = tunnelHandler;
         _isDecider = localPlayer.Id < remotePlayer.Id;
 
+        if (localPlayer.Id == remotePlayer.Id)
+            Logger.Log($"V3TunnelNegotiator: WARNING - player ID collision between {localPlayer.Name} and {remotePlayer.Name} (ID: {localPlayer.Id}). Both peers will pick the non-decider role and negotiation will deadlock.");
+
         _remotePlayer.InitializeTunnelResults(tunnels);
 
         _tunnelHandler.RegisterV3PacketHandler(_localPlayer.Id, _remotePlayer.Id, OnPacketReceived);
