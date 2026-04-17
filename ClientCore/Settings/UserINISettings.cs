@@ -240,6 +240,7 @@ namespace ClientCore
 
         public IntSetting ScrollRate { get; private set; }
         public IntSetting DragDistance { get; private set; }
+        // When > 0, overrides the auto-scaled DragDistance. Allows players to set a fixed pixel threshold regardless of resolution.
         public IntSetting CustomDragDistance { get; private set; }
         public IntSetting DoubleTapInterval { get; private set; }
         public StringSetting Win8CompatMode { get; private set; }
