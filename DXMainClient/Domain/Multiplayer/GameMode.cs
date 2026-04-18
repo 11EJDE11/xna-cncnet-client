@@ -62,7 +62,7 @@ namespace DTAClient.Domain.Multiplayer
 
         public int? MaxPlayersOverride { get; private set; }
 
-        private string mapCodeININame;
+        private string mapCodeIniPath;
         private List<string> randomizedMapCodeININames;
         private int randomizedMapCodesCount;
 
@@ -89,7 +89,11 @@ namespace DTAClient.Domain.Multiplayer
             MaxPlayersOverride = section.GetIntValueOrNull("MaxPlayersOverride");
 
             forcedOptionsSection = section.GetStringValue("ForcedOptions", string.Empty);
-            mapCodeININame = section.GetStringValue("MapCodeININame", Name + ".ini");
+            string customIniPath = section.GetStringValue("CustomIniPath", string.Empty);
+            string mapCodeININame = section.GetStringValue("MapCodeININame", Name + ".ini");
+            mapCodeIniPath = string.IsNullOrWhiteSpace(customIniPath)
+                ? SafePath.CombineFilePath("INI", "Map Code", mapCodeININame)
+                : customIniPath;
             randomizedMapCodeININames = section.GetStringValue("RandomizedMapCodeININames", string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
             randomizedMapCodesCount = section.GetIntValue("RandomizedMapCodesCount", 1);
 
@@ -152,7 +156,7 @@ namespace DTAClient.Domain.Multiplayer
 
         public List<IniFile> GetMapRulesIniFiles(Random pseudoRandom)
         {
-            var mapRules = new List<IniFile>() { new IniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, BASE_INI_PATH, mapCodeININame)) };
+            var mapRules = new List<IniFile>() { new IniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, mapCodeIniPath)) };
             if (randomizedMapCodeININames.Count == 0)
                 return mapRules;
 
