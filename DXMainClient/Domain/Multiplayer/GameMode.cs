@@ -90,9 +90,9 @@ namespace DTAClient.Domain.Multiplayer
 
             forcedOptionsSection = section.GetStringValue("ForcedOptions", string.Empty);
             string customIniPath = section.GetStringValue("CustomIniPath", string.Empty);
-            string mapCodeININame = section.GetStringValue("MapCodeININame", Name + ".ini");
+            string mapCodeIniName = section.GetStringValue("MapCodeININame", Name + ".ini");
             mapCodeIniPath = string.IsNullOrWhiteSpace(customIniPath)
-                ? SafePath.CombineFilePath("INI", "Map Code", mapCodeININame)
+                ? SafePath.CombineFilePath("INI", "Map Code", mapCodeIniName)
                 : customIniPath;
             randomizedMapCodeININames = section.GetStringValue("RandomizedMapCodeININames", string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
             randomizedMapCodesCount = section.GetIntValue("RandomizedMapCodesCount", 1);
