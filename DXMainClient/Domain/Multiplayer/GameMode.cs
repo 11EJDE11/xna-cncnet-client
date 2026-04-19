@@ -92,7 +92,7 @@ namespace DTAClient.Domain.Multiplayer
             string customIniPath = section.GetStringValue("CustomIniPath", string.Empty);
             string mapCodeIniName = section.GetStringValue("MapCodeININame", Name + ".ini");
             mapCodeIniPath = string.IsNullOrWhiteSpace(customIniPath)
-                ? SafePath.CombineFilePath("INI", "Map Code", mapCodeIniName)
+                ? SafePath.CombineFilePath(BASE_INI_PATH, mapCodeIniName)
                 : customIniPath;
             randomizedMapCodeININames = section.GetStringValue("RandomizedMapCodeININames", string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
             randomizedMapCodesCount = section.GetIntValue("RandomizedMapCodesCount", 1);
