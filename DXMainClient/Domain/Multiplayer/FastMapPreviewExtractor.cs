@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.IO;
 using System.Text;
 
@@ -14,13 +15,13 @@ public class FastMapPreviewExtractor : MapPreviewExtractor, IMapPreviewExtractor
 {
     public static new readonly FastMapPreviewExtractor Instance = new FastMapPreviewExtractor();
 
-    public override Image ExtractMapPreview(string mapFilePath)
+    public override Image? ExtractMapPreview(string mapFilePath)
     {
         string baseFilename = mapFilePath.Replace(ProgramConstants.GamePath, "");
 
         const string hiddenPreviewSentinel = "yAsAIAXQ5PDQ5PDQ6JQATAEE6PDQ4PDI4JgBTAFEAkgAJyAATAG0AydEAEABpAJIA0wBVA";
 
-        string previewSize = null;
+        string? previewSize = null;
         var sb = new StringBuilder();
         bool inPreview = false;
         bool inPreviewPack = false;
