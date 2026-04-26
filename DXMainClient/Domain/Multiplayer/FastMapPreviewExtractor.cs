@@ -26,7 +26,6 @@ public class FastMapPreviewExtractor : MapPreviewExtractor, IMapPreviewExtractor
         bool inPreview = false;
         bool inPreviewPack = false;
         bool hasPreviewPack = false;
-        bool isFirstPreviewPackKey = true;
 
         // Note: we only care about ASCII characters here. Therefore, we use the default UTF-8 encoding reading the file, ignoring the MapCodeHelper.GetMapEncoding() call.
         // Microsoft says using UTF8Encoding is faster than using ASCIIEncoding.
@@ -64,16 +63,12 @@ public class FastMapPreviewExtractor : MapPreviewExtractor, IMapPreviewExtractor
             }
             else if (inPreviewPack)
             {
+                hasPreviewPack = true;
                 string value = line.Substring(equalsIndex + 1).Trim();
-                if (isFirstPreviewPackKey)
+                if (line.Substring(0, equalsIndex).Trim() == "1" && value == hiddenPreviewSentinel)
                 {
-                    hasPreviewPack = true;
-                    isFirstPreviewPackKey = false;
-                    if (line.Substring(0, equalsIndex).Trim() == "1" && value == hiddenPreviewSentinel)
-                    {
-                        Logger.Log("MapPreviewExtractor: " + baseFilename + " - Hidden preview detected, not extracting preview.");
-                        return null;
-                    }
+                    Logger.Log("MapPreviewExtractor: " + baseFilename + " - Hidden preview detected, not extracting preview.");
+                    return null;
                 }
                 sb.Append(value);
             }
