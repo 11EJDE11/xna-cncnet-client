@@ -25,7 +25,7 @@ namespace DTAClient.Domain.Multiplayer
     /// </summary>
     public class MapPreviewExtractor : IMapPreviewExtractor
     {
-        public static MapPreviewExtractor Instance = new MapPreviewExtractor();
+        public static readonly MapPreviewExtractor Instance = new MapPreviewExtractor();
 
         public MapPreviewExtractor() { }
 
