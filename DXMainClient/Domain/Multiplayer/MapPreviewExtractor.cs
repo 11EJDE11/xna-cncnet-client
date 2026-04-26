@@ -1,12 +1,18 @@
 ﻿using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+
 using ClientCore;
-using Rampastring.Tools;
+using ClientCore.Extensions;
+
 using lzo.net;
+
+using Rampastring.Tools;
+
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Memory;
@@ -17,87 +23,52 @@ namespace DTAClient.Domain.Multiplayer
     /// <summary>
     /// A helper class for extracting preview images from maps.
     /// </summary>
-    public static class MapPreviewExtractor
+    public class MapPreviewExtractor : IMapPreviewExtractor
     {
+        public static MapPreviewExtractor Instance = new MapPreviewExtractor();
+
+        public MapPreviewExtractor() { }
+
         /// <summary>
         /// Extracts map preview image as a bitmap.
         /// </summary>
         /// <param name="mapFilePath">Path to the map file.</param>
         /// <returns>Bitmap of map preview image, or null if preview could not be extracted.</returns>
-        public static Image ExtractMapPreview(string mapFilePath)
+        public virtual Image ExtractMapPreview(string mapFilePath)
         {
-            const string hiddenPreviewSentinel = "yAsAIAXQ5PDQ5PDQ6JQATAEE6PDQ4PDI4JgBTAFEAkgAJyAATAG0AydEAEABpAJIA0wBVA";
+            IniFile mapIni = new IniFile(mapFilePath);
+            string baseFilename = mapIni.FileName.Replace(ProgramConstants.GamePath, "");
 
-            string baseFilename = mapFilePath.Replace(ProgramConstants.GamePath, "");
-            string previewSize = null;
-            var sb = new StringBuilder();
-            bool inPreview = false;
-            bool inPreviewPack = false;
-            bool hasPreviewPack = false;
-            bool isFirstPreviewPackKey = true;
+            List<string> sectionKeys = mapIni.GetSectionKeys("PreviewPack");
 
-            foreach (string rawLine in File.ReadLines(mapFilePath))
-            {
-                string line = rawLine;
-                int semicolonIndex = line.IndexOf(';');
-                if (semicolonIndex >= 0)
-                    line = line.Substring(0, semicolonIndex);
-
-                line = line.Trim();
-                if (line.Length == 0)
-                    continue;
-
-                if (line[0] == '[')
-                {
-                    int closeBracket = line.IndexOf(']');
-                    if (closeBracket < 0)
-                        continue;
-                    string sectionName = line.Substring(1, closeBracket - 1);
-                    inPreview = sectionName == "Preview";
-                    inPreviewPack = sectionName == "PreviewPack";
-                    continue;
-                }
-
-                int equalsIndex = line.IndexOf('=');
-                if (equalsIndex < 0)
-                    continue;
-
-                if (inPreview)
-                {
-                    if (line.Substring(0, equalsIndex).Trim() == "Size")
-                        previewSize = line.Substring(equalsIndex + 1).Trim();
-                }
-                else if (inPreviewPack)
-                {
-                    string value = line.Substring(equalsIndex + 1).Trim();
-                    if (isFirstPreviewPackKey)
-                    {
-                        hasPreviewPack = true;
-                        isFirstPreviewPackKey = false;
-                        if (line.Substring(0, equalsIndex).Trim() == "1" && value == hiddenPreviewSentinel)
-                        {
-                            Logger.Log("MapPreviewExtractor: " + baseFilename + " - Hidden preview detected, not extracting preview.");
-                            return null;
-                        }
-                    }
-                    sb.Append(value);
-                }
-            }
-
-            if (!hasPreviewPack)
+            if (sectionKeys == null || sectionKeys.Count == 0)
             {
                 Logger.Log("MapPreviewExtractor: " + baseFilename + " - no [PreviewPack] exists, unable to extract preview.");
                 return null;
             }
 
-            string[] previewSizes = previewSize != null ? previewSize.Split(',') : Array.Empty<string>();
-            int previewWidth = previewSizes.Length > 3 ? Conversions.IntFromString(previewSizes[2].Trim(), -1) : -1;
-            int previewHeight = previewSizes.Length > 3 ? Conversions.IntFromString(previewSizes[3].Trim(), -1) : -1;
+            if (mapIni.GetStringValue("PreviewPack", "1", string.Empty) ==
+                "yAsAIAXQ5PDQ5PDQ6JQATAEE6PDQ4PDI4JgBTAFEAkgAJyAATAG0AydEAEABpAJIA0wBVA")
+            {
+                Logger.Log("MapPreviewExtractor: " + baseFilename + " - Hidden preview detected, not extracting preview.");
+                return null;
+            }
+
+            string[] previewSizes = mapIni.GetStringListValue("Preview", "Size", string.Empty);
+            int previewWidth = previewSizes.Length > 3 ? Conversions.IntFromString(previewSizes[2], -1) : -1;
+            int previewHeight = previewSizes.Length > 3 ? Conversions.IntFromString(previewSizes[3], -1) : -1;
 
             if (previewWidth < 1 || previewHeight < 1)
             {
                 Logger.Log("MapPreviewExtractor: " + baseFilename + " - [Preview] Size value is invalid, unable to extract preview.");
                 return null;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            if (sectionKeys != null)
+            {
+                foreach (string key in sectionKeys)
+                    sb.Append(mapIni.GetStringValue("PreviewPack", key, string.Empty));
             }
 
             byte[] dataSource;
@@ -138,7 +109,7 @@ namespace DTAClient.Domain.Multiplayer
         /// <param name="decompressedDataSize">Size of decompressed preview image data.</param>
         /// <param name="errorMessage">Will be set to error message if something went wrong, otherwise null.</param>
         /// <returns>Array of decompressed preview image data if successfully decompressed, otherwise null.</returns>
-        private static byte[] DecompressPreviewData(byte[] dataSource, int decompressedDataSize, out string errorMessage)
+        protected byte[] DecompressPreviewData(byte[] dataSource, int decompressedDataSize, out string errorMessage)
         {
             try
             {
@@ -189,7 +160,7 @@ namespace DTAClient.Domain.Multiplayer
         /// <param name="imageData">Raw image pixel data in 24-bit RGB format.</param>
         /// <param name="errorMessage">Will be set to error message if something went wrong, otherwise null.</param>
         /// <returns>Bitmap based on the provided dimensions and raw image data, or null if length of image data does not match the provided dimensions or if something went wrong.</returns>
-        private static Image CreatePreviewBitmapFromImageData(int width, int height, byte[] imageData, out string errorMessage)
+        protected Image CreatePreviewBitmapFromImageData(int width, int height, byte[] imageData, out string errorMessage)
         {
             const int pixelFormatBitCount = 24;
             const int pixelFormatByteCount = pixelFormatBitCount / 8;
