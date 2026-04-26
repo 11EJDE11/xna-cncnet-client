@@ -34,7 +34,7 @@ namespace DTAClient.Domain.Multiplayer
         /// </summary>
         /// <param name="mapFilePath">Path to the map file.</param>
         /// <returns>Bitmap of map preview image, or null if preview could not be extracted.</returns>
-        public virtual Image? ExtractMapPreview(string mapFilePath)
+        public virtual Image ExtractMapPreview(string mapFilePath)
         {
             IniFile mapIni = new IniFile(mapFilePath);
             string baseFilename = mapIni.FileName.Replace(ProgramConstants.GamePath, "");
