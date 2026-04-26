@@ -28,6 +28,9 @@ public class FastMapPreviewExtractor : MapPreviewExtractor, IMapPreviewExtractor
         bool hasPreviewPack = false;
         bool isFirstPreviewPackKey = true;
 
+        // Note: we only care about ASCII characters here. Therefore, we use the default UTF-8 encoding reading the file, ignoring the MapCodeHelper.GetMapEncoding() call.
+        // Microsoft says using UTF8Encoding is faster than using ASCIIEncoding.
+        // Ref: https://learn.microsoft.com/en-us/dotnet/standard/base-types/character-encoding
         foreach (string rawLine in File.ReadLines(mapFilePath))
         {
             string line = rawLine;
