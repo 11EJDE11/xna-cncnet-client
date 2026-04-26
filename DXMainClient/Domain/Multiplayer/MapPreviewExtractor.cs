@@ -33,6 +33,7 @@ namespace DTAClient.Domain.Multiplayer
         /// Extracts map preview image as a bitmap.
         /// </summary>
         /// <param name="mapFilePath">Path to the map file.</param>
+        /// <remarks>This method is not optimized for speed. It should have exact behavior as FastMapPreviewExtractor.ExtractMapPreview(). Any changes to this method must be carefully ported to FastMapPreviewExtractor.ExtractMapPreview() to ensure the two methods remain in sync, and vice versa.</remarks>
         /// <returns>Bitmap of map preview image, or null if preview could not be extracted.</returns>
         public virtual Image ExtractMapPreview(string mapFilePath)
         {

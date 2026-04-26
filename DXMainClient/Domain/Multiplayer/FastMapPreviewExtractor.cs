@@ -15,6 +15,12 @@ public class FastMapPreviewExtractor : MapPreviewExtractor, IMapPreviewExtractor
 {
     public static new readonly FastMapPreviewExtractor Instance = new FastMapPreviewExtractor();
 
+    /// <summary>
+    /// Extracts map preview image as a bitmap.
+    /// </summary>
+    /// <param name="mapFilePath">Path to the map file.</param>
+    /// <remarks>This method is optimized for speed. It should have exact behavior as MapPreviewExtractor.ExtractMapPreview(). Any changes to this method must be carefully ported to MapPreviewExtractor.ExtractMapPreview() to ensure the two methods remain in sync, and vice versa.</remarks>
+    /// <returns>Bitmap of map preview image, or null if preview could not be extracted.</returns>
     public override Image? ExtractMapPreview(string mapFilePath)
     {
         string baseFilename = mapFilePath.Replace(ProgramConstants.GamePath, "");
