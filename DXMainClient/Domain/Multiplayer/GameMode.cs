@@ -90,7 +90,8 @@ namespace DTAClient.Domain.Multiplayer
 
             forcedOptionsSection = section.GetStringValue("ForcedOptions", string.Empty);
             string customIniPath = section.GetStringValue("CustomIniPath", string.Empty);
-            string mapCodeIniName = section.GetStringValue("MapCodeININame", Name + ".ini");
+            string mapCodeIniName = section.GetStringValue("MapCodeIniName",
+                section.GetStringValue("MapCodeININame", Name + ".ini"));
             mapCodeIniPath = string.IsNullOrWhiteSpace(customIniPath)
                 ? SafePath.CombineFilePath(BASE_INI_PATH, mapCodeIniName)
                 : customIniPath;
