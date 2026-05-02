@@ -297,7 +297,7 @@ Please follow the guideline below. We assume you have a Windows 10/11 PC, but si
 
 3. Is there a "Load Bitmap Font" dialog?
     - Yes. This means your TTF/OTF file MUST be preprocessed. Select a font size (e.g. 14 px) and click "OK". Remember the size you chose. Jump to Step 5.
-    - No. Your font file should work fine without preprocessing *under a 100% scaling only*. However, considered that users might have a high DPI monitor, the client might displays itself at a different scaling like 200%, and in this case, a non-preprocessed font file may look blurrier than expected.
+    - No. Your font file should work fine without preprocessing. However, you might still want to preprocess it if you prefer the pixel-perfect rendering style, but be sure to check the rendering quality in the end. Most fonts will look worse after preprocessing, but Arial and Microsoft Sans Serif are exceptions. Jump to Step 4 if you want to preprocess it, otherwise use the original TTF/OTF file directly in your `Fonts.ini` without preprocessing.
 
 The dialog should look like this:
 
