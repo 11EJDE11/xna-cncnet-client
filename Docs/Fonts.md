@@ -397,10 +397,10 @@ Choose SpriteFont if:
 2. You want a pixel-perfect, non-anti-aliased rendering style.
 3. You don't need fallback for missing characters.
 4. You don't care about RTL text or complex scripts.
-5. You need only ~10000 characters or less.
+5. You need only ~10,000 characters or less.
 
 Choose TTF/OTF if:
-1. You don't mind the additional rendering overhead.
+1. You don't mind the additional font rendering overhead.
 2. You don't mind a slightly blurrier rendering style.
 3. You need fallback for missing characters.
 4. You need proper support for RTL text and complex scripts.
