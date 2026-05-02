@@ -90,12 +90,11 @@ namespace DTAClient.Domain.Multiplayer
 
             forcedOptionsSection = section.GetStringValue("ForcedOptions", string.Empty);
             string customIniPath = section.GetStringValue("CustomIniPath", string.Empty);
-            string mapCodeIniName = section.GetStringValue("MapCodeIniName",
-                section.GetStringValue("MapCodeININame", Name + ".ini"));
+            mapCodeININame = section.GetStringValue("MapCodeIniName", section.GetStringValue("MapCodeININame", Name + ".ini"));
             mapCodeIniPath = string.IsNullOrWhiteSpace(customIniPath)
                 ? SafePath.CombineFilePath(BASE_INI_PATH, mapCodeIniName)
                 : customIniPath;
-            randomizedMapCodeININames = section.GetStringValue("RandomizedMapCodeININames", string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+            randomizedMapCodeININames = section.GetStringValue("RandomizedMapCodeIniNames", section.GetStringValue("RandomizedMapCodeININames", string.Empty)).Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
             randomizedMapCodesCount = section.GetIntValue("RandomizedMapCodesCount", 1);
 
             DisallowedPlayerSides = section.GetListValue("DisallowedPlayerSides", ',', int.Parse);
