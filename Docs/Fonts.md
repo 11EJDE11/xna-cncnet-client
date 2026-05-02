@@ -9,7 +9,7 @@ The client supports two font types:
 
 Font configuration is done via `Fonts.ini` placed in your `Resources` directory.
 
-**Warning:** The TTF/OTF font file might need to be preprocessed for an optimal rendering experience. Please explicitly follow the instructions in "Preprocess font files" section to preprocess your font files. **Do not just copy existing TTF/OTF files!**
+**Warning:** The TTF/OTF font file *might* need to be preprocessed for an optimal rendering experience. Please explicitly follow the instructions in "Preprocess font files" section to preprocess your font files.
 
 ## Fonts.ini location
 
@@ -112,19 +112,25 @@ myLabel.FontIndex = 1;
 ```
 
 ## Recommended fonts
+For English text:
+- [MozillaText-Bold.ttf](https://fonts.google.com/specimen/Mozilla+Text).
 
-Due to our technical limitations, only a small subset of TTF/OTF fonts render well in the client. The recommendation does not mean other fonts are "bad" -- it's our rendering engine just happens to work better with certain font designs than others.
+For CJK text:
+- A Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese).
+
+
+## Recommended pixel-perfect fonts
+
+If you prefer a pixel-perfect, non anti-aliased font rendering, which is close to the current SpriteFont rendering style, only a small subset of TTF/OTF fonts render well in the client.
 
 For English text:
-- arial.ttf provided by Windows. It looks good after preprocessing at 14 px.
-- micross.ttf provided by Windows. It looks good after preprocessing at 14 px.
-- [MozillaText-Bold.ttf](https://fonts.google.com/specimen/Mozilla+Text). However, it looks worse after preprocessing, and without preprocessing it looks blurry, especially when the client scales.
+- Arial `arial.ttf` provided by Windows. It looks sharp after preprocessing at 14 px.
+- Microsoft Sans Serif `micross.ttf` provided by Windows. It looks sharp after preprocessing at 14 px.
 
-For CJK fallback, consider one of the following options:
+For CJK text, consider one of the following options:
 - [GNU Unifont](https://unifoundry.com/unifont/). It has broad Unicode coverage and has pixel-perfect rendering. It supports 16 px as the font size ONLY. Does not have bold/italic variants.
-- The default Windows Chinese font, SimSum. It has pixel-perfect rendering on multiple sizes (we recommend 14 pixel) but you MUST follow the "Preprocess font files" instructions below to preprocess the font file before use. Does not have bold/italic variants.
 - [WenQuanYi Bitmap Song TTF](https://github.com/AmusementClub/WenQuanYi-Bitmap-Song-TTF). This is already a "preprocessed" font with pixel-perfect rendering. Note that the font size does not correspond to the claimed size in the filename, say you need to specifiy `Size=15` for `WenQuanYi.Bitmap.Song.14px.ttf`. Does not have bold/italic variants.
-- A Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese). However, they look worse after preprocessing, and without preprocessing they look blurry, especially when the client scales.
+- The default Windows Chinese font, SimSum `simsun.ttc`. It has pixel-perfect rendering on multiple sizes (we recommend 14 pixel) but you MUST follow the "Preprocess font files" instructions below to preprocess the font file before use. Does not have bold/italic variants.
 
 ## Examples
 
