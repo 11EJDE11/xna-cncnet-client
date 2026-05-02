@@ -71,6 +71,9 @@ namespace DTAClient
 
             Task.Run(MigrateOldLogFiles);
 
+            // Start INI file preprocessor
+            PreprocessorBackgroundTask.Instance.Run();
+
             DirectoryInfo updaterFolder = SafePath.GetDirectory(ProgramConstants.GamePath, "Updater");
 
             if (updaterFolder.Exists)
@@ -118,17 +121,14 @@ namespace DTAClient
                 }
             }
 
-            FinalSunSettings.WriteFinalSunIni();
+            FinalSunSettings.WriteFinalSunIniAsync();
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 WriteInstallPathToRegistry();
 
             ClientConfiguration.Instance.RefreshSettings();
 
-            // Start INI file preprocessor
-            PreprocessorBackgroundTask.Instance.Run();
-
-            GameClass gameClass = new GameClass();
+            using GameClass gameClass = new GameClass();
 
             if (!UserINISettings.Instance.BorderlessWindowedClient)
             {

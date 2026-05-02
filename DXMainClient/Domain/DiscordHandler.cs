@@ -14,6 +14,7 @@ namespace DTAClient.Domain
     /// </summary>
     public class DiscordHandler: IDisposable
     {
+        private const int MaxDiscordPresenceTextLength = 128;
         private DiscordRpcClient client;
 
         private RichPresence _currentPresence;
@@ -158,13 +159,13 @@ namespace DTAClient.Domain
                 stateString += "🔒";
             CurrentPresence = new RichPresence()
             {
-                State = stateString,
-                Details = $"{type} • {map} • {mode}",
+                State = TrimDiscordPresenceText(stateString),
+                Details = TrimDiscordPresenceText($"{type} • {map} • {mode}"),
                 Assets = new Assets()
                 {
                     LargeImageKey = "logo",
                     SmallImageKey = sideKey,
-                    SmallImageText = side
+                    SmallImageText = TrimDiscordPresenceText(side)
                 },
                 Timestamps = (client?.CurrentPresence.HasTimestamps() ?? false) && !resetTimer ?
                     client.CurrentPresence.Timestamps : Timestamps.Now
@@ -184,8 +185,8 @@ namespace DTAClient.Domain
                 stateString += "👑";
             CurrentPresence = new RichPresence()
             {
-                State = stateString,
-                Details = $"{type} • {map} • {mode}",
+                State = TrimDiscordPresenceText(stateString),
+                Details = TrimDiscordPresenceText($"{type} • {map} • {mode}"),
                 Assets = new Assets()
                 {
                     LargeImageKey = "logo"
@@ -203,13 +204,13 @@ namespace DTAClient.Domain
             string sideKey = new Regex("[^a-zA-Z0-9]").Replace(side.ToLower(), "");
             CurrentPresence = new RichPresence()
             {
-                State = $"{state}",
-                Details = $"Skirmish • {map} • {mode}",
+                State = TrimDiscordPresenceText(state),
+                Details = TrimDiscordPresenceText($"Skirmish • {map} • {mode}"),
                 Assets = new Assets()
                 {
                     LargeImageKey = "logo",
                     SmallImageKey = sideKey,
-                    SmallImageText = side
+                    SmallImageText = TrimDiscordPresenceText(side)
                 },
                 Timestamps = (client?.CurrentPresence.HasTimestamps() ?? false) && !resetTimer ?
                     client.CurrentPresence.Timestamps : Timestamps.Now
@@ -225,12 +226,12 @@ namespace DTAClient.Domain
             CurrentPresence = new RichPresence()
             {
                 State = "Playing Mission",
-                Details = $"{mission} • {difficulty}",
+                Details = TrimDiscordPresenceText($"{mission} • {difficulty}"),
                 Assets = new Assets()
                 {
                     LargeImageKey = "logo",
                     SmallImageKey = sideKey,
-                    SmallImageText = side
+                    SmallImageText = TrimDiscordPresenceText(side)
                 },
                 Timestamps = (client?.CurrentPresence.HasTimestamps() ?? false) && !resetTimer ?
                     client.CurrentPresence.Timestamps : Timestamps.Now
@@ -245,7 +246,7 @@ namespace DTAClient.Domain
             CurrentPresence = new RichPresence()
             {
                 State = "Playing Saved Game",
-                Details = $"{save}",
+                Details = TrimDiscordPresenceText(save),
                 Assets = new Assets()
                 {
                     LargeImageKey = "logo"
@@ -253,6 +254,14 @@ namespace DTAClient.Domain
                 Timestamps = (client?.CurrentPresence.HasTimestamps() ?? false) && !resetTimer ?
                     client.CurrentPresence.Timestamps : Timestamps.Now
             };
+        }
+
+        private static string TrimDiscordPresenceText(string value)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= MaxDiscordPresenceTextLength)
+                return value;
+
+            return value.Substring(0, MaxDiscordPresenceTextLength - 3) + "...";
         }
 
         #endregion
