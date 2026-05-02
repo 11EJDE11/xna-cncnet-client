@@ -9,8 +9,6 @@ The client supports two font types:
 
 Font configuration is done via `Fonts.ini` placed in your `Resources` directory.
 
-**Warning:** The TTF/OTF font file *might* need to be preprocessed for an optimal rendering experience. Please explicitly follow the instructions in "Preprocess font files" section to preprocess your font files.
-
 ## Fonts.ini location
 
 The client searches for `Fonts.ini` in this order, loading the first one found:
@@ -113,15 +111,16 @@ myLabel.FontIndex = 1;
 
 ## Recommended fonts
 For English text:
-- [MozillaText-Bold.ttf](https://fonts.google.com/specimen/Mozilla+Text).
+- [Roboto_SemiCondensed-Medium.ttf](https://fonts.google.com/specimen/Roboto).
+- [MozillaText-Medium.ttf](https://fonts.google.com/specimen/Mozilla+Text).
 
 For CJK text:
-- A Noto CJK font such as [NotoSansSC-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Regular.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese).
+- A Noto CJK font such as [NotoSansSC-Medium.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Medium.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Medium.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese).
 
 
 ## Recommended pixel-perfect fonts
 
-If you prefer a pixel-perfect, non anti-aliased font rendering, which is close to the current SpriteFont rendering style, only a small subset of TTF/OTF fonts render well in the client.
+If you prefer the current SpriteFont rendering style, which is a pixel-perfect, sharp, non-anti-aliased font rendering, you can only choose a small subset of TTF/OTF fonts, and you must preprocess them.
 
 For English text:
 - Arial `arial.ttf` provided by Windows. It looks sharp after preprocessing at 14 px.
@@ -183,36 +182,36 @@ Count=6
 
 [Font0]
 Type=TrueType
-Path=NotoSansKR-Regular.ttf
+Path=NotoSansKR-Medium.ttf
 Size=14
 Fallback=4
 
 [Font1]
 Type=TrueType
-Path=NotoSansKR-Regular.ttf
+Path=NotoSansKR-Medium.ttf
 Size=16
 Fallback=4
 
 [Font2]
 Type=TrueType
-Path=NotoSansKR-Regular.ttf
+Path=NotoSansKR-Medium.ttf
 Size=18
 Fallback=5
 
 [Font3]
 Type=TrueType
-Path=NotoSansKR-Bold.ttf
+Path=NotoSansKR-Medium.ttf
 Size=20
 Fallback=5
 
 [Font4]
 Type=TrueType
-Path=NotoSansSC-Regular.ttf
+Path=NotoSansSC-Medium.ttf
 Size=14
 
 [Font5]
 Type=TrueType
-Path=NotoSansSC-Regular.ttf
+Path=NotoSansSC-Medium.ttf
 Size=18
 ```
 
@@ -255,7 +254,7 @@ Fallback=4
 
 [Font4]
 Type=TrueType
-Path=NotoSansSC-Regular.ttf
+Path=NotoSansSC-Medium.ttf
 Size=16
 ```
 
@@ -286,7 +285,7 @@ The `.xnb` extension is optional in the `Path` — it will be added automaticall
 
 ## Preprocess font files
 
-We recommend preprocessing TTF/OTF font files for the best rendering quality at a fixed size only.
+We recommend preprocessing TTF/OTF font files if you prefer the pixel-perfect rendering style similar to SpriteFont. Preprocessing generates a new TTF file with vector outlines optimized for a specific pixel size, which can significantly improve the rendering quality for certain fonts, especially CJK fonts with embedded bitmaps. However, not all fonts look better after preprocessing. Some might have a weird appearance.
 
 Please follow the guideline below. We assume you have a Windows 10/11 PC, but similar steps should also work on Linux/Mac.
 
@@ -377,8 +376,6 @@ Some TTF/OTF fonts (especially CJK fonts like SimSun or WenQuanYi Zen Hei) conta
 
 If you need pixel-perfect CJK rendering, either use a font whose vector outlines are already optimized for a specific pixel size (e.g., [Unifont](https://unifoundry.com/unifont/index.html) in 16 px, which has its bitmap data converted to vector outlines), or follow the "Preprocess font files" instructions above. In either case, there is only one optimal size for the font, and using it at other sizes may look worse.
 
-Even if your font does not contain embedded bitmaps, preprocessing can still improve the rendering quality, and therefore we recommend preprocessing for all fonts.
-
 ### SpriteFont has no fallback
 
 SpriteFont indexes cannot use the `Fallback` property. If you need fallback for missing characters, use TrueType fonts for all your font indexes.
@@ -393,29 +390,25 @@ Some fonts, especially CJK fonts like SimSun, only provide a regular weight with
 
 ## Frequently Asked Questions
 
-### Are all TTF/OTF fonts supported? Why do some fonts look blurrier than others?
+### How should I choose between TTF/OTF and SpriteFont? 
 
-Unfortunately, not all TTF/OTF fonts perform well when rendered in a small font size. You can try preprocessing the font file as described in the "Preprocess font files" section to improve the rendering quality. If the font looks weird after preprocessing, we have no solutions. Note that this is a technical limitation of our rendering engine, not a problem with the font file itself.
+Choose SpriteFont if:
+1. You want extreme performance.
+2. You want a pixel-perfect, non-anti-aliased rendering style.
+3. You don't need fallback for missing characters.
+4. You don't care about RTL text or complex scripts.
+5. You need only ~10000 characters or less.
 
-### Why do I need to use a TTF/OTF font over SpriteFont? Especially considering that I need to manually preprocess the font file to a fixed size, which means they are bitmap fonts in practice.
-
-1. TrueType fonts support fallback, which is essential for rendering characters not covered by the primary font (e.g., CJK characters in an English font). SpriteFont has no fallback mechanism.
-
-2. We have HarfBuzz text shaping support for TrueType fonts, which is required for proper rendering of complex scripts (Arabic, Hebrew) and emojis. SpriteFont does not support HarfBuzz shaping.
-
-3. Even if you have to preprocess TTF/OTF font files, the overall workflow is notably faster compared to making a SpriteFont using XNAContentCompiler. Generating a SpriteFont can take a few days if you need to cover a large character set like Chinese, while preprocessing a TTF file only takes a few minutes.
-
-### Must I preprocess TTF/OTF font files? Can't I just use the original TTF/OTF files directly?
-
-Technically you can, but you might find that fonts look blurrier than expected due to the reasons explained in the "Known limitations" section. Preprocessing generates a new TTF file with vector outlines optimized for a specific pixel size, which can significantly improve the rendering quality for certain fonts. However, not all fonts look better after preprocessing. Some might have a weird appearance.
+Choose TTF/OTF if:
+1. You don't mind the additional rendering overhead.
+2. You don't mind a slightly blurrier rendering style.
+3. You need fallback for missing characters.
+4. You need proper support for RTL text and complex scripts.
+5. You need to cover a large character set.
 
 ### Can I use the preprocessed TTF font files as regular TTF fonts for other applications?
 
 Definitely not! The preprocessed TTF files are essentially vectorized bitmap fonts that only look good at the specific size they were preprocessed for. Using them at other sizes or in other applications will likely result in poor rendering quality.
-
-### Why can other applications use the original TTF/OTF files but the client requires preprocessing? That's so inconvenient!
-
-Well, the client is built on Rampastring.XNAUI, rebuilding all kinds of GUI elements from scratch, including font rendering. The preprocessing step is the only feasible way to achieve good rendering quality within a reasonable amount of development time. Due to historical reasons, the client does not follow MVVM architecture and does not have a clear separation between UI and logic. It would take many man-hours and LLM tokens to refactor the entire codebase to integrate the client with a modern UI library; therefore, we don't think it's worth doing, especially considering that the games the client serves also work on bitmap assets.
 
 ## Troubleshooting
 
