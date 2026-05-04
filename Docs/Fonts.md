@@ -78,7 +78,7 @@ Font paths are relative to the directory containing `Fonts.ini`. Both `/` and `\
 |----------|-----------|-------------|
 | `Type` | Both | `TrueType` or `SpriteFont` |
 | `Path` | Both | File path relative to `Fonts.ini` directory. For SpriteFont, the `.xnb` extension is optional — it is stripped and re-appended automatically. |
-| `Size` | TrueType | Font height in pixels. This is the em-square height passed to FreeType via `FT_Set_Pixel_Sizes`. The actual rendered height of characters may be slightly smaller depending on the font's metrics. |
+| `Size` | TrueType | Font height in pixels. This is the em-square height. The actual rendered height of characters may be slightly smaller depending on the font's metrics. Ignored for fallback fonts. |
 | `Fallback` | TrueType | Index of another TrueType font to use when a character is not found. The chain is followed recursively. Circular references are detected and ignored. |
 
 ## Character fallback
