@@ -36,9 +36,9 @@ Count=6   ; Total number of defined font indexes, including fallback fonts.
 [Font0]
 Type=TrueType               ; Type: "TrueType" or "SpriteFont"
 Path=MozillaText-Bold.ttf   ; Path relative to the directory containing Fonts.ini
-Size=14           ; Font height in pixels (TrueType only; ignored for SpriteFont)
-Fallback=4        ; Optional. Index of the font to try when a character is missing.
-                  ; The fallback font's own Fallback is followed recursively.
+Size=14                     ; Font height in pixels (TrueType only; ignored for SpriteFont)
+Fallback=4                  ; Optional. Index of the font to try when a character is missing.
+                            ; The fallback font's own Fallback is followed recursively.
 
 [Font1]
 Type=TrueType
