@@ -321,7 +321,7 @@ The dialog should look like this:
     - Yes. Jump to Step 11.
     - No. This means the extracted bitmap font does not contain basic ASCII characters, and you need to merge it with another font that contains the missing characters as a fallback target.
 
-9. This step is only for users who need to provide fallback characters. Select a basic font, e.g., `micross.ttf`, `arial.ttf`. Open it with FontForge. Repeat Step 2 to Step 8 for this font, saving the font as `secondary.bdf`.
+9. This step is only for users who need to provide fallback characters. Select a basic font, e.g., `micross.ttf`, `arial.ttf`. Open it with FontForge. Repeat Step 2 to Step 7 for this font, saving the font as `secondary.bdf`.
 
 10. Use https://github.com/SadPencil/BdfToolSP to merge `myfont.bdf` and `secondary.bdf` into `merged.bdf`. Rename `merged.bdf` to `myfont.bdf`. Again, it's strongly recommended to run the merge command with `--font-name` parameter to set up a unique font name, to avoid conflicts.
 
