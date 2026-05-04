@@ -56,7 +56,38 @@ namespace DTAClient
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
 #endif
 #endif
+
+#if NETFRAMEWORK
+            // Native libs (e.g. libHarfBuzzSharp.dll from HarfBuzzSharp.NativeAssets.Win32)
+            // ship under SPECIFIC_LIBRARY_PATH/{x64|x86|arm64}/. The .NET Framework runtime
+            // does not search those subfolders by default, and HarfBuzzSharp's resolver looks
+            // beside the EXE rather than beside its managed wrapper - so without help, P/Invoke
+            // calls fail with "Unable to load library 'libHarfBuzzSharp'".
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                string archSubfolder = RuntimeInformation.ProcessArchitecture switch
+                {
+                    Architecture.X64 => "x64",
+                    Architecture.X86 => "x86",
+                    Architecture.Arm64 => "arm64",
+                    _ => null
+                };
+
+                if (archSubfolder is not null)
+                {
+                    string nativeDir = Path.Combine(SPECIFIC_LIBRARY_PATH, archSubfolder);
+                    if (Directory.Exists(nativeDir))
+                        SetDllDirectory(nativeDir);
+                }
+            }
+#endif
         }
+
+#if NETFRAMEWORK
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern bool SetDllDirectory(string lpPathName);
+#endif
 
         private static string COMMON_LIBRARY_PATH;
         private static string SPECIFIC_LIBRARY_PATH;
