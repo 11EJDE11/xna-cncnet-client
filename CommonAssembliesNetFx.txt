@@ -1,5 +1,6 @@
 ClientUpdater.dll
 ClientUpdater.pdb
+arm64\libHarfBuzzSharp.dll
 Cyotek.Drawing.BitmapFont.dll
 DiscordRPC.dll
 Facepunch.Steamworks.Win64.dll
@@ -63,3 +64,5 @@ System.Text.Json.dll
 System.Threading.Tasks.Extensions.dll
 System.ValueTuple.dll
 TextCopy.dll
+x64\libHarfBuzzSharp.dll
+x86\libHarfBuzzSharp.dll

@@ -35,14 +35,16 @@ $Script:Engines | ForEach-Object {
   [string]$Private:Engine = $PSItem
   [string]$Private:PlatformFolder = Join-Path $Binaries $Private:Engine
 
-  Get-ChildItem $Private:PlatformFolder | Where-Object {
+  Get-ChildItem $Private:PlatformFolder -Recurse | Where-Object {
     $PSItem -is [System.IO.FileInfo]
   } | ForEach-Object {
-    if (!$Script:FileHashTable.ContainsKey($PSItem.Name)) {
-      $Script:FileHashTable[$PSItem.Name] = [hashtable]@{}
+    [string]$Private:RelativePath = [System.IO.Path]::GetRelativePath($Private:PlatformFolder, $PSItem.FullName)
+
+    if (!$Script:FileHashTable.ContainsKey($Private:RelativePath)) {
+      $Script:FileHashTable[$Private:RelativePath] = [hashtable]@{}
     }
 
-    $Script:FileHashTable[$PSItem.Name][$Engine] = Get-FileHash $PSItem
+    $Script:FileHashTable[$Private:RelativePath][$Engine] = Get-FileHash $PSItem
   }
 }
 
