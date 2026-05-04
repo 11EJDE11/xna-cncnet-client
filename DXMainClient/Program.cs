@@ -59,7 +59,8 @@ namespace DTAClient
 
 #if NETFRAMEWORK
             // Native libs (e.g. libHarfBuzzSharp.dll from HarfBuzzSharp.NativeAssets.Win32)
-            // ship under SPECIFIC_LIBRARY_PATH/{x64|x86|arm64}/. The .NET Framework runtime
+            // ship under either SPECIFIC_LIBRARY_PATH/{x64|x86|arm64}/
+            // or COMMON_LIBRARY_PATH/{x64|x86|arm64}/. The .NET Framework runtime
             // does not search those subfolders by default, and HarfBuzzSharp's resolver looks
             // beside the EXE rather than beside its managed wrapper - so without help, P/Invoke
             // calls fail with "Unable to load library 'libHarfBuzzSharp'".
