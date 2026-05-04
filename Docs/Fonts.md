@@ -28,7 +28,7 @@ This lets translations supply their own fonts without touching the base configur
 ; Disable for simple Latin-only text (English, Spanish, French) for better performance.
 Enabled=true
 EnableBiDi=true       ; Bidirectional text support (mixed LTR/RTL)
-CacheSize=1000        ; Shaped text cache entries. Use 1000+ for CJK languages.
+CacheSize=100         ; Shaped text cache entries.
 
 [Fonts]
 Count=6   ; Total number of font indexes to define
@@ -175,7 +175,7 @@ Korean font as primary, Chinese font as fallback for any characters the Korean f
 [TextShaping]
 Enabled=true
 EnableBiDi=false
-CacheSize=1000
+CacheSize=100
 
 [Fonts]
 Count=6
