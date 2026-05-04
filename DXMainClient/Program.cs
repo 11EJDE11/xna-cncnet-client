@@ -65,6 +65,8 @@ namespace DTAClient
             // calls fail with "Unable to load library 'libHarfBuzzSharp'".
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
+                SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+
                 string archSubfolder = RuntimeInformation.ProcessArchitecture switch
                 {
                     Architecture.X64 => "x64",
@@ -75,9 +77,14 @@ namespace DTAClient
 
                 if (archSubfolder is not null)
                 {
-                    string nativeDir = Path.Combine(SPECIFIC_LIBRARY_PATH, archSubfolder);
-                    if (Directory.Exists(nativeDir))
-                        SetDllDirectory(nativeDir);
+                    void addDllDirectoryIfExists(string path)
+                    {
+                        if (Directory.Exists(path))
+                            AddDllDirectory(path);
+                    }
+
+                    addDllDirectoryIfExists(Path.Combine(SPECIFIC_LIBRARY_PATH, archSubfolder));
+                    addDllDirectoryIfExists(Path.Combine(COMMON_LIBRARY_PATH, archSubfolder));
                 }
             }
 #endif
@@ -87,6 +94,19 @@ namespace DTAClient
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         private static extern bool SetDllDirectory(string lpPathName);
+
+        private const int LOAD_LIBRARY_SEARCH_APPLICATION_DIR = 0x00000200;
+        private const int LOAD_LIBRARY_SEARCH_USER_DIRS = 0x00000400;
+        private const int LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800;
+        private const int LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000;
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern bool SetDefaultDllDirectories(int directoryFlags);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern IntPtr AddDllDirectory(string lpPathName);
 #endif
 
         private static string COMMON_LIBRARY_PATH;
