@@ -372,7 +372,7 @@ for i, font in enumerate(ttc):
 
 Some TTF/OTF fonts (especially CJK fonts like SimSun or WenQuanYi Zen Hei) contain embedded bitmap glyphs optimised for specific sizes. FontStashSharp does not use these embedded bitmaps — it always rasterizes from the vector outlines. This means these fonts may look blurrier than expected at their intended pixel sizes.
 
-If you need pixel-perfect CJK rendering, either use a font whose vector outlines are already optimized for a specific pixel size (e.g., [Unifont](https://unifoundry.com/unifont/index.html) in 16 px, which has its bitmap data converted to vector outlines), or follow the "Preprocess font files" instructions above. In either case, there is only one optimal size for the font, and using it at other sizes may look worse.
+If you need pixel-perfect CJK rendering, either use a font whose vector outlines are already optimized for a specific pixel size (e.g., [Unifont](https://unifoundry.com/unifont/index.html) in 16 px, which has its bitmap data converted to vector outlines), or follow the "Preprocess font files" instructions above. In either case, there is only one optimal size for a preprocessed font, and using it at other sizes may look worse.
 
 ### SpriteFont has no fallback
 
@@ -416,4 +416,4 @@ Definitely not! The preprocessed TTF files are essentially vectorized bitmap fon
 
 **Characters render as `?`** — the character isn't in any font in the fallback chain. Add a font that covers it as a fallback target and set `Fallback` on the font index.
 
-**Performance issues** — disable `TextShaping` if not needed, reduce fallback chain length, and lower `CacheSize` if memory is tight.
+**Performance issues** — disable `TextShaping` if not needed, reduce fallback chain length, increase `CacheSize` if CPU or GPU usage is high, and decrease `CacheSize` if memory usage is high.
