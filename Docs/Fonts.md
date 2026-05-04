@@ -13,9 +13,9 @@ Font configuration is done via `Fonts.ini` placed in your `Resources` directory.
 
 The client searches for `Fonts.ini` in this order, loading the first one found:
 
-1. Translation+Theme folder (e.g. `Translations/Korean/Allied/Fonts.ini`)
+1. Translation+Theme folder (e.g. `Translations/ko-KR/Allied/Fonts.ini`)
 2. Theme folder (e.g. `Resources/Allied/Fonts.ini`)
-3. Translation folder (e.g. `Translations/Korean/Fonts.ini`)
+3. Translation folder (e.g. `Translations/ko-KR/Fonts.ini`)
 4. Base resources folder (`Resources/Fonts.ini`)
 
 This lets translations supply their own fonts without touching the base configuration.
@@ -25,7 +25,7 @@ This lets translations supply their own fonts without touching the base configur
 ```ini
 [TextShaping]
 ; HarfBuzz text shaping. Required for complex scripts (Arabic, Hebrew) and ZWJ emoji.
-; Disable for simple Latin-only text (English, Spanish, French) for better performance.
+; Disable for simple Latin-only text (English, Spanish, French) and/or CJK-only text (Chinese, Japanese, Korean) for better performance.
 Enabled=true
 EnableBiDi=true       ; Bidirectional text support (mixed LTR/RTL)
 CacheSize=100         ; Shaped text cache entries.
