@@ -301,7 +301,7 @@ The dialog should look like this:
 
 ![FontForge Load Bitmap Font dialog](Images/ttf-fontforge-preprocess-bitmap-font-dialog.png)
 
-4. This step is only for users whose font file does not show the "Load Bitmap Font" dialog or the dialog does not contain the font size you expect. Select Element -> Bitmap Strikes Available. If "Pixel Sizes" is empty or does not contain the size you chose previously, you need to manually fill the pixel size and click "OK". 
+4. This step is only for users whose font file does not show the "Load Bitmap Font" dialog or the dialog does not contain the font size you expect. Select Element -> Bitmap Strikes Available. If "Pixel Sizes" is empty or does not contain the size you chose previously, you need to manually fill the pixel size and click "OK".
 
 ![FontForge Bitmap Strikes Available dialog](Images/ttf-fontforge-preprocess-secondary-font-bitmap-available.png)
 
@@ -339,10 +339,10 @@ Tools to extract TTF from TTC:
 
 - Online: [everythingfonts.com/ttc-to-ttf](https://everythingfonts.com/ttc-to-ttf) or [transfonter.org/ttc-unpack](https://transfonter.org/ttc-unpack)
 
-- Extract locally using Python and fonttools: 
-1. Install the latest Python 3. 
-2. Run `python3 -m venv venv` and `venv\Scripts\activate` (Windows) or `source venv/bin/activate` (Linux/Mac) to create and activate a virtual environment. 
-3. Run `pip install fonttools` (`pip install fonttools==4.62.1` if the latest version causes issues). 
+- Extract locally using Python and fonttools:
+1. Install the latest Python 3.
+2. Run `python3 -m venv venv` and `venv\Scripts\activate` (Windows) or `source venv/bin/activate` (Linux/Mac) to create and activate a virtual environment.
+3. Run `pip install fonttools` (`pip install fonttools==4.62.1` if the latest version causes issues).
 4. Create `extract_ttc.py` with the following content ([source](https://github.com/fonttools/fonttools/discussions/2647#discussioncomment-3093867)):
 ```python
 #!/usr/bin/env python
@@ -388,7 +388,7 @@ Some fonts, especially CJK fonts like SimSun, only provide a regular weight with
 
 ## Frequently Asked Questions
 
-### How should I choose between TTF/OTF and SpriteFont? 
+### How should I choose between TTF/OTF and SpriteFont?
 
 Choose SpriteFont if:
 1. You want extreme performance.
