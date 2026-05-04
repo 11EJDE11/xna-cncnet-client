@@ -2,8 +2,8 @@
 
 The client supports two font types:
 
-- **TrueType** – TTF/OTF fonts rendered via FontStashSharp
-- **SpriteFont** – precompiled XNA/MonoGame bitmap fonts (.xnb files)
+- **TrueType** – TTF/OTF fonts. The client uses FontStashSharp to render these fonts.
+- **SpriteFont** – precompiled XNA/MonoGame bitmap fonts (.xnb files).
 
 > **Important:** TrueType and SpriteFont fonts cannot be mixed within a fallback chain. Fallback only works between TrueType fonts. A SpriteFont font index cannot fall back to a TrueType font, and vice versa. Each font index is entirely one type or the other.
 
