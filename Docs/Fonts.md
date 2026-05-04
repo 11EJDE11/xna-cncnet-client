@@ -116,7 +116,6 @@ For English text:
 For CJK text:
 - A Noto CJK font such as [NotoSansSC-Medium.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+SC) (Chinese), [NotoSansKR-Medium.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (Korean), or [NotoSansJP-Medium.ttf](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Japanese).
 
-
 ## Recommended pixel-perfect fonts
 
 If you prefer the current SpriteFont rendering style, which is a pixel-perfect, sharp, non-anti-aliased font rendering, you can only choose a small subset of TTF/OTF fonts, and you must preprocess them.
@@ -284,7 +283,7 @@ The `.xnb` extension is optional in the `Path` — it will be added automaticall
 
 ## Preprocess font files
 
-We recommend preprocessing TTF/OTF font files if you prefer the pixel-perfect rendering style similar to SpriteFont. Preprocessing generates a new TTF file with vector outlines optimized for a specific pixel size, which can significantly improve the rendering quality for certain fonts, especially CJK fonts with embedded bitmaps. However, not all fonts look better after preprocessing. Some might have a weird appearance.
+We recommend to preprocess TTF/OTF font files if you prefer the pixel-perfect rendering style similar to SpriteFont. Preprocessing generates a new TTF file with vector outlines optimized for a specific pixel size, which can significantly improve the rendering quality for certain fonts, especially CJK fonts with embedded bitmaps. However, not all fonts look better after preprocessing. Some might have a weird appearance.
 
 Please follow the guideline below. We assume you have a Windows 10/11 PC, but similar steps should also work on Linux/Mac.
 
