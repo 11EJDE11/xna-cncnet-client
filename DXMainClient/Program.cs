@@ -66,6 +66,25 @@ namespace DTAClient
             // calls fail with "Unable to load library 'libHarfBuzzSharp'".
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
+                static bool areSecureDllLoadingAPIsAvailable()
+                {
+                    var kernel32ModuleHandle = GetModuleHandle("kernel32");
+                    if (kernel32ModuleHandle == IntPtr.Zero)
+                        throw new Exception("Failed to get handle for kernel32.dll. Is your operating system broken?", new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()));
+
+                    string[] requiredFunctions = ["SetDefaultDllDirectories", "AddDllDirectory", "RemoveDllDirectory"];
+                    foreach (string function in requiredFunctions)
+                    {
+                        if (GetProcAddress(kernel32ModuleHandle, function) == IntPtr.Zero)
+                            return false;
+                    }
+
+                    return true;
+                }
+
+                if (!areSecureDllLoadingAPIsAvailable())
+                    throw new PlatformNotSupportedException("This application requires at least Windows 7 SP1 with KB4457144 (alternatively, KB2533623 or KB3063858) installed.");
+
                 SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 
                 string archSubfolder = RuntimeInformation.ProcessArchitecture switch
@@ -78,7 +97,7 @@ namespace DTAClient
 
                 if (archSubfolder is not null)
                 {
-                    void addDllDirectoryIfExists(string path)
+                    static void addDllDirectoryIfExists(string path)
                     {
                         if (Directory.Exists(path))
                             AddDllDirectory(path);
@@ -108,6 +127,14 @@ namespace DTAClient
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         private static extern IntPtr AddDllDirectory(string lpPathName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetModuleHandleW", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern IntPtr GetModuleHandle([In][MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true, ThrowOnUnmappableChar = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern IntPtr GetProcAddress([In] IntPtr hModule, [In][MarshalAs(UnmanagedType.LPStr)] string lpProcName);
 #endif
 
         private static string COMMON_LIBRARY_PATH;
