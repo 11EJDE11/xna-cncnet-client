@@ -174,6 +174,9 @@ public abstract class CacheManagerBase<TInput, TOutput> : ICacheManager<TInput, 
     {
         lock (cacheLock)
         {
+            foreach (CacheEntry cacheEntry in cache.Values)
+                OnOutputRemoved(cacheEntry.Output);
+
             cache.Clear();
             lruList.Clear();
         }
@@ -185,6 +188,10 @@ public abstract class CacheManagerBase<TInput, TOutput> : ICacheManager<TInput, 
     /// <param name="input">The input.</param>
     /// <returns>The output.</returns>
     protected abstract TOutput? ComputeOutputForInput(TInput input);
+
+    protected virtual void OnOutputRemoved(TOutput? output)
+    {
+    }
 
     /// <summary>
     /// Worker thread that processes computation requests sequentially.
@@ -254,7 +261,10 @@ public abstract class CacheManagerBase<TInput, TOutput> : ICacheManager<TInput, 
         lruList.RemoveLast();
 
         if (cache.TryGetValue(lruInput, out CacheEntry? entry))
+        {
+            OnOutputRemoved(entry.Output);
             cache.Remove(lruInput);
+        }
     }
 
     /// <summary>

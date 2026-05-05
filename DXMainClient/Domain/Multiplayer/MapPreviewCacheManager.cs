@@ -22,4 +22,9 @@ public class MapPreviewCacheManager : CacheManagerBase<Map, Image>, IMapPreviewC
         Image? image = map.GetNonImmediatePreviewImage();
         return image;
     }
+
+    protected override void OnOutputRemoved(Image? output)
+    {
+        output?.Dispose();
+    }
 }
