@@ -56,7 +56,7 @@ namespace DTAClient.Domain.Multiplayer
 
             for (int aiId = 0; aiId < aiPlayers.Count; aiId++)
             {
-                var phi = playerHouseInfos[multiCmbIndexes.Count + aiId];
+                var phi = playerHouseInfos[players.Count + aiId];
                 int teamId = aiPlayers[aiId].TeamId;
                 if (teamId <= 0)
                     teamId = teamStartMappings?.Find(sa => sa.StartingWaypoint == phi.StartingWaypoint)?.TeamId ?? 0;
