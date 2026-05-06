@@ -143,6 +143,11 @@ namespace DTAClient.DXGUI
 #endif
             InitializeUISettings();
 
+            // Decide between TTF (Fonts.ini) and legacy SpriteFont assets before
+            // WindowManager.Initialize triggers FontManager.LoadFonts.
+            Rampastring.XNAUI.FontManagement.FontManager.UseLegacySpriteFonts =
+                UserINISettings.Instance.UseLegacyFonts;
+
             WindowManager wm = new(this, graphics);
             wm.Initialize(content, ProgramConstants.GetBaseResourcePath());
 

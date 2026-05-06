@@ -115,6 +115,7 @@ namespace ClientCore
             BorderlessWindowedMode = new BoolSetting(iniFile, VIDEO, "NoWindowFrame", false);
             BorderlessWindowedClient = new BoolSetting(iniFile, VIDEO, "BorderlessWindowedClient", ClientConfiguration.Instance.UserDefault_BorderlessWindowedClient);
             IntegerScaledClient = new BoolSetting(iniFile, VIDEO, "IntegerScaledClient", ClientConfiguration.Instance.UserDefault_IntegerScaledClient);
+            UseLegacyFonts = new BoolSetting(iniFile, VIDEO, "UseLegacyFonts", false);
             ClientFPS = new IntSetting(iniFile, VIDEO, "ClientFPS", 60);
             DisplayToggleableExtraTextures = new BoolSetting(iniFile, VIDEO, "DisplayToggleableExtraTextures", true);
 
@@ -218,6 +219,7 @@ namespace ClientCore
         public IntSetting ClientResolutionY { get; set; }
         public BoolSetting BorderlessWindowedClient { get; private set; }
         public BoolSetting IntegerScaledClient { get; private set; }
+        public BoolSetting UseLegacyFonts { get; private set; }
         public IntSetting ClientFPS { get; private set; }
         public BoolSetting DisplayToggleableExtraTextures { get; private set; }
 
