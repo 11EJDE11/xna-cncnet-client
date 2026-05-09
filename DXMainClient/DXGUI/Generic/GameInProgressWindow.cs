@@ -31,6 +31,7 @@ namespace DTAClient.DXGUI
 
         private bool initialized = false;
         private bool nativeCursorUsed = false;
+        private bool savedIsFixedTimeStep = true;
 
         private List<string> debugSnapshotDirectories;
         private DateTime debugLogLastWriteTime;
@@ -70,7 +71,8 @@ namespace DTAClient.DXGUI
 
             window.CenterOnParent();
 
-            Game.TargetElapsedTime = TimeSpan.FromMilliseconds(1000.0 / UserINISettings.Instance.ClientFPS);
+            if (Game.IsFixedTimeStep)
+                Game.TargetElapsedTime = TimeSpan.FromMilliseconds(1000.0 / UserINISettings.Instance.ClientFPS);
 
             Visible = false;
             Enabled = false;
@@ -119,6 +121,8 @@ namespace DTAClient.DXGUI
             nativeCursorUsed = Game.IsMouseVisible;
             Game.IsMouseVisible = false;
             ProgramConstants.IsInGame = true;
+            savedIsFixedTimeStep = Game.IsFixedTimeStep;
+            Game.IsFixedTimeStep = true;
             Game.TargetElapsedTime = TimeSpan.FromMilliseconds(1000.0 / POWER_SAVING_FPS);
 #if WINFORMS
 
@@ -141,7 +145,9 @@ namespace DTAClient.DXGUI
             else
                 WindowManager.Cursor.Visible = true;
             ProgramConstants.IsInGame = false;
-            Game.TargetElapsedTime = TimeSpan.FromMilliseconds(1000.0 / UserINISettings.Instance.ClientFPS);
+            Game.IsFixedTimeStep = savedIsFixedTimeStep;
+            if (Game.IsFixedTimeStep)
+                Game.TargetElapsedTime = TimeSpan.FromMilliseconds(1000.0 / UserINISettings.Instance.ClientFPS);
 
 #if WINFORMS
             if (UserINISettings.Instance.MinimizeWindowsOnGameStart)
