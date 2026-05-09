@@ -134,5 +134,22 @@ namespace DTAClient.Domain.Multiplayer
             CoopDifficultyLevel = section.GetIntValueOrNull("CoopDifficultyLevel");
         }
 
+        /// <summary>
+        /// Copies parsed base settings from another instance without re-reading the source INI.
+        /// </summary>
+        protected void CopyBaseSettingsFrom(GameModeMapBase source)
+        {
+            MaxPlayers = source.MaxPlayers;
+            MinPlayers = source.MinPlayers;
+            EnforceMaxPlayers = source.EnforceMaxPlayers;
+            AllowedStartingLocations = source.AllowedStartingLocations;
+            IsCoop = source.IsCoop;
+            CoopInfo = source.CoopInfo;
+            CoopDifficultyLevel = source.CoopDifficultyLevel;
+            MultiplayerOnly = source.MultiplayerOnly;
+            HumanPlayersOnly = source.HumanPlayersOnly;
+            ForceRandomStartLocations = source.ForceRandomStartLocations;
+            ForceNoTeams = source.ForceNoTeams;
+        }
     }
 }

@@ -429,6 +429,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (!IsHost)
                 return;
 
+            newSkillLevel = ClientConfiguration.Instance.NormalizeSkillLevel(newSkillLevel);
+
             bool gameNameChanged = gameRoomName != newGameRoomName;
             bool maxPlayersChanged = playerLimit != newMaxPlayers;
             bool skillLevelChanged = skillLevel != newSkillLevel;
@@ -449,7 +451,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             gameRoomName = newGameRoomName;
             channel.UIName = newGameRoomName;
             playerLimit = newMaxPlayers;
-            skillLevel = ClientConfiguration.Instance.NormalizeSkillLevel(newSkillLevel);
+            skillLevel = newSkillLevel;
 
             if (passwordChanged)
             {

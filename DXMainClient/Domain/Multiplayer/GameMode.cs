@@ -21,6 +21,33 @@ namespace DTAClient.Domain.Multiplayer
             Initialize();
         }
 
+        private GameMode(GameMode source)
+        {
+            Name = source.Name;
+            UIName = source.UIName;
+            UntranslatedUIName = source.UntranslatedUIName;
+            DisallowedPlayerSides = source.DisallowedPlayerSides;
+            DisallowedHumanPlayerSides = source.DisallowedHumanPlayerSides;
+            DisallowedComputerPlayerSides = source.DisallowedComputerPlayerSides;
+            MinPlayersOverride = source.MinPlayersOverride;
+            MaxPlayersOverride = source.MaxPlayersOverride;
+            mapCodeIniPath = source.mapCodeIniPath;
+            randomizedMapCodeININames = source.randomizedMapCodeININames;
+            randomizedMapCodesCount = source.randomizedMapCodesCount;
+            forcedOptionsSection = source.forcedOptionsSection;
+            Maps = new List<Map>(source.Maps);
+            ForcedCheckBoxValues = source.ForcedCheckBoxValues;
+            ForcedDropDownValues = source.ForcedDropDownValues;
+            ForcedSpawnIniOptions = source.ForcedSpawnIniOptions;
+            CopyBaseSettingsFrom(source);
+        }
+
+        /// <summary>
+        /// Returns a copy with a private Maps list, suitable for the map loader's
+        /// copy-on-write snapshot. Does not re-read MPMaps.ini.
+        /// </summary>
+        internal GameMode CloneForSnapshot() => new GameMode(this);
+
         private const string BASE_INI_PATH = "INI/Map Code/";
         private const string SPAWN_INI_OPTIONS_SECTION = "ForcedSpawnIniOptions";
 

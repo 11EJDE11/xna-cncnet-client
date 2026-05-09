@@ -10,7 +10,8 @@ namespace DTAClient.Domain.Multiplayer;
 /// <summary>
 /// Thread-safe manager for caching outputs with LRU eviction policy.
 /// Processes computation requests sequentially to limit CPU usage to a single thread.
-/// Note: this manager assumes the `TOutput` objects are managed, so it never disposes them directly.
+/// Subclasses can override <see cref="OnOutputRemoved"/> to release resources held by an
+/// output when it is evicted, replaced, or cleared.
 /// </summary>
 public abstract class CacheManagerBase<TInput, TOutput> : ICacheManager<TInput, TOutput> where TInput : notnull
 {
@@ -268,7 +269,7 @@ public abstract class CacheManagerBase<TInput, TOutput> : ICacheManager<TInput, 
     }
 
     /// <summary>
-    /// Disposes the cache manager. Does not dispose cached outputs directly; left to garbage collector.
+    /// Disposes the cache manager. Cached outputs are released via <see cref="OnOutputRemoved"/>.
     /// </summary>
     public void Dispose()
     {
