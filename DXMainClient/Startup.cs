@@ -157,22 +157,8 @@ namespace DTAClient
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 Task.Run(InitSteamworks);
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                timeBeginPeriod(1);
-
             gameClass.Run();
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                timeEndPeriod(1);
         }
-
-        [DllImport("winmm.dll")]
-        [SupportedOSPlatform("windows")]
-        private static extern uint timeBeginPeriod(uint uPeriod);
-
-        [DllImport("winmm.dll")]
-        [SupportedOSPlatform("windows")]
-        private static extern uint timeEndPeriod(uint uPeriod);
 
         [SupportedOSPlatform("windows")]
         private void InitSteamworks()
