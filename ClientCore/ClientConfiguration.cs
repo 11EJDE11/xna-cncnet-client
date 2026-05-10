@@ -394,7 +394,15 @@ namespace ClientCore
 
         public string SkillLevelOptions => clientDefinitionsIni.GetStringValue(SETTINGS, "SkillLevelOptions", "Any,Beginner,Intermediate,Pro");
 
-        public int DefaultSkillLevelIndex => clientDefinitionsIni.GetIntValue(SETTINGS, "DefaultSkillLevelIndex", 0);
+        public string[] GetSkillLevelOptions() => SkillLevelOptions.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+        public int NormalizeSkillLevel(int skillLevel)
+        {
+            int maxSkillLevelIndex = Math.Max(0, GetSkillLevelOptions().Length - 1);
+            return Math.Clamp(skillLevel, 0, maxSkillLevelIndex);
+        }
+
+        public int DefaultSkillLevelIndex => NormalizeSkillLevel(clientDefinitionsIni.GetIntValue(SETTINGS, "DefaultSkillLevelIndex", 0));
 
         public bool CampaignTagSelectorEnabled => clientDefinitionsIni.GetBooleanValue(SETTINGS, "CampaignTagSelectorEnabled", false);
 
