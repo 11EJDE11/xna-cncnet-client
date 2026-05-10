@@ -6,7 +6,8 @@ namespace DTAClient.Domain.Multiplayer;
 /// <summary>
 /// Thread-safe manager for caching map preview images with LRU eviction policy.
 /// Processes image extraction requests sequentially to limit CPU usage to a single thread.
-/// Note: this manager assumes the `Image` objects are managed, so it never disposes them directly.
+/// Disposes evicted <see cref="Image"/> objects via <see cref="OnOutputRemoved"/>;
+/// callers must not retain references to images returned by <see cref="ICacheManager{TInput,TOutput}.Request"/>.
 /// </summary>
 public class MapPreviewCacheManager : CacheManagerBase<Map, Image>, IMapPreviewCacheManager
 {

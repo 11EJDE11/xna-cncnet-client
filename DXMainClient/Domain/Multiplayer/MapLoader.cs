@@ -803,6 +803,7 @@ namespace DTAClient.Domain.Multiplayer
         /// Maps with an immediate (on-disk) preview must load it directly via
         /// <see cref="Map.PreviewPath"/> with AssetLoader.LoadTextureUncached so the intermediate
         /// Image does not need to be tracked for disposal.
+        /// The returned image is owned by the cache — use it immediately and do not retain the reference.
         /// </summary>
         public Image GetCachedPreviewImageFromMap(Map map, bool syncLoadOnCacheMiss = false)
         {
