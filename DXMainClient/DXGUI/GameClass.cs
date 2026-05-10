@@ -43,10 +43,9 @@ namespace DTAClient.DXGUI
         {
             graphics = new GraphicsDeviceManager(this);
 #if GL
-            // In windowed mode, VSync synchronises SwapBuffers with DWM's composite cycle,
-            // eliminating the micro-stutter caused by unsynchronised frame delivery.
-            // IsFixedTimeStep=false lets VSync be the sole frame timer so the client
-            // renders at the display's refresh rate with no sleep-based pacing.
+            // VSync drives frame pacing via SwapBuffers, eliminating micro-stutter caused
+            // by unsynchronised frame delivery. IsFixedTimeStep=false lets VSync be the
+            // sole frame timer so the client renders at the display's refresh rate.
             graphics.SynchronizeWithVerticalRetrace = true;
             IsFixedTimeStep = false;
 #else

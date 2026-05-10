@@ -31,7 +31,7 @@ namespace DTAClient.DXGUI
 
         private bool initialized = false;
         private bool nativeCursorUsed = false;
-        private bool savedIsFixedTimeStep = true;
+        private bool savedIsFixedTimeStep;
 
         private List<string> debugSnapshotDirectories;
         private DateTime debugLogLastWriteTime;
@@ -43,6 +43,7 @@ namespace DTAClient.DXGUI
                 throw new InvalidOperationException("GameInProgressWindow cannot be initialized twice!");
 
             initialized = true;
+            savedIsFixedTimeStep = Game.IsFixedTimeStep;
 
             BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
             PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
