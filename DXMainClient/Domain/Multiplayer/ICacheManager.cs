@@ -18,8 +18,6 @@ public interface ICacheManager<TInput, TOutput> : IDisposable
 
     /// <summary>
     /// Requests an output to be computed for the specified input.
-    /// The returned output is owned by the cache and may be evicted and disposed at any time.
-    /// Callers must use the output immediately and must not retain a reference to it.
     /// </summary>
     /// <param name="input">The input to get the output.</param>
     /// <param name="output">The cached output if found or computed.</param>

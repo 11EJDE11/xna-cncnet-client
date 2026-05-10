@@ -15,7 +15,6 @@ using Microsoft.Xna.Framework.Graphics;
 
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
-using Image = SixLabors.ImageSharp.Image;
 
 namespace DTAClient.DXGUI.Multiplayer
 {
@@ -256,30 +255,33 @@ namespace DTAClient.DXGUI.Multiplayer
 
                 Map map = mapLoader.FindMapByHash(game.MapHash);
 
-                Image mapPreviewImage = map != null && !map.IsImmediatePreviewImageAvailable()
-                    ? mapLoader.GetCachedPreviewImageFromMap(map, syncLoadOnCacheMiss: false)
-                    : null;
-
                 if (map?.IsImmediatePreviewImageAvailable() ?? false)
                 {
                     mapPreviewTexture = AssetLoader.LoadTextureUncached(map.PreviewPath);
                     mapPreviewTextureNeedsDispose = true;
                 }
-                else if (mapPreviewImage != null)
-                {
-                    mapPreviewTexture = AssetLoader.TextureFromImage(mapPreviewImage);
-                    mapPreviewTextureNeedsDispose = true;
-                }
-                else if (noMapPreviewTexture != null)
-                {
-                    Debug.Assert(!noMapPreviewTexture.IsDisposed, "noMapPreviewTexture should never be disposed.");
-                    mapPreviewTexture = noMapPreviewTexture;
-                    mapPreviewTextureNeedsDispose = false;
-                }
                 else
                 {
-                    mapPreviewTexture = null;
-                    mapPreviewTextureNeedsDispose = false;
+                    Texture2D cachedTexture = map != null
+                        ? mapLoader.GetCachedPreviewTextureFromMap(map, syncLoadOnCacheMiss: false)
+                        : null;
+
+                    if (cachedTexture != null)
+                    {
+                        mapPreviewTexture = cachedTexture;
+                        mapPreviewTextureNeedsDispose = true;
+                    }
+                    else if (noMapPreviewTexture != null)
+                    {
+                        Debug.Assert(!noMapPreviewTexture.IsDisposed, "noMapPreviewTexture should never be disposed.");
+                        mapPreviewTexture = noMapPreviewTexture;
+                        mapPreviewTextureNeedsDispose = false;
+                    }
+                    else
+                    {
+                        mapPreviewTexture = null;
+                        mapPreviewTextureNeedsDispose = false;
+                    }
                 }
             }
             else

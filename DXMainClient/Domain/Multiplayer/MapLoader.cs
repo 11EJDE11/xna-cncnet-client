@@ -9,7 +9,10 @@ using System.Threading.Tasks;
 using ClientCore;
 using ClientCore.Extensions;
 
+using Microsoft.Xna.Framework.Graphics;
+
 using Rampastring.Tools;
+using Rampastring.XNAUI;
 
 using SixLabors.ImageSharp;
 
@@ -799,21 +802,20 @@ namespace DTAClient.Domain.Multiplayer
         }
 
         /// <summary>
-        /// Returns a cached preview image for non-immediate previews (extracted from a custom map).
+        /// Returns a cached preview texture for non-immediate previews (extracted from a custom map),
+        /// or null if the preview is not yet cached or the map has an intentionally hidden preview.
         /// Maps with an immediate (on-disk) preview must load it directly via
-        /// <see cref="Map.PreviewPath"/> with AssetLoader.LoadTextureUncached so the intermediate
-        /// Image does not need to be tracked for disposal.
-        /// The returned image is owned by the cache — use it immediately and do not retain the reference.
+        /// <see cref="Map.PreviewPath"/> with <see cref="AssetLoader.LoadTextureUncached"/>.
         /// </summary>
-        public Image GetCachedPreviewImageFromMap(Map map, bool syncLoadOnCacheMiss = false)
+        public Texture2D GetCachedPreviewTextureFromMap(Map map, bool syncLoadOnCacheMiss = false)
         {
             if (!(map?.IsNonImmediatePreviewImageAvailable() ?? false))
                 return null;
 
-            if (mapPreviewCacheManager.Request(map, out Image image, syncComputeOnCacheMiss: syncLoadOnCacheMiss, addToQueue: true))
-                return image;
+            if (!mapPreviewCacheManager.Request(map, out Image image, syncComputeOnCacheMiss: syncLoadOnCacheMiss, addToQueue: true))
+                return null;
 
-            return null;
+            return image != null ? AssetLoader.TextureFromImage(image) : null;
         }
 
         public Map FindMapByHash(string mapHash) => GameModeMaps?.FindMapByHash(mapHash);
