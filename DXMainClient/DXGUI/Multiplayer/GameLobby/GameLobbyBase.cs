@@ -478,6 +478,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     ChangeMap(updatedGameModeMap);
             }
 
+            RefreshGameModeFilter();
             ListMaps();
         }
 
@@ -486,7 +487,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             // If the currently selected map was removed, select a different one
             if (Map != null && Map.SHA1 == removedMap.SHA1)
             {
-                var availableMaps = GameModeMaps.Where(gmm => gmm.GameMode == GameMode).ToList();
+                var currentGameModeName = GameMode?.Name;
+                var availableMaps = GameModeMaps
+                    .Where(gmm => gmm.GameMode.Name == currentGameModeName)
+                    .ToList();
                 if (availableMaps.Any())
                 {
                     ChangeMap(availableMaps.First());
@@ -537,7 +541,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             GameModeMaps.Where(gmm => gmm.IsFavorite).ToList();
 
         private Func<List<GameModeMap>> GetGameModeMaps(GameMode gm) => () =>
-            GameModeMaps.Where(gmm => gmm.GameMode == gm).ToList();
+            GameModeMaps.Where(gmm => gmm.GameMode.Name == gm.Name).ToList();
 
         private void RefreshBtnPlayerExtraOptionsOpenTexture()
         {
@@ -936,7 +940,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             int randomValue = random.Next(0, maps.Count);
             bool isFavoriteMapsSelected = IsFavoriteMapsSelected();
-            GameModeMap = GameModeMaps.FirstOrDefault(gmm => (gmm.GameMode == GameMode || gmm.IsFavorite && isFavoriteMapsSelected) && gmm.Map == maps[randomValue]);
+            string currentGameModeName = GameMode?.Name;
+            GameModeMap = GameModeMaps.FirstOrDefault(gmm =>
+                ((gmm.GameMode.Name == currentGameModeName) || gmm.IsFavorite && isFavoriteMapsSelected) &&
+                gmm.Map == maps[randomValue]);
             Logger.Log("PickRandomMap: Rolled " + randomValue + " out of " + maps.Count + ". Picked map: " + Map.Name);
 
             ChangeMap(GameModeMap);
