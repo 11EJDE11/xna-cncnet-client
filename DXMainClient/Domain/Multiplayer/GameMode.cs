@@ -75,6 +75,21 @@ namespace DTAClient.Domain.Multiplayer
 
         private List<KeyValuePair<string, string>> ForcedSpawnIniOptions = new List<KeyValuePair<string, string>>();
 
+        public GameMode CloneForSnapshot()
+        {
+            GameMode clone = (GameMode)MemberwiseClone();
+            clone.Maps = new List<Map>(Maps);
+            clone.DisallowedPlayerSides = new List<int>(DisallowedPlayerSides);
+            clone.DisallowedHumanPlayerSides = new List<int>(DisallowedHumanPlayerSides);
+            clone.DisallowedComputerPlayerSides = new List<int>(DisallowedComputerPlayerSides);
+            clone.ForcedCheckBoxValues = new List<KeyValuePair<string, bool>>(ForcedCheckBoxValues);
+            clone.ForcedDropDownValues = new List<KeyValuePair<string, int>>(ForcedDropDownValues);
+            clone.ForcedSpawnIniOptions = new List<KeyValuePair<string, string>>(ForcedSpawnIniOptions);
+            clone.randomizedMapCodeININames = new List<string>(randomizedMapCodeININames);
+
+            return clone;
+        }
+
         public void Initialize()
         {
             IniFile forcedOptionsIni = new IniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, ClientConfiguration.Instance.MPMapsIniPath));

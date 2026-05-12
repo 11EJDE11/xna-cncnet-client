@@ -934,17 +934,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             int totalPlayerCount = Players.Count(p => p.SideId < ddPlayerSides[0].Items.Count - 1)
                    + AIPlayers.Count;
-            List<Map> maps = GetMapList(totalPlayerCount);
-            if (maps.Count < 1)
+            List<GameModeMap> gameModeMaps = GetRandomGameModeMaps(totalPlayerCount);
+            if (gameModeMaps.Count < 1)
                 return;
 
-            int randomValue = random.Next(0, maps.Count);
-            bool isFavoriteMapsSelected = IsFavoriteMapsSelected();
-            string currentGameModeName = GameMode?.Name;
-            GameModeMap = GameModeMaps.FirstOrDefault(gmm =>
-                ((gmm.GameMode.Name == currentGameModeName) || gmm.IsFavorite && isFavoriteMapsSelected) &&
-                gmm.Map == maps[randomValue]);
-            Logger.Log("PickRandomMap: Rolled " + randomValue + " out of " + maps.Count + ". Picked map: " + Map.Name);
+            int randomValue = random.Next(0, gameModeMaps.Count);
+            GameModeMap = gameModeMaps[randomValue];
+            Logger.Log("PickRandomMap: Rolled " + randomValue + " out of " + gameModeMaps.Count + ". Picked map: " + GameModeMap.Map.Name);
 
             ChangeMap(GameModeMap);
             tbMapSearch.Text = string.Empty;
@@ -952,32 +948,21 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             ListMaps();
         }
 
-        private List<Map> GetMapList(int playerCount)
+        private List<GameModeMap> GetRandomGameModeMaps(int playerCount)
         {
-            List<Map> maps = IsFavoriteMapsSelected()
-                ? GetFavoriteGameModeMaps().Select(gameModeMap => gameModeMap.Map).ToList()
-                : GameMode?.Maps.ToList() ?? new List<Map>();
+            List<GameModeMap> gameModeMaps = IsFavoriteMapsSelected()
+                ? GetFavoriteGameModeMaps()
+                : GameModeMaps.Where(gmm => gmm.GameMode.Name == GameMode?.Name).ToList();
 
             if (playerCount != 1)
             {
+                gameModeMaps = gameModeMaps.Where(gmm => gmm.MaxPlayers == playerCount).ToList();
 
-                if (GameMode?.MaxPlayersOverride != null)
-                {
-                    // MaxPlayers have been overridden in GameMode. This means all maps in the game mode has the same MaxPlayers value
-                    if (playerCount != GameMode.MaxPlayersOverride)
-                        maps = [];
-                }
-                else
-                {
-                    // Maps could have different MaxPlayers values.
-                    maps = maps.Where(x => x.MaxPlayers == playerCount).ToList();
-                }
-
-                if (maps.Count < 1 && playerCount <= MAX_PLAYER_COUNT)
-                    return GetMapList(playerCount + 1);
+                if (gameModeMaps.Count < 1 && playerCount <= MAX_PLAYER_COUNT)
+                    return GetRandomGameModeMaps(playerCount + 1);
             }
 
-            return maps;
+            return gameModeMaps;
         }
 
         /// <summary>

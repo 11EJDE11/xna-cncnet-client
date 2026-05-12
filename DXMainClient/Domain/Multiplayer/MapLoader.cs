@@ -396,11 +396,6 @@ namespace DTAClient.Domain.Multiplayer
                 gameMode.Maps.RemoveAll(map => map.SHA1 == sha1);
         }
 
-        private void UpdateGameModeMaps()
-        {
-            ReplaceGameModeSnapshot(_gameModes);
-        }
-
         private void ReplaceGameModeSnapshot(List<GameMode> gameModes)
         {
             gameModes.RemoveAll(g => g.Maps.Count < 1);
@@ -408,17 +403,7 @@ namespace DTAClient.Domain.Multiplayer
             _gameModeMaps = new GameModeMapCollection(gameModes);
         }
 
-        private List<GameMode> CloneGameModeSnapshot() => GameModes.Select(CloneGameMode).ToList();
-
-        private static GameMode CloneGameMode(GameMode source)
-        {
-            GameMode clone = new GameMode(source.Name)
-            {
-                Maps = new List<Map>(source.Maps)
-            };
-
-            return clone;
-        }
+        private List<GameMode> CloneGameModeSnapshot() => GameModes.Select(gameMode => gameMode.CloneForSnapshot()).ToList();
 
         private async Task LoadMultiMapsAsync(IniFile mpMapsIni)
         {
