@@ -33,6 +33,8 @@ namespace ClientCore
         private IniFile DTACnCNetClient_ini;
         private IniFile clientDefinitionsIni;
         private IniFile networkDefinitionsIni;
+        private readonly string[] skillLevelOptions;
+        private readonly int maxSkillLevelIndex;
 
         protected ClientConfiguration()
         {
@@ -65,6 +67,9 @@ namespace ClientCore
             }
 
             RefreshTranslationGameFiles();
+
+            skillLevelOptions = SkillLevelOptions.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            maxSkillLevelIndex = Math.Max(0, skillLevelOptions.Length - 1);
         }
 
         /// <summary>
@@ -394,13 +399,9 @@ namespace ClientCore
 
         public string SkillLevelOptions => clientDefinitionsIni.GetStringValue(SETTINGS, "SkillLevelOptions", "Any,Beginner,Intermediate,Pro");
 
-        public string[] GetSkillLevelOptions() => SkillLevelOptions.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        public string[] GetSkillLevelOptions() => skillLevelOptions;
 
-        public int NormalizeSkillLevel(int skillLevel)
-        {
-            int maxSkillLevelIndex = Math.Max(0, GetSkillLevelOptions().Length - 1);
-            return Math.Clamp(skillLevel, 0, maxSkillLevelIndex);
-        }
+        public int NormalizeSkillLevel(int skillLevel) => Math.Clamp(skillLevel, 0, maxSkillLevelIndex);
 
         public int DefaultSkillLevelIndex => NormalizeSkillLevel(clientDefinitionsIni.GetIntValue(SETTINGS, "DefaultSkillLevelIndex", 0));
 

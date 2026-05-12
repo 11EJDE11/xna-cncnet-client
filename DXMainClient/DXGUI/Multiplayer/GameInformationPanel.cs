@@ -178,7 +178,7 @@ namespace DTAClient.DXGUI.Multiplayer
             lblGameInformation.ClientRectangle = new Rectangle(lblGameInformation.X, gameInfoLabelTopPadding,
                 lblGameInformation.Width, lblGameInformation.Height);
 
-            skillLevelOptions = ClientConfiguration.Instance.SkillLevelOptions.Split(',');
+            skillLevelOptions = ClientConfiguration.Instance.GetSkillLevelOptions();
 
             base.Initialize();
         }
@@ -242,7 +242,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 lblPlayerNames[i].Visible = false;
             }
 
-            int skillLevelIndex = ClientConfiguration.Instance.NormalizeSkillLevel(game.SkillLevel);
+            int skillLevelIndex = game.SkillLevel;
             string skillLevel = skillLevelOptions[skillLevelIndex];
             string localizedSkillLevel = skillLevel.L10N($"INI:ClientDefinitions:SkillLevel:{skillLevelIndex}");
             lblSkillLevel.Text = "Preferred Skill Level:".L10N("Client:Main:GameInfoSkillLevel") + " " + localizedSkillLevel;

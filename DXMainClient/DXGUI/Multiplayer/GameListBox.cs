@@ -38,7 +38,7 @@ namespace DTAClient.DXGUI.Multiplayer
             this.gameLobby = gameLobby;
             GameMatchesFilter = gameMatchesFilter;
 
-            SkillLevelOptions = ClientConfiguration.Instance.SkillLevelOptions.Split(',');
+            SkillLevelOptions = ClientConfiguration.Instance.GetSkillLevelOptions();
         }
 
         private List<Texture2D?> txSkillLevelIcons = new();
@@ -319,7 +319,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 || hg.Game.InternalName != localGameIdentifier.ToLower();
             int gameTextureWidth = showGameIcon ? hg.Game.Texture.Width : 0;
 
-            int skillLevelIndex = ClientConfiguration.Instance.NormalizeSkillLevel(hg.SkillLevel);
+            int skillLevelIndex = hg.SkillLevel;
             int skillLevelIconWidth = 0;
             if (txSkillLevelIcons[skillLevelIndex] != null)
                 skillLevelIconWidth = txSkillLevelIcons[skillLevelIndex].Width;
@@ -468,7 +468,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 }
 
                 // skill level icon (shown even if passworded)
-                int skillLevelIndex = ClientConfiguration.Instance.NormalizeSkillLevel(hostedGame.SkillLevel);
+                int skillLevelIndex = hostedGame.SkillLevel;
                 Texture2D txSkillLevelIcon = txSkillLevelIcons[skillLevelIndex];
                 if (txSkillLevelIcon != null)
                 {

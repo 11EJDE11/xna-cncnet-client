@@ -486,7 +486,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (skillLevelChanged)
             {
-                string[] skillLevelOptions = ClientConfiguration.Instance.SkillLevelOptions.Split(',');
+                string[] skillLevelOptions = ClientConfiguration.Instance.GetSkillLevelOptions();
                 string skillLevelName = skillLevelOptions[skillLevel];
                 string localizedSkillLevel = skillLevelName.L10N($"INI:ClientDefinitions:SkillLevel:{skillLevel}");
                 AddNotice(string.Format("Skill level changed to {0}."
@@ -564,7 +564,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (skillLevelChanged)
             {
-                string[] skillLevelOptions = ClientConfiguration.Instance.SkillLevelOptions.Split(',');
+                string[] skillLevelOptions = ClientConfiguration.Instance.GetSkillLevelOptions();
                 string skillLevelName = skillLevelOptions[skillLevel];
                 string localizedSkillLevel = skillLevelName.L10N($"INI:ClientDefinitions:SkillLevel:{skillLevel}");
                 AddNotice(string.Format("{0} changed skill level to {1}."
