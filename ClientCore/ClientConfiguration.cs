@@ -70,6 +70,8 @@ namespace ClientCore
 
             skillLevelOptions = SkillLevelOptions.SplitWithCleanup();
             maxSkillLevelIndex = Math.Max(0, skillLevelOptions.Length - 1);
+            if (maxSkillLevelIndex == 0)
+                throw new ClientConfigurationException("No skill level options defined in ClientDefinitions.ini.");
         }
 
         /// <summary>
