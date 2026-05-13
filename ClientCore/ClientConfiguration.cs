@@ -68,7 +68,7 @@ namespace ClientCore
 
             RefreshTranslationGameFiles();
 
-            skillLevelOptions = SkillLevelOptions.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            skillLevelOptions = SkillLevelOptions.SplitWithCleanup();
             maxSkillLevelIndex = Math.Max(0, skillLevelOptions.Length - 1);
         }
 
