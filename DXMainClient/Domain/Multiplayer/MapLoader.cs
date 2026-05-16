@@ -43,15 +43,32 @@ namespace DTAClient.Domain.Multiplayer
         private readonly object mapModificationLock = new object();
         private const int _mapChangeRetryCount = 3;
 
+        // Mutable buffer used only during the initial map-loading pass. After
+        // LoadMapsInternalAsync publishes the first snapshot, it is set to null
+        // and every subsequent update goes through ReplaceGameModeSnapshot under
+        // mapModificationLock.
         private List<GameMode> _gameModes = [];
+
+        private sealed class Snapshot
+        {
+            public IReadOnlyList<GameMode> GameModes { get; }
+            public IReadOnlyGameModeMapCollection GameModeMaps { get; }
+
+            public Snapshot(IReadOnlyList<GameMode> gameModes, IReadOnlyGameModeMapCollection gameModeMaps)
+            {
+                GameModes = gameModes;
+                GameModeMaps = gameModeMaps;
+            }
+        }
+
+        private Snapshot _snapshot = new Snapshot(Array.Empty<GameMode>(), new GameModeMapCollection(Array.Empty<GameMode>()));
 
         /// <summary>
         /// List of game modes.
         /// </summary>
-        public IReadOnlyList<GameMode> GameModes => _gameModes;
+        public IReadOnlyList<GameMode> GameModes => _snapshot.GameModes;
 
-        private GameModeMapCollection _gameModeMaps;
-        public IReadOnlyGameModeMapCollection GameModeMaps => _gameModeMaps;
+        public IReadOnlyGameModeMapCollection GameModeMaps => _snapshot.GameModeMaps;
 
         /// <summary>
         /// An event that is fired when the maps have been loaded.
@@ -134,7 +151,8 @@ namespace DTAClient.Domain.Multiplayer
 
             Logger.Log("MapLoader: Post-processing game mode map collections.");
             _gameModes.RemoveAll(g => g.Maps.Count < 1);
-            _gameModeMaps = new GameModeMapCollection(_gameModes);
+            PublishSnapshot(_gameModes);
+            _gameModes = null;
 
             // Clean up any name-based favorite entries after migration (legacy: changed from name to sha1)
             CleanupMigratedFavorites();
@@ -365,30 +383,16 @@ namespace DTAClient.Domain.Multiplayer
             }
         }
 
-        private bool IsMapAlreadyLoaded(string sha1)
-            => IsMapAlreadyLoaded(sha1, GameModes);
-
         private static bool IsMapAlreadyLoaded(string sha1, IEnumerable<GameMode> gameModes)
             => gameModes.SelectMany(gm => gm.Maps).Any(map => map.SHA1 == sha1);
 
-        private Map FindMapBySHA1(string sha1)
-            => FindMapBySHA1(sha1, GameModes);
-
         private static Map FindMapBySHA1(string sha1, IEnumerable<GameMode> gameModes)
             => gameModes.SelectMany(gm => gm.Maps).FirstOrDefault(map => map.SHA1 == sha1);
-
-        private string FindMapSHA1ByFilePath(string baseFilePath)
-            => FindMapSHA1ByFilePath(baseFilePath, GameModes);
 
         private static string FindMapSHA1ByFilePath(string baseFilePath, IEnumerable<GameMode> gameModes)
             => gameModes.SelectMany(gm => gm.Maps)
                 .Where(map => !map.Official && map.BaseFilePath.Equals(baseFilePath, StringComparison.OrdinalIgnoreCase))
                 .FirstOrDefault()?.SHA1;
-
-        private void RemoveMapBySHA1(string sha1)
-        {
-            RemoveMapBySHA1(sha1, GameModes);
-        }
 
         private static void RemoveMapBySHA1(string sha1, IEnumerable<GameMode> gameModes)
         {
@@ -399,9 +403,11 @@ namespace DTAClient.Domain.Multiplayer
         private void ReplaceGameModeSnapshot(List<GameMode> gameModes)
         {
             gameModes.RemoveAll(g => g.Maps.Count < 1);
-            _gameModes = gameModes;
-            _gameModeMaps = new GameModeMapCollection(gameModes);
+            PublishSnapshot(gameModes);
         }
+
+        private void PublishSnapshot(List<GameMode> gameModes)
+            => _snapshot = new Snapshot(gameModes, new GameModeMapCollection(gameModes));
 
         private List<GameMode> CloneGameModeSnapshot() => GameModes.Select(gameMode => gameMode.CloneForSnapshot()).ToList();
 
@@ -686,22 +692,23 @@ namespace DTAClient.Domain.Multiplayer
 
             if (map.InitializeFromCustomMap())
             {
-                foreach (GameMode gm in GameModes)
+                lock (mapModificationLock)
                 {
-                    if (gm.Maps.Find(m => m.SHA1 == map.SHA1) != null)
+                    List<GameMode> gameModeSnapshot = CloneGameModeSnapshot();
+
+                    if (IsMapAlreadyLoaded(map.SHA1, gameModeSnapshot))
                     {
                         Logger.Log("LoadCustomMap: Custom map " + customMapFile.FullName + " is already loaded!");
                         resultMessage = string.Format("Map {0} is already loaded.".L10N("Client:MapLoader:MapAlreadyLoaded"), map.Name);
 
                         return null;
                     }
+
+                    AddMapToGameModes(map, gameModeSnapshot, true);
+                    ReplaceGameModeSnapshot(gameModeSnapshot);
                 }
 
                 Logger.Log("LoadCustomMap: Map " + customMapFile.FullName + " added successfully.");
-
-                AddMapToGameModes(map, true);
-                var gameModes = GameModes.Where(gm => gm.Maps.Contains(map));
-                _gameModeMaps.AddRange(gameModes.Select(gm => new GameModeMap(gm, map, false)));
 
                 resultMessage = string.Format("Map {0} loaded successfully.".L10N("Client:MapLoader:MapLoadedSuccessfully"), map.Name);
 
@@ -718,12 +725,13 @@ namespace DTAClient.Domain.Multiplayer
         {
             Logger.Log("Deleting map " + gameModeMap.Map.UntranslatedName);
             File.Delete(gameModeMap.Map.CompleteFilePath);
-            foreach (GameMode gameMode in GameModeMaps.GameModes)
-            {
-                gameMode.Maps.Remove(gameModeMap.Map);
-            }
 
-            _gameModeMaps.Remove(gameModeMap);
+            lock (mapModificationLock)
+            {
+                List<GameMode> gameModeSnapshot = CloneGameModeSnapshot();
+                RemoveMapBySHA1(gameModeMap.Map.SHA1, gameModeSnapshot);
+                ReplaceGameModeSnapshot(gameModeSnapshot);
+            }
         }
 
         /// <summary>

@@ -871,10 +871,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             try
             {
+                // GameMode below is read from the pre-delete snapshot; resolve the surviving
+                // map count by name against the post-delete snapshot that DeleteCustomMap publishes.
+                string currentGameModeName = GameMode?.Name;
                 MapLoader.DeleteCustomMap(GameModeMap);
 
                 tbMapSearch.Text = string.Empty;
-                if (GameMode.Maps.Count == 0)
+                bool currentGameModeHasMaps = GameModeMaps.Any(gmm => gmm.GameMode.Name == currentGameModeName);
+                if (!currentGameModeHasMaps)
                 {
                     // this will trigger another GameMode to be selected
                     GameModeMap = GameModeMaps.FirstOrDefault(gm => gm.GameMode.Maps.Count > 0);
