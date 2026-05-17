@@ -302,9 +302,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             AddNotice(string.Format("{0} connected from {1}".L10N("Client:Main:PlayerFromIP"), lpInfo.Name, lpInfo.IPAddress));
             lpInfo.StartReceiveLoop();
 
+            OnGameOptionChanged();
             CopyPlayerDataToUI();
             BroadcastPlayerOptions();
-            OnGameOptionChanged();
             BroadcastPlayerExtraOptions();
             UpdateDiscordPresence();
         }
