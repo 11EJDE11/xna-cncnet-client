@@ -304,8 +304,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             CopyPlayerDataToUI();
             BroadcastPlayerOptions();
-            BroadcastPlayerExtraOptions();
             OnGameOptionChanged();
+            BroadcastPlayerExtraOptions();
             UpdateDiscordPresence();
         }
 
