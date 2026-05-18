@@ -61,7 +61,7 @@ namespace DTAClient.Domain.Multiplayer
             }
         }
 
-        private Snapshot _snapshot = new Snapshot(Array.Empty<GameMode>(), new GameModeMapCollection(Array.Empty<GameMode>()));
+        private volatile Snapshot _snapshot = new Snapshot(Array.Empty<GameMode>(), new GameModeMapCollection(Array.Empty<GameMode>()));
 
         /// <summary>
         /// List of game modes.
