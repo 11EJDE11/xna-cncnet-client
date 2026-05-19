@@ -47,7 +47,7 @@ namespace DTAClient.Domain.Multiplayer
         // LoadMapsInternalAsync publishes the first snapshot, it is set to null
         // and every subsequent update goes through ReplaceGameModeSnapshot under
         // mapModificationLock.
-        private List<GameMode> _gameModes = [];
+        private List<GameMode> _initialGameModes = [];
 
         private sealed class Snapshot
         {
@@ -150,9 +150,9 @@ namespace DTAClient.Domain.Multiplayer
             await LoadCustomMapsAsync();
 
             Logger.Log("MapLoader: Post-processing game mode map collections.");
-            _gameModes.RemoveAll(g => g.Maps.Count < 1);
-            PublishSnapshot(_gameModes);
-            _gameModes = null;
+            _initialGameModes.RemoveAll(g => g.Maps.Count < 1);
+            PublishSnapshot(_initialGameModes);
+            _initialGameModes = null;
 
             // Clean up any name-based favorite entries after migration (legacy: changed from name to sha1)
             CleanupMigratedFavorites();
@@ -460,7 +460,7 @@ namespace DTAClient.Domain.Multiplayer
 
             foreach (Map map in tasks.Select(t => t.Result).Where(m => m != null))
             {
-                AddMapToGameModes(map, _gameModes, false);
+                AddMapToGameModes(map, _initialGameModes, false);
                 _translatedMapNames[map.UntranslatedName] = map.Name;
             }
         }
@@ -476,7 +476,7 @@ namespace DTAClient.Domain.Multiplayer
                     if (!string.IsNullOrEmpty(gameModeName))
                     {
                         GameMode gm = new GameMode(gameModeName);
-                        _gameModes.Add(gm);
+                        _initialGameModes.Add(gm);
                     }
                 }
             }
@@ -589,7 +589,7 @@ namespace DTAClient.Domain.Multiplayer
 
             foreach (Map map in customMapCache.Items.Values.Select(item => item.Map))
             {
-                AddMapToGameModes(map, _gameModes, false);
+                AddMapToGameModes(map, _initialGameModes, false);
             }
 
             Logger.Log("MapLoader: Custom maps loaded.");
