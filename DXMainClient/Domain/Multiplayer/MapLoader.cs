@@ -47,7 +47,7 @@ namespace DTAClient.Domain.Multiplayer
         // LoadMapsInternalAsync publishes the first snapshot, it is set to null
         // and every subsequent update goes through ReplaceGameModeSnapshot under
         // mapModificationLock.
-        // TODO: Consider refactor this MapLoader class into two classes, one for initial loading and one for runtime updates, to avoid having this mutable state that is only used during initialization.
+        // TODO: Consider refactoring this MapLoader class into two classes, one for initial loading and one for runtime updates, to avoid having this mutable state that is only used during initialization.
         private List<GameMode> _initialGameModes = [];
 
         private sealed class Snapshot
