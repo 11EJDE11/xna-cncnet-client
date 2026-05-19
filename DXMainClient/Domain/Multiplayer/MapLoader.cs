@@ -390,9 +390,7 @@ namespace DTAClient.Domain.Multiplayer
             => gameModes.SelectMany(gm => gm.Maps).FirstOrDefault(map => map.SHA1 == sha1);
 
         private static string FindMapSHA1ByFilePath(string baseFilePath, IEnumerable<GameMode> gameModes)
-            => gameModes.SelectMany(gm => gm.Maps)
-                .Where(map => !map.Official && map.BaseFilePath.Equals(baseFilePath, StringComparison.OrdinalIgnoreCase))
-                .FirstOrDefault()?.SHA1;
+            => gameModes.SelectMany(gm => gm.Maps).FirstOrDefault(map => !map.Official && map.BaseFilePath.Equals(baseFilePath, StringComparison.OrdinalIgnoreCase))?.SHA1;
 
         private static void RemoveMapBySHA1(string sha1, IEnumerable<GameMode> gameModes)
         {
