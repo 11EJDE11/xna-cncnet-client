@@ -400,9 +400,10 @@ namespace DTAClient.Domain.Multiplayer
                 gameMode.Maps.RemoveAll(map => map.SHA1 == sha1);
         }
 
-        private void ReplaceGameModeSnapshot(List<GameMode> gameModes)
+        private void ReplaceGameModeSnapshot(List<GameMode> gameModes, bool removeEmptyGameModes = true)
         {
-            gameModes.RemoveAll(g => g.Maps.Count < 1);
+            if (removeEmptyGameModes)
+                gameModes.RemoveAll(g => g.Maps.Count < 1);
             PublishSnapshot(gameModes);
         }
 
