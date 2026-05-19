@@ -460,7 +460,7 @@ namespace DTAClient.Domain.Multiplayer
 
             foreach (Map map in tasks.Select(t => t.Result).Where(m => m != null))
             {
-                AddMapToGameModes(map, false);
+                AddMapToGameModes(map, _gameModes, false);
                 _translatedMapNames[map.UntranslatedName] = map.Name;
             }
         }
@@ -589,7 +589,7 @@ namespace DTAClient.Domain.Multiplayer
 
             foreach (Map map in customMapCache.Items.Values.Select(item => item.Map))
             {
-                AddMapToGameModes(map, false);
+                AddMapToGameModes(map, _gameModes, false);
             }
 
             Logger.Log("MapLoader: Custom maps loaded.");
@@ -738,10 +738,8 @@ namespace DTAClient.Domain.Multiplayer
         /// Adds map to all eligible game modes.
         /// </summary>
         /// <param name="map">Map to add.</param>
+        /// <param name="gameModes">Game modes collection.</param>
         /// <param name="enableLogging">If set to true, a message for each game mode the map is added to is output to the log file.</param>
-        private void AddMapToGameModes(Map map, bool enableLogging)
-            => AddMapToGameModes(map, _gameModes, enableLogging);
-
         private void AddMapToGameModes(Map map, List<GameMode> gameModes, bool enableLogging)
         {
             foreach (string gameMode in map.GameModes)
