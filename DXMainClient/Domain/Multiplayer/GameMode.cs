@@ -13,7 +13,7 @@ namespace DTAClient.Domain.Multiplayer
     /// <summary>
     /// A multiplayer game mode.
     /// </summary>
-    public class GameMode : GameModeMapBase
+    public class GameMode : GameModeMapBase, ICloneable
     {
         public GameMode(string name)
         {
@@ -89,6 +89,8 @@ namespace DTAClient.Domain.Multiplayer
 
             return clone;
         }
+
+        object ICloneable.Clone() => Clone();
 
         public void Initialize()
         {
