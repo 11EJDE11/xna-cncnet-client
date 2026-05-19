@@ -404,6 +404,7 @@ namespace DTAClient.Domain.Multiplayer
         {
             if (removeEmptyGameModes)
                 gameModes.RemoveAll(g => g.Maps.Count < 1);
+
             PublishSnapshot(gameModes);
         }
 
