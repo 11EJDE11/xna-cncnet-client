@@ -151,7 +151,6 @@ namespace DTAClient.Domain.Multiplayer
             await LoadCustomMapsAsync();
 
             Logger.Log("MapLoader: Post-processing game mode map collections.");
-            _initialGameModes.RemoveAll(g => g.Maps.Count < 1);
             PublishSnapshot(_initialGameModes);
             _initialGameModes = null;
 
@@ -399,16 +398,16 @@ namespace DTAClient.Domain.Multiplayer
                 gameMode.Maps.RemoveAll(map => map.SHA1 == sha1);
         }
 
-        private void ReplaceGameModeSnapshot(List<GameMode> gameModes, bool removeEmptyGameModes = true)
+        private void ReplaceGameModeSnapshot(List<GameMode> gameModes, bool removeEmptyGameModes = true) =>
+            PublishSnapshot(gameModes, removeEmptyGameModes);
+
+        private void PublishSnapshot(List<GameMode> gameModes, bool removeEmptyGameModes = true)
         {
             if (removeEmptyGameModes)
                 gameModes.RemoveAll(g => g.Maps.Count < 1);
 
-            PublishSnapshot(gameModes);
+            _snapshot = new Snapshot(gameModes, new GameModeMapCollection(gameModes));
         }
-
-        private void PublishSnapshot(List<GameMode> gameModes)
-            => _snapshot = new Snapshot(gameModes, new GameModeMapCollection(gameModes));
 
         private List<GameMode> CloneGameModeSnapshot() => GameModes.Select(gameMode => gameMode.Clone()).ToList();
 
