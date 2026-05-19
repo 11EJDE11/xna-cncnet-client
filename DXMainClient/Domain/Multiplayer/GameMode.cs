@@ -78,14 +78,14 @@ namespace DTAClient.Domain.Multiplayer
         public GameMode CloneForSnapshot()
         {
             GameMode clone = (GameMode)MemberwiseClone();
-            clone.Maps = new List<Map>(Maps);
-            clone.DisallowedPlayerSides = new List<int>(DisallowedPlayerSides);
-            clone.DisallowedHumanPlayerSides = new List<int>(DisallowedHumanPlayerSides);
-            clone.DisallowedComputerPlayerSides = new List<int>(DisallowedComputerPlayerSides);
-            clone.ForcedCheckBoxValues = new List<KeyValuePair<string, bool>>(ForcedCheckBoxValues);
-            clone.ForcedDropDownValues = new List<KeyValuePair<string, int>>(ForcedDropDownValues);
-            clone.ForcedSpawnIniOptions = new List<KeyValuePair<string, string>>(ForcedSpawnIniOptions);
-            clone.randomizedMapCodeININames = new List<string>(randomizedMapCodeININames);
+            clone.Maps = [.. clone.Maps];
+            clone.DisallowedPlayerSides = [.. clone.DisallowedPlayerSides];
+            clone.DisallowedHumanPlayerSides = [.. clone.DisallowedHumanPlayerSides];
+            clone.DisallowedComputerPlayerSides = [.. clone.DisallowedComputerPlayerSides];
+            clone.ForcedCheckBoxValues = [.. clone.ForcedCheckBoxValues];
+            clone.ForcedDropDownValues = [.. clone.ForcedDropDownValues];
+            clone.ForcedSpawnIniOptions = [.. clone.ForcedSpawnIniOptions];
+            clone.randomizedMapCodeININames = [.. clone.randomizedMapCodeININames];
 
             return clone;
         }
