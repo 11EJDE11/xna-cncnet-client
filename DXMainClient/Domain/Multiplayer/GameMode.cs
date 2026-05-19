@@ -75,7 +75,7 @@ namespace DTAClient.Domain.Multiplayer
 
         private List<KeyValuePair<string, string>> ForcedSpawnIniOptions = new List<KeyValuePair<string, string>>();
 
-        public GameMode CloneForSnapshot()
+        public GameMode Clone()
         {
             GameMode clone = (GameMode)MemberwiseClone();
             clone.Maps = [.. clone.Maps];

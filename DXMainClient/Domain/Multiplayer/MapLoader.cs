@@ -410,7 +410,7 @@ namespace DTAClient.Domain.Multiplayer
         private void PublishSnapshot(List<GameMode> gameModes)
             => _snapshot = new Snapshot(gameModes, new GameModeMapCollection(gameModes));
 
-        private List<GameMode> CloneGameModeSnapshot() => GameModes.Select(gameMode => gameMode.CloneForSnapshot()).ToList();
+        private List<GameMode> CloneGameModeSnapshot() => GameModes.Select(gameMode => gameMode.Clone()).ToList();
 
         private async Task LoadMultiMapsAsync(IniFile mpMapsIni)
         {
