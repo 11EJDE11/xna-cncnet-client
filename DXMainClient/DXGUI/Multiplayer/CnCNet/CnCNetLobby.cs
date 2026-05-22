@@ -1496,7 +1496,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 cncnetUserData.IsIgnored(message.SenderIdent) &&
                 !message.SenderIsAdmin)
             {
-                lbChatMessages.AddMessage(new ChatMessage(Color.Silver, string.Format("Message blocked from - {0}".L10N("Client:Main:PMBlockedFrom"), message.SenderName)));
+                lbChatMessages.AddMessage(new ChatMessage(message.SenderName, message.SenderIdent, false, Color.Silver, message.DateTime, "Message blocked".L10N("Client:Main:PMBlocked")));
             }
             else
             {

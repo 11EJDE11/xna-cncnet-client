@@ -333,7 +333,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 cncnetUserData.IsIgnored(e.Message.SenderIdent) &&
                 !e.Message.SenderIsAdmin)
             {
-                lbChatMessages.AddMessage(new ChatMessage(Color.Silver, string.Format("Message blocked from - {0}".L10N("Client:Main:PMBlockedFrom"), e.Message.SenderName)));
+                lbChatMessages.AddMessage(new ChatMessage(e.Message.SenderName, e.Message.SenderIdent, false, Color.Silver, e.Message.DateTime, "Message blocked".L10N("Client:Main:PMBlocked")));
             }
             else
             {

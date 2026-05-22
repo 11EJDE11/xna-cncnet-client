@@ -848,8 +848,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             if (cncnetUserData.IsIgnored(e.Message.SenderIdent))
             {
-                lbChatMessages.AddMessage(new ChatMessage(Color.Silver,
-                    string.Format("Message blocked from {0}".L10N("Client:Main:MessageBlockedFromPlayer"), e.Message.SenderName)));
+                lbChatMessages.AddMessage(new ChatMessage(e.Message.SenderName, e.Message.SenderIdent, false, Color.Silver, e.Message.DateTime, "Message blocked".L10N("Client:Main:PMBlocked")));
             }
             else
             {

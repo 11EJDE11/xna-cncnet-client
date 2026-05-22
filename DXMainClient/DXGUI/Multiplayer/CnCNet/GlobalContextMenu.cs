@@ -239,7 +239,14 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return connectionManager.UserList.Find(u => u.Name == contextMenuData.PlayerName);
 
             if (!string.IsNullOrEmpty(contextMenuData.ChatMessage?.SenderName))
-                return connectionManager.UserList.Find(u => u.Name == contextMenuData.ChatMessage.SenderName);
+            {
+                var user = connectionManager.UserList.Find(u => u.Name == contextMenuData.ChatMessage.SenderName);
+                if (user != null)
+                    return user;
+
+                if (!string.IsNullOrEmpty(contextMenuData.ChatMessage.SenderIdent))
+                    return new IRCUser(contextMenuData.ChatMessage.SenderName) { Ident = contextMenuData.ChatMessage.SenderIdent };
+            }
 
             return null;
         }
