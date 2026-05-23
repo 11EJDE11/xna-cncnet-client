@@ -1,4 +1,5 @@
 ﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
@@ -26,6 +27,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     private XNAClientButton btnClose;
     private readonly List<XNALabel> playerLabels = new List<XNALabel>();
     private readonly Dictionary<(string, string), XNALabel> statusCells = new Dictionary<(string, string), XNALabel>();
+    private static Texture2D sharedCellBackground;
 
     public TunnelNegotiationStatusPanel(WindowManager windowManager) : base(windowManager)
     {
@@ -133,6 +135,8 @@ public class TunnelNegotiationStatusPanel : XNAPanel
                     continue;
                 }
 
+                sharedCellBackground ??= AssetLoader.CreateTexture(new Color(30, 30, 30, 120), 1, 1);
+
                 var cellPanel = new XNAPanel(WindowManager)
                 {
                     ClientRectangle = new Rectangle(
@@ -140,7 +144,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
                         HEADER_HEIGHT + (i * CELL_HEIGHT),
                         CELL_WIDTH,
                         CELL_HEIGHT),
-                    BackgroundTexture = AssetLoader.CreateTexture(new Color(30, 30, 30, 120), 1, 1),
+                    BackgroundTexture = sharedCellBackground,
                     DrawBorders = true
                 };
                 matrixPanel.AddChild(cellPanel);
