@@ -1432,7 +1432,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             using var sha1 = SHA1.Create();
             byte[] hash = sha1.ComputeHash(Encoding.UTF8.GetBytes($"{playerName}:{channel.ChannelName}"));
-            return BitConverter.ToUInt32(hash, 0);
+            return BinaryPrimitives.ReadUInt32LittleEndian(hash);
         }
 
         private void RegenerateV3PlayerInfos()
