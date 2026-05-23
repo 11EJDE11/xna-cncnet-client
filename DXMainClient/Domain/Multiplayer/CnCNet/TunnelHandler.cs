@@ -85,6 +85,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 wm.AddCallback(CurrentTunnelPinged, this, EventArgs.Empty);
         }
 
+        private void DoTunnelFailed(CnCNetTunnel tunnel)
+        {
+            if (TunnelFailed != null)
+                wm.AddCallback(TunnelFailed, this, tunnel);
+        }
+
         private void ConnectionManager_Connected(object sender, EventArgs e)
         {
             InitializeTunnelCommunicator();
@@ -223,7 +229,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                     if (previousPing.IsValid() && (tunnel.Ping.IsUnknown() || tunnel.Ping.Milliseconds > TUNNEL_FAILED_PING_AMOUNT))
                     {
                         if (CurrentTunnel == null || tunnel == CurrentTunnel)
-                            TunnelFailed?.Invoke(this, tunnel);
+                            DoTunnelFailed(tunnel);
                     }
 
                     DoTunnelPinged(tunnel.Address, tunnel.Port);
@@ -243,7 +249,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 PingValue pingResult = tunnel.Ping;
 
                 if (previousPing.IsValid() && (pingResult.IsUnknown() || pingResult.Milliseconds > TUNNEL_FAILED_PING_AMOUNT))
-                    TunnelFailed?.Invoke(this, tunnel);
+                    DoTunnelFailed(tunnel);
 
                 DoCurrentTunnelPinged();
 
@@ -261,7 +267,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                         if (CurrentTunnel == null && otherPreviousPing.IsValid() &&
                             (pingResult.IsUnknown() || pingResult.Milliseconds > TUNNEL_FAILED_PING_AMOUNT))
                         {
-                            TunnelFailed?.Invoke(this, otherTunnel);
+                            DoTunnelFailed(otherTunnel);
                         }
 
                         DoTunnelPinged(otherTunnel.Address, otherTunnel.Port);
