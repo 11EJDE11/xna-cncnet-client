@@ -122,7 +122,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 "Download a map from CNCNet's map server using a map ID and an optional filename.\nExample: \"/downloadmap MAPID [2] My Battle Map\"".L10N("Client:Main:DownloadMapCommandDescription"),
                 false, DownloadMapByIdCommand));
             AddChatBoxCommand(new ChatBoxCommand("NEGSTATUS",
-                "Toggle the tunnel negotiation status display",
+                "Toggle the tunnel negotiation status display".L10N("Client:Main:NegStatusCommand"),
                 false, ToggleNegotiationStatus));
             AddChatBoxCommand(new ChatBoxCommand("TUNNELMODE",
                 "Change tunnel mode (0=V3 static, 1=V3 dynamic, 2=V2 legacy) (game host only)".L10N("Client:Main:TunnelModeCommand"),
@@ -506,7 +506,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             if (!_useDynamicTunnels)
             {
-                AddNotice("Negotiation status is only available when using dynamic tunnels.");
+                AddNotice("Negotiation status is only available when using dynamic tunnels.".L10N("Client:Main:NegStatusOnlyDynamic"));
                 return;
             }
 
