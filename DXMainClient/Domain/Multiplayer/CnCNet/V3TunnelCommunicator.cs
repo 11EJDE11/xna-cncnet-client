@@ -103,14 +103,21 @@ public class V3TunnelCommunicator
     /// </summary>
     public void Shutdown()
     {
+        Thread? receiveThread;
         lock (_initLock)
         {
             _running = false;
             _udpClient?.Close();
             _udpClient = null;
+            receiveThread = _receiveThread;
+            _receiveThread = null;
             _endpointToTunnel.Clear();
+            _tunnelToEndpoint.Clear();
+            _handlers.Clear();
             Logger.Log("V3TunnelCommunicator: Shut down");
         }
+
+        receiveThread?.Join();
     }
 
     /// <summary>
@@ -126,7 +133,9 @@ public class V3TunnelCommunicator
         foreach (var tunnel in tunnels.Where(t => t.Version == 3))
         {
             var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
-            if (_endpointToTunnel.TryAdd(endpoint, tunnel))
+            bool addedEndpoint = _endpointToTunnel.TryAdd(endpoint, tunnel);
+            bool addedTunnel = _tunnelToEndpoint.TryAdd(tunnel, endpoint);
+            if (addedEndpoint || addedTunnel)
                 added++;
         }
 
