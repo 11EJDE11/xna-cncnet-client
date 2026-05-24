@@ -382,6 +382,10 @@ public class V3TunnelCommunicator
     /// </summary>
     private void ReceivePackets()
     {
+        UdpClient? udpClient = _udpClient;
+        if (udpClient == null)
+            return;
+
         try
         {
             IPEndPoint remoteEndpoint = new(IPAddress.Any, 0);
@@ -389,9 +393,9 @@ public class V3TunnelCommunicator
             {
                 try
                 {
-                    if (_udpClient!.Client.Poll(500_000, SelectMode.SelectRead)) // 500ms
+                    if (udpClient.Client.Poll(500_000, SelectMode.SelectRead)) // 500ms
                     {
-                        byte[] data = _udpClient.Receive(ref remoteEndpoint);
+                        byte[] data = udpClient.Receive(ref remoteEndpoint);
                         var receivedTime = Stopwatch.GetTimestamp();
 
                         if (_endpointToTunnel.TryGetValue(remoteEndpoint, out var tunnel))
