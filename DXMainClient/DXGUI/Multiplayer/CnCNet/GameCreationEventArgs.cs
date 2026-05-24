@@ -1,7 +1,7 @@
 ﻿using DTAClient.Domain.Multiplayer.CnCNet;
 using System;
 
-#nullable enable annotations
+#nullable enable
 
 namespace DTAClient.DXGUI.Multiplayer.CnCNet
 {
