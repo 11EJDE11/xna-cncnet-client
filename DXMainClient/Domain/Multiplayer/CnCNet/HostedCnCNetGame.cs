@@ -1,5 +1,7 @@
 ﻿using System;
 
+#nullable enable annotations
+
 namespace DTAClient.Domain.Multiplayer.CnCNet
 {
     public class HostedCnCNetGame : GenericHostedGame
@@ -30,7 +32,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public bool Tunneled { get; set; }
         public bool IsLadder { get; set; }
         public string MatchID { get; set; }
-        public CnCNetTunnel TunnelServer { get; set; }
+        public CnCNetTunnel? TunnelServer { get; set; }
         public int[] BroadcastedGameOptionValues { get; set; }
 
         public override PingValue Ping => TunnelServer?.Ping ?? PingValue.Unknown;
