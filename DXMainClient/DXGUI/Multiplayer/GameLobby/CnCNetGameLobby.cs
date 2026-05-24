@@ -601,7 +601,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         protected override void UpdatePlayerPingIndicator(PlayerInfo pInfo,
             NegotiationStatus? negotiationStatus = null,
-            string tooltipText = null)
+            string? tooltipText = null)
         {
             if (tooltipText != null)
             {
