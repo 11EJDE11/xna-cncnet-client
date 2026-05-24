@@ -169,7 +169,6 @@ public class TunnelNegotiationStatusPanel : XNAPanel
 
     private void UpdateCell(XNALabel cell, NegotiationStatus status, PingValue? ping)
     {
-        cell.CenterOnParent();
         switch (status)
         {
             case NegotiationStatus.NotStarted:
