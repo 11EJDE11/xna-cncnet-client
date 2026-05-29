@@ -133,10 +133,12 @@ public class V3TunnelCommunicator
         foreach (var tunnel in tunnels.Where(t => t.Version == 3))
         {
             var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
-            bool addedEndpoint = _endpointToTunnel.TryAdd(endpoint, tunnel);
-            bool addedTunnel = _tunnelToEndpoint.TryAdd(tunnel, endpoint);
-            if (addedEndpoint || addedTunnel)
+
+            if (_tunnelToEndpoint.TryAdd(tunnel, endpoint))
+            {
+                _endpointToTunnel[endpoint] = tunnel;
                 added++;
+            }
         }
 
         if (added > 0)

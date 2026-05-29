@@ -208,11 +208,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         private string lastGameMode;
 
-        /// <summary>
-        /// Set to true if host has selected invalid tunnel server.
-        /// </summary>
-        private bool tunnelErrorMode;
-
         public override void Initialize()
         {
             IniNameOverride = nameof(CnCNetGameLobby);
@@ -633,12 +628,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (v3Info?.Tunnel != null && status == NegotiationStatus.Succeeded)
             {
-                var tunnelResult = v3Info.GetTunnelResult(v3Info.Tunnel);
-                var packetLoss = tunnelResult?.PacketLoss ?? 0;
+                // NegotiatedPacketLoss is set on both peers (decider measures it, non-decider
+                // receives it in the TunnelChoice packet), so both sides display correct stats.
+                string tooltip = "Ping:".L10N("Client:Main:PlayerInfoPing") + " " + pInfo.Ping.ToString() + "\n" +
+                                 "Tunnel:".L10N("Client:Main:Tunnel") + " " + v3Info.Tunnel.Name;
 
-                return "Ping:".L10N("Client:Main:PlayerInfoPing") + " " + pInfo.Ping.ToString() + "\n" +
-                       "Tunnel:".L10N("Client:Main:Tunnel") + " " + v3Info.Tunnel.Name + "\n" +
-                       "Packet Loss:".L10N("Client:Main:PacketLoss") + " " + $"{packetLoss:F1}%";
+                if (v3Info.NegotiatedPacketLoss.HasValue)
+                    tooltip += "\n" + "Packet Loss:".L10N("Client:Main:PacketLoss") + " " + $"{v3Info.NegotiatedPacketLoss.Value:F1}%";
+
+                return tooltip;
             }
 
             // NotStarted or no tunnel assigned
@@ -1164,6 +1162,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (pInfo != null)
                 UpdatePlayerPingIndicator(pInfo, NegotiationStatus.InProgress);
 
+            // Disable the launch button until this negotiation succeeds.
+            UpdateLaunchGameButtonStatus();
+
             try
             {
                 var startResult = player.StartNegotiation(localV3Player, tunnelHandler, availableTunnels);
@@ -1381,6 +1382,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             var sb = new StringBuilder();
 
+            // The player order here defines each player's in-game id (port). All clients must
+            // iterate in this same order; NonHostLaunchGameV3 keys the id off the message position.
             for (int i = 0; i < Players.Count; i++)
             {
                 var playerData = PreparePlayerGameData(i);
@@ -1419,6 +1422,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return (id, player.Name, IPAddress.Any + ":0");
             }
 
+            // In dynamic mode each client uses its own per-peer negotiated tunnel, so this
+            // address is informational only; it is only consumed by clients in V3 static mode.
             string address = v3PlayerInfo.Tunnel == null ? IPAddress.Any + ":0" : v3PlayerInfo.Tunnel.Address + ":" + v3PlayerInfo.Tunnel.Port;
             return (id, player.Name, address);
         }
@@ -2453,14 +2458,20 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 string pName = parts[i + 1];
                 string[] ipAndPort = parts[i + 2].Split(':');
 
-                if (ipAndPort.Length != 2 || !int.TryParse(ipAndPort[1], out int port))
+                if (ipAndPort.Length != 2 || !int.TryParse(ipAndPort[1], out int tunnelPort))
                     return;
 
                 PlayerInfo pInfo = Players.Find(p => p.Name == pName);
                 if (pInfo == null)
                     return;
 
-                pInfo.Port = 48000 - pInfo.Index;
+                // Derive the in-game id (port) from the player's position in the host's start
+                // message rather than the local player index, so every client agrees on the id
+                // even if their Players list ordering ever diverges. Must match the host's
+                // ordering in GenerateV3PlayerStartString.
+                int playerPosition = (i - 1) / 3;
+                int gamePort = 48000 - playerPosition;
+                pInfo.Port = gamePort;
                 recentPlayers.Add(pName);
 
                 V3PlayerInfo v3PlayerInfo = _v3PlayerInfos.Find(p => p.Name == pName);
@@ -2468,11 +2479,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 {
                     if (!_useDynamicTunnels) // host set tunnel
                     {
-                        CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == ipAndPort[0] && t.Port == port);
+                        CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == ipAndPort[0] && t.Port == tunnelPort);
                         v3PlayerInfo.Tunnel = tunnel;
                     }
-                    v3PlayerInfo.PlayerIndex = pInfo.Index;
-                    v3PlayerInfo.PlayerGameId = (ushort)pInfo.Port;
+                    v3PlayerInfo.PlayerIndex = playerPosition;
+                    v3PlayerInfo.PlayerGameId = (ushort)gamePort;
                     v3PlayerInfo.Id = id;
                 }
             }
@@ -2797,18 +2808,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
             if (tunnel == null)
             {
-                tunnelErrorMode = true;
                 AddNotice(("The game host has selected an invalid tunnel server! " +
                     "The game host needs to change the server or you will be unable " +
                     "to participate in the match.").L10N("Client:Main:HostInvalidTunnel"),
                     Color.Yellow);
-                UpdateLaunchGameButtonStatus();
                 return;
             }
 
-            tunnelErrorMode = false;
             HandleTunnelServerChange(tunnel);
-            UpdateLaunchGameButtonStatus();
         }
 
         private void HandleTunnelRenegotiateMessage(string sender, string tunnelAddressAndPort)
@@ -2889,7 +2896,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override bool UpdateLaunchGameButtonStatus()
         {
-            return base.UpdateLaunchGameButtonStatus();
+            // In dynamic tunnel mode the host can't launch until every player pair has
+            // successfully negotiated a tunnel (AreAllNegotiationsSuccessful is a no-op in
+            // the other tunnel modes). Only gate the host so non-host ready-up is unaffected.
+            btnLaunchGame.Enabled = base.UpdateLaunchGameButtonStatus() && (!IsHost || AreAllNegotiationsSuccessful());
+            return btnLaunchGame.Enabled;
         }
 
         #region CnCNet map sharing

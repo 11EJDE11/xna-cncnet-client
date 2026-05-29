@@ -81,7 +81,7 @@ public class V3PlayerNegotiator : IDisposable
         _isDecider = localPlayer.Id < remotePlayer.Id;
 
         if (localPlayer.Id == remotePlayer.Id)
-            Logger.Log($"V3TunnelNegotiator: WARNING - player ID collision between {localPlayer.Name} and {remotePlayer.Name} (ID: {localPlayer.Id}). Both peers will pick the non-decider role and negotiation will deadlock.");
+            Logger.Log($"V3PlayerNegotiator: WARNING - player ID collision between {localPlayer.Name} and {remotePlayer.Name} (ID: {localPlayer.Id}). Both peers will pick the non-decider role and negotiation will deadlock.");
 
         _remotePlayer.InitializeTunnelResults(tunnels);
 
@@ -92,7 +92,7 @@ public class V3PlayerNegotiator : IDisposable
     {
         try
         {
-            Logger.Log($"V3TunnelNegotiator: Starting negotiation with player {_remotePlayer.Name} (ID: {_remotePlayer.Id}, Decider: {_isDecider})");
+            Logger.Log($"V3PlayerNegotiator: Starting negotiation with player {_remotePlayer.Name} (ID: {_remotePlayer.Id}, Decider: {_isDecider})");
 
             _negotiationCompletionSource = new TaskCompletionSource<bool>();
             _tunnelAckReceived = new TaskCompletionSource<bool>();
@@ -112,7 +112,7 @@ public class V3PlayerNegotiator : IDisposable
         }
         catch (Exception ex)
         {
-            Logger.Log($"V3TunnelNegotiator: Negotiation failed with {_remotePlayer.Name}: {ex.Message}");
+            Logger.Log($"V3PlayerNegotiator: Negotiation failed with {_remotePlayer.Name}: {ex.Message}");
             PrintNegotiationResults();
             _negotiationCompletionSource.TrySetResult(false);
             RaiseNegotiationResult(null, 0, ex.Message);
@@ -143,7 +143,7 @@ public class V3PlayerNegotiator : IDisposable
         int totalTunnels = _remotePlayer.TunnelResults.Count;
         if (totalTunnels == 0)
         {
-            Logger.Log($"V3TunnelNegotiator: No tunnels available for decider negotiation with {_remotePlayer.Name}");
+            Logger.Log($"V3PlayerNegotiator: No tunnels available for decider negotiation with {_remotePlayer.Name}");
             _negotiationCompletionSource.TrySetResult(false);
             RaiseNegotiationResult(null, 0, "No tunnels available");
             return;
@@ -158,7 +158,7 @@ public class V3PlayerNegotiator : IDisposable
         {
             var tunnel = kvp.Key;
             var result = kvp.Value;
-            _ = WaitForTunnelResultsAsync(result, () => {
+            _ = WaitForTunnelResultsAsync(result, _negotiationCts.Token, () => {
                 lock (completionLock)
                 {
                     completedTunnels++;
@@ -182,7 +182,9 @@ public class V3PlayerNegotiator : IDisposable
             if (bestResult != null && bestResult.AverageRtt.HasValue)
             {
                 int halvedPing = (int)Math.Round(bestResult.AverageRtt.Value / 2.0);
-                bool acknowledged = await SendTunnelChoiceAsync(bestTunnel, halvedPing);
+                double packetLoss = bestResult.PacketLoss;
+                _remotePlayer.NegotiatedPacketLoss = packetLoss;
+                bool acknowledged = await SendTunnelChoiceAsync(bestTunnel, halvedPing, packetLoss);
                 if (!acknowledged)
                 {
                     _negotiationCompletionSource.TrySetResult(false);
@@ -195,17 +197,19 @@ public class V3PlayerNegotiator : IDisposable
         }
         else
         {
-            Logger.Log("V3TunnelNegotiator: No tunnels had any ping responses");
+            Logger.Log("V3PlayerNegotiator: No tunnels had any ping responses");
             _negotiationCompletionSource.TrySetResult(false);
             RaiseNegotiationResult(null, 0, "No viable tunnel found");
         }
     }
 
-    private static async Task WaitForTunnelResultsAsync(TunnelTestResult result, Action onComplete)
+    private static async Task WaitForTunnelResultsAsync(TunnelTestResult result, CancellationToken cancellationToken, Action onComplete)
     {
         try
         {
-            using var timeoutCts = new CancellationTokenSource();
+            // Link the phase timeouts to the negotiation token so they don't keep running
+            // for up to 30s after the negotiator has been disposed/cancelled.
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var connectedTask = result.ConnectedTcs.Task;
             var connectedTimeoutTask = Task.Delay(DECIDER_CONNECTED_PHASE_TIMEOUT, timeoutCts.Token);
             var completedTask = await Task.WhenAny(connectedTask, connectedTimeoutTask);
@@ -216,7 +220,7 @@ public class V3PlayerNegotiator : IDisposable
                 timeoutCts.Cancel();
 
                 // Now wait for pings
-                using var pingTimeoutCts = new CancellationTokenSource();
+                using var pingTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 var pingsTask = result.PingsCompletedTcs.Task;
                 var pingsTimeoutTask = Task.Delay(DECIDER_PING_PHASE_TIMEOUT, pingTimeoutCts.Token);
                 var pingCompletedTask = await Task.WhenAny(pingsTask, pingsTimeoutTask);
@@ -250,7 +254,7 @@ public class V3PlayerNegotiator : IDisposable
 
             if (completed == negotiationTimeout && !_negotiationCompletionSource.Task.IsCompleted)
             {
-                Logger.Log($"V3TunnelNegotiator: Timeout waiting for tunnel selection from {_remotePlayer.Name} after {NON_DECIDER_TOTAL_TIMEOUT_MS / 1000} seconds.");
+                Logger.Log($"V3PlayerNegotiator: Timeout waiting for tunnel selection from {_remotePlayer.Name} after {NON_DECIDER_TOTAL_TIMEOUT_MS / 1000} seconds.");
                 _negotiationCompletionSource.TrySetResult(false);
                 cts.Cancel();
 
@@ -263,7 +267,7 @@ public class V3PlayerNegotiator : IDisposable
         }
         catch (OperationCanceledException)
         {
-            Logger.Log($"V3TunnelNegotiator: Cancelled negotiation with {_remotePlayer.Name}.");
+            Logger.Log($"V3PlayerNegotiator: Cancelled negotiation with {_remotePlayer.Name}.");
         }
         finally
         {
@@ -306,9 +310,7 @@ public class V3PlayerNegotiator : IDisposable
     {
         for (int i = 0; i < PINGS_PER_TUNNEL && !_negotiationCts.Token.IsCancellationRequested; i++)
         {
-            var ping = new PingResult { ID = i, SentTimeTicks = Stopwatch.GetTimestamp() };
-
-            result.PingResults.Add(ping);
+            var ping = result.AddPing(i, Stopwatch.GetTimestamp());
 
             var pingIdBytes = new byte[4];
             BinaryPrimitives.WriteInt32LittleEndian(pingIdBytes, i);
@@ -328,11 +330,11 @@ public class V3PlayerNegotiator : IDisposable
                 var completedTask = await Task.WhenAny(ping.CompletionSource.Task, timeoutTask);
 
                 if (completedTask == timeoutTask)
-                    Logger.Log($"V3TunnelNegotiator: Ping timeout: ID {i} to {_remotePlayer.Name} on {tunnel.Name}");
+                    Logger.Log($"V3PlayerNegotiator: Ping timeout: ID {i} to {_remotePlayer.Name} on {tunnel.Name}");
             }
             catch (OperationCanceledException)
             {
-                Logger.Log($"V3TunnelNegotiator: Ping cancelled: ID {i} to {_remotePlayer.Name} on {tunnel.Name}");
+                Logger.Log($"V3PlayerNegotiator: Ping cancelled: ID {i} to {_remotePlayer.Name} on {tunnel.Name}");
                 break;
             }
         }
@@ -377,12 +379,7 @@ public class V3PlayerNegotiator : IDisposable
                 if (_isDecider && payload.Length >= 4)
                 {
                     int id = BinaryPrimitives.ReadInt32LittleEndian(payload);
-                    var ping = result.PingResults.FirstOrDefault(p => p.ID == id);
-                    if (ping != null && !ping.ReceivedTimeTicks.HasValue)
-                    {
-                        ping.ReceivedTimeTicks = Stopwatch.GetTimestamp();
-                        ping.CompletionSource.TrySetResult(true); //ping complete
-                    }
+                    result.CompletePing(id, Stopwatch.GetTimestamp());
                 }
                 break;
 
@@ -394,7 +391,11 @@ public class V3PlayerNegotiator : IDisposable
                     if (payload != null && payload.Length >= 4)
                         ping = BinaryPrimitives.ReadInt32LittleEndian(payload);
 
-                    Logger.Log($"V3TunnelNegotiator: {_remotePlayer.Name} chose {tunnel.Name} (Ping: {ping}ms)");
+                    // Packet loss (tenths of a percent) so we can display the same stats as the decider.
+                    if (payload != null && payload.Length >= 8)
+                        _remotePlayer.NegotiatedPacketLoss = BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(4)) / 10.0;
+
+                    Logger.Log($"V3PlayerNegotiator: {_remotePlayer.Name} chose {tunnel.Name} (Ping: {ping}ms)");
 
                     _remotePlayer.Tunnel = tunnel;
 
@@ -409,13 +410,13 @@ public class V3PlayerNegotiator : IDisposable
             case TunnelPacketType.TunnelAck:
                 if (_isDecider)
                 {
-                    Logger.Log($"V3TunnelNegotiator: Received acknowledgment from {_remotePlayer.Name} for tunnel {tunnel.Name}");
+                    Logger.Log($"V3PlayerNegotiator: Received acknowledgment from {_remotePlayer.Name} for tunnel {tunnel.Name}");
                     _tunnelAckReceived.TrySetResult(true);
                 }
                 break;
 
             case TunnelPacketType.NegotiationFailed:
-                Logger.Log($"V3TunnelNegotiator: Received failure notification from {_remotePlayer.Name}");
+                Logger.Log($"V3PlayerNegotiator: Received failure notification from {_remotePlayer.Name}");
                 _negotiationCompletionSource.TrySetResult(false);
                 RaiseNegotiationResult(null, 0, "Remote player reported negotiation failure");
                 break;
@@ -424,26 +425,29 @@ public class V3PlayerNegotiator : IDisposable
 
     // Informs the other player of the tunnel to use.
     // Returns true if an acknowledgment was received, false if all retries are exhausted.
-    private async Task<bool> SendTunnelChoiceAsync(CnCNetTunnel tunnel, int ping)
+    private async Task<bool> SendTunnelChoiceAsync(CnCNetTunnel tunnel, int ping, double packetLoss)
     {
-        Logger.Log($"V3TunnelNegotiator: Sending tunnel choice to {_remotePlayer.Name}: {tunnel.Name} (Ping: {ping}ms)");
+        Logger.Log($"V3PlayerNegotiator: Sending tunnel choice to {_remotePlayer.Name}: {tunnel.Name} (Ping: {ping}ms, Loss: {packetLoss:F1}%)");
 
-        var pingBytes = new byte[4];
+        // Payload: ping (int32) followed by packet loss in tenths of a percent (int32),
+        // so the non-decider can show the same stats without any extra IRC traffic.
+        var pingBytes = new byte[8];
         BinaryPrimitives.WriteInt32LittleEndian(pingBytes, ping);
+        BinaryPrimitives.WriteInt32LittleEndian(pingBytes.AsSpan(4), (int)Math.Round(packetLoss * 10));
 
         for (int attempt = 0; attempt < TUNNEL_CHOICE_MAX_RETRIES; attempt++)
         {
             // Bail if NegotiationFailed (or any other completion signal) has already arrived.
             if (_negotiationCompletionSource.Task.IsCompleted)
             {
-                Logger.Log($"V3TunnelNegotiator: Negotiation completion signaled before tunnel choice ack from {_remotePlayer.Name}, aborting retries");
+                Logger.Log($"V3PlayerNegotiator: Negotiation completion signaled before tunnel choice ack from {_remotePlayer.Name}, aborting retries");
                 return false;
             }
 
             _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
                 TunnelPacketType.TunnelChoice, pingBytes);
 
-            Logger.Log($"V3TunnelNegotiator: Attempt {attempt + 1} sent to {_remotePlayer.Name} via {tunnel.Name}");
+            Logger.Log($"V3PlayerNegotiator: Attempt {attempt + 1} sent to {_remotePlayer.Name} via {tunnel.Name}");
 
             try
             {
@@ -453,24 +457,24 @@ public class V3PlayerNegotiator : IDisposable
 
                 if (completedTask == _tunnelAckReceived.Task)
                 {
-                    Logger.Log($"V3TunnelNegotiator: Acknowledgment received from {_remotePlayer.Name} for {tunnel.Name}");
+                    Logger.Log($"V3PlayerNegotiator: Acknowledgment received from {_remotePlayer.Name} for {tunnel.Name}");
                     return true;
                 }
                 if (completedTask == _negotiationCompletionSource.Task)
                 {
-                    Logger.Log($"V3TunnelNegotiator: Negotiation completion signaled while waiting for ack from {_remotePlayer.Name}, aborting retries");
+                    Logger.Log($"V3PlayerNegotiator: Negotiation completion signaled while waiting for ack from {_remotePlayer.Name}, aborting retries");
                     return false;
                 }
-                Logger.Log($"V3TunnelNegotiator: No acknowledgment received, retrying... (attempt {attempt + 1}/{TUNNEL_CHOICE_MAX_RETRIES})");
+                Logger.Log($"V3PlayerNegotiator: No acknowledgment received, retrying... (attempt {attempt + 1}/{TUNNEL_CHOICE_MAX_RETRIES})");
             }
             catch (OperationCanceledException)
             {
-                Logger.Log($"V3TunnelNegotiator: Cancelled while waiting for acknowledgment from {_remotePlayer.Name}");
+                Logger.Log($"V3PlayerNegotiator: Cancelled while waiting for acknowledgment from {_remotePlayer.Name}");
                 return false;
             }
         }
 
-        Logger.Log($"V3TunnelNegotiator: Failed to receive tunnel acknowledgment from {_remotePlayer.Name} after {TUNNEL_CHOICE_MAX_RETRIES} goes");
+        Logger.Log($"V3PlayerNegotiator: Failed to receive tunnel acknowledgment from {_remotePlayer.Name} after {TUNNEL_CHOICE_MAX_RETRIES} goes");
         RaiseNegotiationResult(null, 0, $"Failed to receive tunnel acknowledgment after {TUNNEL_CHOICE_MAX_RETRIES} attempts");
         return false;
     }
@@ -495,7 +499,7 @@ public class V3PlayerNegotiator : IDisposable
             var result = _remotePlayer.GetTunnelResult(tunnel);
             if (result != null)
             {
-                var successfulPings = result.PingResults.Count(p => p.RoundTripTime.HasValue);
+                var (successfulPings, totalPings) = result.GetPingCounts();
 
                 sb.AppendLine(
                     $"Player: {_remotePlayer.Name} | " +
@@ -505,7 +509,7 @@ public class V3PlayerNegotiator : IDisposable
                     $"Real ping*2: {(tunnel.Ping.IsValid() ? $"{tunnel.Ping.Milliseconds * 2:F1}ms" : "N/A")} | " +
                     $"Difference: {(tunnel.Ping.IsValid() && result.AverageRtt.HasValue ? $"{result.AverageRtt.Value - (tunnel.Ping.Milliseconds * 2):F1}ms" : "N/A")} | " +
                     $"Packet Loss: {result.PacketLoss:F1}% | " +
-                    $"Pings: {successfulPings}/{result.PingResults.Count} | " +
+                    $"Pings: {successfulPings}/{totalPings} | " +
                     $"Connected: {result.ConnectedReceived}"
                 );
             }

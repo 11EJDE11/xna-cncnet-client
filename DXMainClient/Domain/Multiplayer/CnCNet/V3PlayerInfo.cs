@@ -44,7 +44,47 @@ public class TunnelTestResult
     // the joining player to receive that IRC message + attempt connections to each tunnel.
     private const int CONNECTED_TIMEOUT_MS = 15000;
 
-    public List<PingResult> PingResults { get; } = [];
+    private readonly object _pingLock = new();
+    private readonly List<PingResult> _pingResults = [];
+
+    /// <summary>
+    /// Records a new ping attempt and returns it.
+    /// </summary>
+    public PingResult AddPing(int id, long sentTimeTicks)
+    {
+        var ping = new PingResult { ID = id, SentTimeTicks = sentTimeTicks };
+        lock (_pingLock)
+            _pingResults.Add(ping);
+        return ping;
+    }
+
+    /// <summary>
+    /// Marks the ping with the given id as received. Returns true if it was an
+    /// outstanding ping that got completed.
+    /// </summary>
+    public bool CompletePing(int id, long receivedTimeTicks)
+    {
+        lock (_pingLock)
+        {
+            var ping = _pingResults.FirstOrDefault(p => p.ID == id);
+            if (ping == null || ping.ReceivedTimeTicks.HasValue)
+                return false;
+
+            ping.ReceivedTimeTicks = receivedTimeTicks;
+            ping.CompletionSource.TrySetResult(true);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Returns the count of successful and total pings.
+    /// </summary>
+    public (int successful, int total) GetPingCounts()
+    {
+        lock (_pingLock)
+            return (_pingResults.Count(p => p.RoundTripTime.HasValue), _pingResults.Count);
+    }
+
     public bool ConnectedReceived { get; set; }
 
     /// <summary>
@@ -61,17 +101,37 @@ public class TunnelTestResult
     {
         get
         {
-            var values = PingResults
-                .Where(p => p.RoundTripTime.HasValue)
-                .Select(p => p.RoundTripTime!.Value)
-                .ToList();
+            lock (_pingLock)
+            {
+                double sum = 0;
+                int count = 0;
+                foreach (var p in _pingResults)
+                {
+                    if (p.RoundTripTime.HasValue)
+                    {
+                        sum += p.RoundTripTime.Value;
+                        count++;
+                    }
+                }
 
-            return values.Count > 0 ? values.Average() : null;
+                return count > 0 ? sum / count : null;
+            }
         }
     }
 
-    public double PacketLoss => PingResults.Count == 0 ? 100 :
-        PingResults.Count(p => !p.RoundTripTime.HasValue) * 100.0 / PingResults.Count;
+    public double PacketLoss
+    {
+        get
+        {
+            lock (_pingLock)
+            {
+                if (_pingResults.Count == 0)
+                    return 100;
+
+                return _pingResults.Count(p => !p.RoundTripTime.HasValue) * 100.0 / _pingResults.Count;
+            }
+        }
+    }
 
     public DateTime? FirstConnectedSentTime { get; set; }
     public bool ConnectedTimedOut => FirstConnectedSentTime.HasValue &&
@@ -105,6 +165,13 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     public bool HasNegotiated { get; set; }
     public bool IsNegotiating { get; set; }
     public CnCNetTunnel? Tunnel { get; set; }
+
+    /// <summary>
+    /// Packet loss (percentage) measured for the chosen tunnel during negotiation.
+    /// Set on both peers: the decider measures it, the non-decider receives it in the
+    /// TunnelChoice packet, so both can display the same stats without extra IRC traffic.
+    /// </summary>
+    public double? NegotiatedPacketLoss { get; set; }
     public V3PlayerNegotiator? Negotiator => _negotiator;
     public Dictionary<CnCNetTunnel, TunnelTestResult> TunnelResults { get; } = [];
 
@@ -155,6 +222,7 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     public void ResetNegotiator()
     {
         Tunnel = null;
+        NegotiatedPacketLoss = null;
         IsNegotiating = false;
         HasNegotiated = false;
     }
