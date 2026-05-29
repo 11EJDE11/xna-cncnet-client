@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using ClientGUI;
 using DTAClient.Domain.Multiplayer.CnCNet;
 
+#nullable enable
+
 namespace DTAClient.DXGUI.Multiplayer.GameLobby;
 
 /// <summary>
@@ -22,12 +24,12 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     private const int TITLE_HEIGHT = 25;
     private const int CLOSE_BUTTON_SIZE = 20;
 
-    private XNALabel lblTitle;
-    private XNAPanel matrixPanel;
-    private XNAClientButton btnClose;
+    private XNALabel lblTitle = null!;
+    private XNAPanel matrixPanel = null!;
+    private XNAClientButton btnClose = null!;
     private readonly List<XNALabel> playerLabels = new List<XNALabel>();
     private readonly Dictionary<(string, string), XNALabel> statusCells = new Dictionary<(string, string), XNALabel>();
-    private static Texture2D sharedCellBackground;
+    private static Texture2D? sharedCellBackground;
 
     public TunnelNegotiationStatusPanel(WindowManager windowManager) : base(windowManager)
     {
@@ -70,7 +72,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         Disable();
     }
 
-    private void BtnClose_LeftClick(object sender, EventArgs e)
+    private void BtnClose_LeftClick(object? sender, EventArgs e)
     {
         Disable();
     }
