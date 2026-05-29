@@ -78,10 +78,16 @@ public class V3PlayerNegotiator : IDisposable
         _remotePlayer = remotePlayer;
         _tunnels = tunnels;
         _tunnelHandler = tunnelHandler;
-        _isDecider = localPlayer.Id < remotePlayer.Id;
+        // The decider drives tunnel selection; the other peer waits for its choice.
+        // Use the ID ordering, but fall back to player name ordering if the IDs
+        // collide so exactly one side still becomes decider (otherwise both peers
+        // would take the non-decider role and negotiation would deadlock).
+        _isDecider = localPlayer.Id != remotePlayer.Id
+            ? localPlayer.Id < remotePlayer.Id
+            : string.CompareOrdinal(localPlayer.Name, remotePlayer.Name) < 0;
 
         if (localPlayer.Id == remotePlayer.Id)
-            Logger.Log($"V3PlayerNegotiator: WARNING - player ID collision between {localPlayer.Name} and {remotePlayer.Name} (ID: {localPlayer.Id}). Both peers will pick the non-decider role and negotiation will deadlock.");
+            Logger.Log($"V3PlayerNegotiator: WARNING - player ID collision between {localPlayer.Name} and {remotePlayer.Name} (ID: {localPlayer.Id}). Falling back to name ordering to pick the decider.");
 
         _remotePlayer.InitializeTunnelResults(tunnels);
 
@@ -248,7 +254,7 @@ public class V3PlayerNegotiator : IDisposable
 
         try
         {
-            //wait for tuennel choice or negotiation timeout
+            //wait for tunnel choice or negotiation timeout
             var negotiationTimeout = Task.Delay(NON_DECIDER_TOTAL_TIMEOUT_MS, cts.Token);
             var completed = await Task.WhenAny(_negotiationCompletionSource.Task, negotiationTimeout);
 
