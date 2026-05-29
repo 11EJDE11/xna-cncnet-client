@@ -322,6 +322,9 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
 
         private void ChkUseLegacyTunnels_CheckedChanged(object sender, EventArgs e)
         {
+            if (chkUseLegacyTunnels.Checked)
+                chkUseDynamicTunnels.Checked = false;
+
             chkUseDynamicTunnels.AllowChecking = !chkUseLegacyTunnels.Checked;
         }
 
