@@ -183,6 +183,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private readonly List<V3PlayerInfo> _v3PlayerInfos = new();
         private bool _useLegacyTunnels;
         private bool _useDynamicTunnels;
+
+        /// <summary>
+        /// Set to true if the host has selected a tunnel server that this client
+        /// cannot resolve, which prevents this client from readying up / launching.
+        /// </summary>
+        private bool tunnelErrorMode;
         private readonly NegotiationDataManager _negotiationData = new();
         private bool _allNegotiationsCompleteMessageShown;
         private TunnelNegotiationStatusPanel _negotiationStatusPanel;
@@ -2231,14 +2237,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             string modeDescription = tunnelMode switch
             {
-                TUNNEL_MODE_V3_DYNAMIC => "dynamic tunnels (V3)",
-                TUNNEL_MODE_V2_LEGACY => "legacy tunnels (V2)",
-                _ => "static tunnels (V3)"
+                TUNNEL_MODE_V3_DYNAMIC => "dynamic tunnels (V3)".L10N("Client:Main:TunnelModeDynamicV3"),
+                TUNNEL_MODE_V2_LEGACY => "legacy tunnels (V2)".L10N("Client:Main:TunnelModeLegacyV2"),
+                _ => "static tunnels (V3)".L10N("Client:Main:TunnelModeStaticV3")
             };
 
             AddNotice(isHostInitiated
-                ? $"Tunnel mode changed to {modeDescription}."
-                : $"The game host has changed tunnel mode to {modeDescription}.");
+                ? string.Format("Tunnel mode changed to {0}.".L10N("Client:Main:TunnelModeChanged"), modeDescription)
+                : string.Format("The game host has changed tunnel mode to {0}.".L10N("Client:Main:TunnelModeChangedByHost"), modeDescription));
 
             if (IsHost)
             {
@@ -2808,14 +2814,18 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
             if (tunnel == null)
             {
+                tunnelErrorMode = true;
                 AddNotice(("The game host has selected an invalid tunnel server! " +
                     "The game host needs to change the server or you will be unable " +
                     "to participate in the match.").L10N("Client:Main:HostInvalidTunnel"),
                     Color.Yellow);
+                UpdateLaunchGameButtonStatus();
                 return;
             }
 
+            tunnelErrorMode = false;
             HandleTunnelServerChange(tunnel);
+            UpdateLaunchGameButtonStatus();
         }
 
         private void HandleTunnelRenegotiateMessage(string sender, string tunnelAddressAndPort)
@@ -2899,7 +2909,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             // In dynamic tunnel mode the host can't launch until every player pair has
             // successfully negotiated a tunnel (AreAllNegotiationsSuccessful is a no-op in
             // the other tunnel modes). Only gate the host so non-host ready-up is unaffected.
-            btnLaunchGame.Enabled = base.UpdateLaunchGameButtonStatus() && (!IsHost || AreAllNegotiationsSuccessful());
+            btnLaunchGame.Enabled = base.UpdateLaunchGameButtonStatus() && !tunnelErrorMode && (!IsHost || AreAllNegotiationsSuccessful());
             return btnLaunchGame.Enabled;
         }
 
