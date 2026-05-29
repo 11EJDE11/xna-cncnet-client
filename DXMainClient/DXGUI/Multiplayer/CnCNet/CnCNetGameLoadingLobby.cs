@@ -401,7 +401,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private void ShowTunnelSelectionWindow(string description)
         {
             tunnelSelectionWindow.Open(description,
-                tunnelHandler.CurrentTunnel?.Address);
+                tunnelHandler.CurrentTunnel?.Address,
+                targetVersion: 2);
         }
 
         private void TunnelSelectionWindow_TunnelSelected(object sender, TunnelEventArgs e)
