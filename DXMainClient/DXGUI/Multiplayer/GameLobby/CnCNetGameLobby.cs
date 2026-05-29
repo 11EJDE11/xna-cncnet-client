@@ -42,7 +42,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private const string CHEAT_DETECTED_MESSAGE = "CD";
         private const string DICE_ROLL_MESSAGE = "DR";
         private const string CHANGE_TUNNEL_SERVER_MESSAGE = "CHTNL";
-        private const string PLAYER_TUNNEL_MESSAGE = "PLYTNL";
         private const string NEGOTIATION_INFO_MESSAGE = "NEGINFO";
         private const string TUNNEL_RENEGOTIATE_MESSAGE = "TNLRENEG";
         private const string TUNNEL_FAILED_MESSAGE = "TNLFAIL";
@@ -101,7 +100,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(DICE_ROLL_MESSAGE, HandleDiceRollResult),
                 new NoParamCommandHandler(CHEAT_DETECTED_MESSAGE, HandleCheatDetectedMessage),
                 new StringCommandHandler(CHANGE_TUNNEL_SERVER_MESSAGE, HandleTunnelServerChangeMessage),
-                new StringCommandHandler(PLAYER_TUNNEL_MESSAGE, HandlePlayerTunnelMessage),
                 new StringCommandHandler(NEGOTIATION_INFO_MESSAGE, HandleNegotiationInfoMessage),
                 new StringCommandHandler(TUNNEL_RENEGOTIATE_MESSAGE, HandleTunnelRenegotiateMessage),
                 new StringCommandHandler(TUNNEL_FAILED_MESSAGE, HandleTunnelFailedMessage),
@@ -2811,37 +2809,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             tunnelErrorMode = false;
             HandleTunnelServerChange(tunnel);
             UpdateLaunchGameButtonStatus();
-        }
-
-        private void HandlePlayerTunnelMessage(string sender, string tunnelAddressAndPort)
-        {
-            if (!_useDynamicTunnels)
-                return;
-
-            string[] split = tunnelAddressAndPort.Split(':');
-            if (split.Length != 2)
-                return;
-
-            string tunnelAddress = split[0];
-            if (!int.TryParse(split[1], out int tunnelPort))
-                return;
-
-            CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
-
-            if (tunnel == null)
-            {
-                Logger.Log($"HandlePlayerTunnelMessage: Tunnel not found for {tunnelAddress}:{tunnelPort}");
-                return;
-            }
-
-            AddNotice($"{sender} is using tunnel: {tunnel.Name}");
-
-            if (!IsHost)
-                return;
-
-            var v3PlayerInfo = _v3PlayerInfos.FirstOrDefault(p => p.Name == sender);
-            if (v3PlayerInfo != null)
-                v3PlayerInfo.Tunnel = tunnel;
         }
 
         private void HandleTunnelRenegotiateMessage(string sender, string tunnelAddressAndPort)
