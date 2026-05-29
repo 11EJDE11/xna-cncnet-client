@@ -787,6 +787,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void GameLoadingLobby_GameLeft(object sender, EventArgs e)
         {
+            isJoiningGame = false;
             topBar.SwitchToSecondary();
             isInGameRoom = false;
             SetLogOutButtonText();
@@ -797,6 +798,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void GameLobby_GameLeft(object sender, EventArgs e)
         {
+            isJoiningGame = false;
             topBar.SwitchToSecondary();
             isInGameRoom = false;
             SetLogOutButtonText();

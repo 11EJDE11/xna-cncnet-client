@@ -372,7 +372,7 @@ namespace DTAClient.Online
             }
             else
             {
-                connection.QueueMessage(QueuedMessageType.SYSTEM_MESSAGE, 9, "PART " + ChannelName);
+                connection.QueueMessage(QueuedMessageType.INSTANT_MESSAGE, 0, "PART " + ChannelName);
             }
             ClearUsers();
         }
