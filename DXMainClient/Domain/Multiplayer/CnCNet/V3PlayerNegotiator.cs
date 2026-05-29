@@ -343,7 +343,7 @@ public class V3PlayerNegotiator : IDisposable
     }
 
     private void OnPacketReceived(uint senderId, uint receiverId, TunnelPacketType packetType,
-        byte[] payload, long receivedTime, CnCNetTunnel tunnel)
+        ReadOnlyMemory<byte> payload, long receivedTime, CnCNetTunnel tunnel)
     {
         var result = _remotePlayer.GetTunnelResult(tunnel);
         if (result == null)
@@ -370,7 +370,7 @@ public class V3PlayerNegotiator : IDisposable
                         tunnelResult.PingRequestReceived = true;
 
                     _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
-                        TunnelPacketType.PingResponse, payload);
+                        TunnelPacketType.PingResponse, payload.ToArray());
                 }
                 break;
 
@@ -378,8 +378,8 @@ public class V3PlayerNegotiator : IDisposable
                 //if we receive a ping response, note down the received time and complete the ping.
                 if (_isDecider && payload.Length >= 4)
                 {
-                    int id = BinaryPrimitives.ReadInt32LittleEndian(payload);
-                    result.CompletePing(id, Stopwatch.GetTimestamp());
+                    int id = BinaryPrimitives.ReadInt32LittleEndian(payload.Span);
+                    result.CompletePing(id, receivedTime);
                 }
                 break;
 
@@ -388,12 +388,12 @@ public class V3PlayerNegotiator : IDisposable
                 {
                     // The chosen tunnel is the one this packet came through
                     int ping = -1;
-                    if (payload != null && payload.Length >= 4)
-                        ping = BinaryPrimitives.ReadInt32LittleEndian(payload);
+                    if (payload.Length >= 4)
+                        ping = BinaryPrimitives.ReadInt32LittleEndian(payload.Span);
 
                     // Packet loss (tenths of a percent) so we can display the same stats as the decider.
-                    if (payload != null && payload.Length >= 8)
-                        _remotePlayer.NegotiatedPacketLoss = BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(4)) / 10.0;
+                    if (payload.Length >= 8)
+                        _remotePlayer.NegotiatedPacketLoss = BinaryPrimitives.ReadInt32LittleEndian(payload.Span[4..]) / 10.0;
 
                     Logger.Log($"V3PlayerNegotiator: {_remotePlayer.Name} chose {tunnel.Name} (Ping: {ping}ms)");
 

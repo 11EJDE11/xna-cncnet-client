@@ -17,12 +17,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet;
 /// <summary>
 /// Represents a parsed UDP packet exchanged through a V3 tunnel.
 /// </summary>
-public readonly ref struct ParsedPacket
+public readonly struct ParsedPacket
 {
     public uint SenderId { get; init; }
     public uint ReceiverId { get; init; }
     public TunnelPacketType? NegotiationType { get; init; }
-    public ReadOnlySpan<byte> Payload { get; init; }
+    public ReadOnlyMemory<byte> Payload { get; init; }
 }
 
 /// <summary>
@@ -51,7 +51,7 @@ public enum TunnelPacketType : byte
 /// <param name="receivedTime">Stopwatch ticks when received.</param>
 /// <param name="tunnel">The tunnel from which the packet was received.</param>
 public delegate void PacketHandler(uint senderId, uint receiverId,
-    TunnelPacketType packetType, byte[] payload, long receivedTime, CnCNetTunnel tunnel);
+    TunnelPacketType packetType, ReadOnlyMemory<byte> payload, long receivedTime, CnCNetTunnel tunnel);
 
 /// <summary>
 /// Manages UDP communication with V3 tunnel servers.
@@ -61,6 +61,9 @@ public delegate void PacketHandler(uint senderId, uint receiverId,
 public class V3TunnelCommunicator
 {
     private readonly static byte[] MAGIC_BYTES = [(byte)'C', (byte)'N', (byte)'C', (byte)'N', (byte)'E', (byte)'T']; // CNCNET
+
+    // Maximum size of a single UDP datagram payload, used to size the receive buffer.
+    private const int MAX_DATAGRAM_SIZE = 65507;
 
     private UdpClient? _udpClient;
     private Thread? _receiveThread;
@@ -312,14 +315,19 @@ public class V3TunnelCommunicator
     /// Processes a fully received packet by parsing and dispatching it
     /// to the appropriate registered handler.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="data"/> is a view over the shared receive buffer and is only
+    /// valid for the duration of the (synchronous) handler invocation. Handlers must
+    /// copy the payload if they need to retain it past the call.
+    /// </remarks>
     /// <param name="data">Raw packet data.</param>
     /// <param name="receivedTime">Timestamp when the packet was received.</param>
     /// <param name="tunnel">The tunnel that the packet arrived from.</param>
-    private void ProcessReceivedPacket(byte[] data, long receivedTime, CnCNetTunnel tunnel)
+    private void ProcessReceivedPacket(ReadOnlyMemory<byte> data, long receivedTime, CnCNetTunnel tunnel)
     {
         try
         {
-            var parsed = ParsePacket(data.AsSpan());
+            var parsed = ParsePacket(data);
             if (parsed.Payload.Length == 0 && !parsed.NegotiationType.HasValue)
                 return;
 
@@ -332,7 +340,7 @@ public class V3TunnelCommunicator
 
             handler?.Invoke(parsed.SenderId, parsed.ReceiverId,
                 parsed.NegotiationType ?? TunnelPacketType.GameData,
-                parsed.Payload.ToArray(), receivedTime, tunnel);
+                parsed.Payload, receivedTime, tunnel);
         }
         catch (Exception ex)
         {
@@ -344,20 +352,22 @@ public class V3TunnelCommunicator
     /// Parses an incoming raw UDP packet into a <see cref="ParsedPacket"/>.
     /// Detects negotiation vs. game data based on presence of magic bytes.
     /// </summary>
-    private static ParsedPacket ParsePacket(ReadOnlySpan<byte> data)
+    private static ParsedPacket ParsePacket(ReadOnlyMemory<byte> data)
     {
         const int HeaderSize = 8;
 
-        if (data.Length < HeaderSize)
+        ReadOnlySpan<byte> span = data.Span;
+
+        if (span.Length < HeaderSize)
             return new ParsedPacket();
 
-        uint senderId = BinaryPrimitives.ReadUInt32LittleEndian(data);
-        uint receiverId = BinaryPrimitives.ReadUInt32LittleEndian(data[4..]);
+        uint senderId = BinaryPrimitives.ReadUInt32LittleEndian(span);
+        uint receiverId = BinaryPrimitives.ReadUInt32LittleEndian(span[4..]);
 
-        if (data.Length >= HeaderSize + MAGIC_BYTES.Length + sizeof(TunnelPacketType) &&
-            data.Slice(HeaderSize, MAGIC_BYTES.Length).SequenceEqual(MAGIC_BYTES))
+        if (span.Length >= HeaderSize + MAGIC_BYTES.Length + sizeof(TunnelPacketType) &&
+            span.Slice(HeaderSize, MAGIC_BYTES.Length).SequenceEqual(MAGIC_BYTES))
         {
-            var negotiationType = (TunnelPacketType)data[HeaderSize + MAGIC_BYTES.Length];
+            var negotiationType = (TunnelPacketType)span[HeaderSize + MAGIC_BYTES.Length];
             var payload = data[(HeaderSize + sizeof(TunnelPacketType) + MAGIC_BYTES.Length)..];
             return new ParsedPacket
             {
@@ -368,7 +378,7 @@ public class V3TunnelCommunicator
             };
         }
 
-        var gamePayload = data.Length > HeaderSize ? data[HeaderSize..] : [];
+        var gamePayload = data.Length > HeaderSize ? data[HeaderSize..] : ReadOnlyMemory<byte>.Empty;
         return new ParsedPacket
         {
             SenderId = senderId,
@@ -388,20 +398,22 @@ public class V3TunnelCommunicator
         if (udpClient == null)
             return;
 
+        byte[] receiveBuffer = new byte[MAX_DATAGRAM_SIZE];
+        EndPoint remoteEndpoint = new IPEndPoint(IPAddress.Any, 0);
+
         try
         {
-            IPEndPoint remoteEndpoint = new(IPAddress.Any, 0);
             while (_running)
             {
                 try
                 {
                     if (udpClient.Client.Poll(500_000, SelectMode.SelectRead)) // 500ms
                     {
-                        byte[] data = udpClient.Receive(ref remoteEndpoint);
+                        int received = udpClient.Client.ReceiveFrom(receiveBuffer, ref remoteEndpoint);
                         var receivedTime = Stopwatch.GetTimestamp();
 
-                        if (_endpointToTunnel.TryGetValue(remoteEndpoint, out var tunnel))
-                            ProcessReceivedPacket(data, receivedTime, tunnel);
+                        if (_endpointToTunnel.TryGetValue((IPEndPoint)remoteEndpoint, out var tunnel))
+                            ProcessReceivedPacket(receiveBuffer.AsMemory(0, received), receivedTime, tunnel);
                         else
                             Logger.Log($"V3TunnelCommunicator: Received packet from unknown endpoint: {remoteEndpoint}");
                     }

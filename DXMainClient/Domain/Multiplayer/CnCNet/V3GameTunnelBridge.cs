@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Buffers.Binary;
 using Rampastring.Tools;
@@ -106,7 +107,7 @@ public class V3GameTunnelBridge
     /// <param name="receivedTime">The timestamp when the packet was received.</param>
     /// <param name="tunnel">The tunnel through which the packet arrived.</param>
     private void OnTunnelPacketReceived(uint senderId, uint receiverId,
-        TunnelPacketType packetType, byte[] payload, long receivedTime, CnCNetTunnel tunnel)
+        TunnelPacketType packetType, ReadOnlyMemory<byte> payload, long receivedTime, CnCNetTunnel tunnel)
     {
         var player = _otherPlayers.FirstOrDefault(p => p.Id == senderId && p.Tunnel == tunnel);
         if (player == null)
@@ -116,7 +117,11 @@ public class V3GameTunnelBridge
         {
             try
             {
-                _localGameClient.Send(payload, payload.Length, _gameEndpoint);
+                // Forward straight from the received buffer to avoid copying every game packet.
+                if (MemoryMarshal.TryGetArray(payload, out ArraySegment<byte> segment))
+                    _localGameClient.Client.SendTo(segment.Array!, segment.Offset, segment.Count, SocketFlags.None, _gameEndpoint);
+                else
+                    _localGameClient.Send(payload.ToArray(), payload.Length, _gameEndpoint);
             }
             catch (Exception ex)
             {
