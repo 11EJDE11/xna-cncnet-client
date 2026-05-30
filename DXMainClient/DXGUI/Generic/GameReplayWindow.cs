@@ -1,4 +1,4 @@
-﻿using ClientCore;
+using ClientCore;
 using ClientGUI;
 using DTAClient.Domain;
 using ClientCore.Extensions;
@@ -8,26 +8,23 @@ using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using ClientUpdater;
 
 namespace DTAClient.DXGUI.Generic
 {
-    /// <summary>
-    /// A window for loading replays.
-    /// </summary>
     public class GameReplayWindow : XNAWindow
     {
-        private const string REPLAY_GAMES_DIRECTORY = "replays";
+        private const string REPLAY_DIR = "replays";
+        private const string CURRENT_DIR = "replays/current";
 
         public GameReplayWindow(WindowManager windowManager, DiscordHandler discordHandler) : base(windowManager)
         {
             this.discordHandler = discordHandler;
         }
 
-        private DiscordHandler discordHandler;
+        private readonly DiscordHandler discordHandler;
 
         private XNAMultiColumnListBox lbReplayGameList;
         private XNAClientButton btnLaunch;
@@ -41,9 +38,6 @@ namespace DTAClient.DXGUI.Generic
         private XNAClientCheckBox chkShroudEnabled;
         private XNAClientCheckBox chkLockedViewport;
         private XNAClientCheckBox chkSelectUnits;
-
-        private const string SPAWNER_BINARY_NAME = "CnCNet-Spawner.dll";
-        private const string PHOBOS_BINARY_NAME = "phobos.dll";
 
         private List<ReplayGame> replays = new List<ReplayGame>();
         private bool wasEnabled = false;
@@ -59,16 +53,16 @@ namespace DTAClient.DXGUI.Generic
             lbReplayGameList = new XNAMultiColumnListBox(WindowManager);
             lbReplayGameList.Name = nameof(lbReplayGameList);
             lbReplayGameList.ClientRectangle = new Rectangle(13, 13, 724, 280);
-            lbReplayGameList.AddColumn("REPLAY GAME NAME".L10N("Client:Main:ReplayGameNameColumnHeader"), 360);
-            lbReplayGameList.AddColumn("DATE / TIME".L10N("Client:Main:ReplayGameDateTimeColumnHeader"), 154);
-            lbReplayGameList.AddColumn("SPAWNER VER", 105);
-            lbReplayGameList.AddColumn("PHOBOS VER", 105);
+            lbReplayGameList.AddColumn("REPLAY GAME NAME".L10N("Client:Main:ReplayGameNameColumnHeader"), 330);
+            lbReplayGameList.AddColumn("DATE / TIME".L10N("Client:Main:ReplayGameDateTimeColumnHeader"), 140);
+            lbReplayGameList.AddColumn("SPAWNER VER", 86);
+            lbReplayGameList.AddColumn("ARES VER", 80);
+            lbReplayGameList.AddColumn("PHOBOS VER", 88);
             lbReplayGameList.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
             lbReplayGameList.PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
             lbReplayGameList.SelectedIndexChanged += ListBox_SelectedIndexChanged;
             lbReplayGameList.AllowKeyboardInput = true;
 
-            // Game speed dropdown
             lblGameSpeed = new XNALabel(WindowManager);
             lblGameSpeed.Name = nameof(lblGameSpeed);
             lblGameSpeed.ClientRectangle = new Rectangle(13, 305, 100, 20);
@@ -79,7 +73,6 @@ namespace DTAClient.DXGUI.Generic
             ddGameSpeed.ClientRectangle = new Rectangle(120, 303, 150, 21);
             PopulateGameSpeedDropdown(5);
 
-            // Playback settings checkboxes
             lblPlaybackSettings = new XNALabel(WindowManager);
             lblPlaybackSettings.Name = nameof(lblPlaybackSettings);
             lblPlaybackSettings.ClientRectangle = new Rectangle(13, 335, 150, 20);
@@ -113,7 +106,7 @@ namespace DTAClient.DXGUI.Generic
             btnLaunch = new XNAClientButton(WindowManager);
             btnLaunch.Name = nameof(btnLaunch);
             btnLaunch.ClientRectangle = new Rectangle(200, 445, 110, 23);
-            btnLaunch.Text = "Load".L10N("Client:Main:ButtonLoad");
+            btnLaunch.Text = "Watch".L10N("Client:Main:ButtonWatchReplay");
             btnLaunch.AllowClick = false;
             btnLaunch.LeftClick += BtnLaunch_LeftClick;
 
@@ -142,104 +135,119 @@ namespace DTAClient.DXGUI.Generic
             AddChild(btnCancel);
 
             base.Initialize();
-
-            ListReplays();
         }
 
         private void ListBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (lbReplayGameList.SelectedIndex == -1)
-            {
-                btnLaunch.AllowClick = false;
-                btnDelete.AllowClick = false;
-            }
-            else
-            {
-                btnLaunch.AllowClick = true;
-                btnDelete.AllowClick = true;
+            bool hasSelection = lbReplayGameList.SelectedIndex >= 0;
+            btnLaunch.AllowClick = hasSelection;
+            btnDelete.AllowClick = hasSelection;
 
-                ReplayGame replay = replays[lbReplayGameList.SelectedIndex];
-                PopulateGameSpeedDropdown(replay.GameMode);
-            }
+            if (hasSelection)
+                PopulateGameSpeedDropdown(replays[lbReplayGameList.SelectedIndex].GameMode);
         }
 
-        private void BtnCancel_LeftClick(object sender, EventArgs e)
-        {
-            Disable();
-        }
+        private void BtnCancel_LeftClick(object sender, EventArgs e) => Disable();
 
         private void BtnLaunch_LeftClick(object sender, EventArgs e)
         {
             ReplayGame replay = replays[lbReplayGameList.SelectedIndex];
-            Logger.Log("Loading replay " + replay.FileName);
 
-            if (!ValidateReplayVersions(replay))
-                return;
-
-            // Extract spawn.ini and spawnmap.ini from the replay file
-            string spawnIniContent = replay.ExtractSpawnIni();
-            string spawnMapContent = replay.ExtractSpawnMap();
-
-            if (string.IsNullOrEmpty(spawnIniContent) || string.IsNullOrEmpty(spawnMapContent))
+            VersionCheckResult versionResult = replay.CheckVersions(ProgramConstants.GamePath);
+            if (versionResult.HasAnyMismatch)
             {
-                Logger.Log("ERROR: Replay file is missing spawn file data!");
+                string warningText =
+                    "This replay was recorded with different DLL versions:\n\n"
+                    + versionResult.ToWarningText()
+                    + "\n\nPlayback may desync. Launch anyway?";
+
+                var msgBox = new XNAMessageBox(WindowManager,
+                    "Version Mismatch".L10N("Client:Main:VersionMismatchTitle"),
+                    warningText,
+                    XNAMessageBoxButtons.YesNo);
+                msgBox.Show();
+                msgBox.YesClickedAction = _ => LaunchReplay(replay);
+            }
+            else
+            {
+                LaunchReplay(replay);
+            }
+        }
+
+        private void LaunchReplay(ReplayGame replay)
+        {
+            Logger.Log($"Launching replay: {replay.FileName}");
+
+            string spawnIniContent = replay.GetSpawnIni();
+            string spawnMapContent = replay.GetSpawnMap();
+            byte[] eventData = replay.GetEventData();
+
+            if (string.IsNullOrEmpty(spawnIniContent))
+            {
+                Logger.Log("ERROR: Replay file is missing spawn.ini data");
+                XNAMessageBox.Show(WindowManager,
+                    "Error".L10N("Client:Main:Error"),
+                    "This replay file is corrupt or missing spawn configuration data.");
                 return;
             }
 
-            string replayPath = Path.Combine(ProgramConstants.GamePath, REPLAY_GAMES_DIRECTORY, replay.FileName);
+            // Write event stream to temp extraction directory
+            string currentDir = SafePath.GetDirectory(ProgramConstants.GamePath, CURRENT_DIR).FullName;
+            Directory.CreateDirectory(currentDir);
 
-            // Write spawn.ini from replay
+            string eventsPath = Path.Combine(currentDir, "events.dat");
+            if (eventData.Length > 0)
+                File.WriteAllBytes(eventsPath, eventData);
+            else
+                Logger.Log("WARNING: Replay has no event data (eventDataSize=0)");
+
+            // Write spawn.ini extracted from replay
             FileInfo spawnerSettingsFile = SafePath.GetFile(ProgramConstants.GamePath, ProgramConstants.SPAWNER_SETTINGS);
             if (spawnerSettingsFile.Exists)
                 spawnerSettingsFile.Delete();
-            File.WriteAllText(spawnerSettingsFile.FullName, spawnIniContent);
+            File.WriteAllText(spawnerSettingsFile.FullName, spawnIniContent, System.Text.Encoding.UTF8);
 
-            // Update the settings fore play support
+            // Patch spawn.ini for playback
             IniFile spawnIni = new IniFile(spawnerSettingsFile.FullName);
-
-            spawnIni.SetStringValue("Settings", "ReplayFile", replayPath);
-
-            int selectedSpeed = ddGameSpeed.SelectedIndex;
-            spawnIni.SetIntValue("Settings", "GameSpeed", selectedSpeed);
-
+            spawnIni.SetBooleanValue("Settings", "IsReplayPlayback", true);
+            spawnIni.SetStringValue("Settings", "ReplayDataDir", currentDir);
+            spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
+            spawnIni.SetIntValue("Settings", "GameSpeed", ddGameSpeed.SelectedIndex);
             spawnIni.SetIntValue("Settings", "ReplayShroudEnabled", chkShroudEnabled.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked ? 1 : 0);
-            spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
-
             spawnIni.WriteIniFile();
 
-            // Write spawnmap.ini from replay
-            FileInfo spawnMapIniFile = SafePath.GetFile(ProgramConstants.GamePath, "spawnmap.ini");
-            if (spawnMapIniFile.Exists)
-                spawnMapIniFile.Delete();
+            // Write spawnmap.ini extracted from replay
+            if (!string.IsNullOrEmpty(spawnMapContent))
+            {
+                string spawnMapPath = Path.Combine(ProgramConstants.GamePath, "spawnmap.ini");
+                File.WriteAllText(spawnMapPath, spawnMapContent, System.Text.Encoding.UTF8);
+            }
 
-            File.WriteAllText(spawnMapIniFile.FullName, spawnMapContent);
-
-            Logger.Log("Extracted spawn files from replay successfully");
+            Logger.Log($"Replay extracted to {currentDir}");
 
             discordHandler.UpdatePresence(replay.GUIName, true);
-
             Disable();
 
             GameProcessLogic.GameProcessExited += GameProcessExited_Callback;
-
-            // so GameLobbyBase knows not to save replay.dat
             GameProcessLogic.IsReplayPlayback = true;
-
             GameProcessLogic.StartGameProcess(WindowManager);
         }
 
         private void BtnDelete_LeftClick(object sender, EventArgs e)
         {
             ReplayGame replay = replays[lbReplayGameList.SelectedIndex];
-            var msgBox = new XNAMessageBox(WindowManager, "Delete Confirmation".L10N("Client:Main:DeleteConfirmationTitle"),
+            var msgBox = new XNAMessageBox(WindowManager,
+                "Delete Confirmation".L10N("Client:Main:DeleteConfirmationTitle"),
                 string.Format(("The following replay will be deleted permanently:\n\n" +
                     "Filename: {0}\n" +
                     "Replay game name: {1}\n" +
                     "Date and time: {2}\n\n" +
                     "Are you sure you want to proceed?").L10N("Client:Main:DeleteReplayConfirmationText"),
-                    replay.FileName, Renderer.GetSafeString(replay.GUIName, lbReplayGameList.FontIndex), replay.LastModified.ToString()),
+                    replay.FileName,
+                    Renderer.GetSafeString(replay.GUIName, lbReplayGameList.FontIndex),
+                    replay.LastModified.ToString()),
                 XNAMessageBoxButtons.YesNo);
             msgBox.Show();
             msgBox.YesClickedAction = DeleteMsgBox_YesClicked;
@@ -248,9 +256,8 @@ namespace DTAClient.DXGUI.Generic
         private void DeleteMsgBox_YesClicked(XNAMessageBox obj)
         {
             ReplayGame replay = replays[lbReplayGameList.SelectedIndex];
-
             Logger.Log("Deleting replay " + replay.FileName);
-            SafePath.DeleteFileIfExists(ProgramConstants.GamePath, REPLAY_GAMES_DIRECTORY, replay.FileName);
+            SafePath.DeleteFileIfExists(ProgramConstants.GamePath, REPLAY_DIR, replay.FileName);
             ListReplays();
         }
 
@@ -258,20 +265,11 @@ namespace DTAClient.DXGUI.Generic
         {
             base.Update(gameTime);
 
-            // Check if the window was just enabled
             if (Enabled && !wasEnabled)
             {
-                // Check for replay.dat and move it if it exists
-                MoveReplayFileIfExists();
-
-                // Refresh the list to show any new replays
                 ListReplays();
-
-                // Select the first item if there are any replays
                 if (lbReplayGameList.ItemCount > 0)
-                {
                     lbReplayGameList.SelectedIndex = 0;
-                }
             }
 
             wasEnabled = Enabled;
@@ -285,47 +283,9 @@ namespace DTAClient.DXGUI.Generic
         protected virtual void GameProcessExited()
         {
             GameProcessLogic.GameProcessExited -= GameProcessExited_Callback;
-
-            // Clear replay playback flag
             GameProcessLogic.IsReplayPlayback = false;
-
             discordHandler.UpdatePresence();
             ListReplays();
-        }
-
-        /// <summary>
-        /// Checks for replay.dat and moves it to the replays directory if it exists.
-        /// </summary>
-        private void MoveReplayFileIfExists()
-        {
-            try
-            {
-                string replaySource = Path.Combine(ProgramConstants.GamePath, "replay.dat");
-                if (File.Exists(replaySource))
-                {
-                    string replayDir = Path.Combine(ProgramConstants.GamePath, REPLAY_GAMES_DIRECTORY);
-                    Directory.CreateDirectory(replayDir);
-
-                    string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                    string replayDest = Path.Combine(replayDir, $"Replay_{timestamp}.yrrp");
-
-                    // If file already exists, add a counter
-                    int counter = 1;
-                    string baseName = replayDest;
-                    while (File.Exists(replayDest))
-                    {
-                        replayDest = baseName.Replace(".yrrp", $"_{counter}.yrrp");
-                        counter++;
-                    }
-
-                    File.Move(replaySource, replayDest);
-                    Logger.Log($"Replay saved to: {replayDest}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Failed to move replay.dat: {ex.Message}");
-            }
         }
 
         public void ListReplays()
@@ -334,264 +294,60 @@ namespace DTAClient.DXGUI.Generic
             lbReplayGameList.ClearItems();
             lbReplayGameList.SelectedIndex = -1;
 
-            DirectoryInfo replayDirectoryInfo = SafePath.GetDirectory(ProgramConstants.GamePath, REPLAY_GAMES_DIRECTORY);
-
-            if (!replayDirectoryInfo.Exists)
-            {
-                Logger.Log("Replay directory not found!");
+            DirectoryInfo replayDir = SafePath.GetDirectory(ProgramConstants.GamePath, REPLAY_DIR);
+            if (!replayDir.Exists)
                 return;
-            }
 
-            IEnumerable<FileInfo> files = replayDirectoryInfo.EnumerateFiles("*.yrrp", SearchOption.TopDirectoryOnly);
-
-            foreach (FileInfo file in files)
+            foreach (FileInfo file in replayDir.EnumerateFiles("*.yrrp", SearchOption.TopDirectoryOnly))
             {
-                ParseReplay(file.FullName);
+                var replay = new ReplayGame(file.Name);
+                if (replay.ParseInfo())
+                    replays.Add(replay);
             }
 
-            replays = replays.OrderBy(sg => sg.LastModified.Ticks).ToList();
-            replays.Reverse();
+            replays = replays.OrderByDescending(r => r.LastModified.Ticks).ToList();
 
-            foreach (ReplayGame sg in replays)
+            foreach (ReplayGame r in replays)
             {
-                string[] item = new string[] {
-                    Renderer.GetSafeString(sg.GUIName, lbReplayGameList.FontIndex),
-                    sg.LastModified.ToString(),
-                    sg.SpawnerVersion ?? "Unknown",
-                    string.IsNullOrWhiteSpace(sg.PhobosVersion) ? "Unknown" : sg.PhobosVersion };
-                lbReplayGameList.AddItem(item, true);
+                lbReplayGameList.AddItem(new[]
+                {
+                    Renderer.GetSafeString(r.GUIName, lbReplayGameList.FontIndex),
+                    r.LastModified.ToString(),
+                    r.SpawnerVersion ?? "?",
+                    string.IsNullOrWhiteSpace(r.AresVersion) || r.AresVersion == "N/A" ? "N/A" : r.AresVersion,
+                    string.IsNullOrWhiteSpace(r.PhobosVersion) || r.PhobosVersion == "N/A" ? "N/A" : r.PhobosVersion
+                }, true);
             }
         }
 
-        private void ParseReplay(string fileName)
-        {
-            string shortName = Path.GetFileName(fileName);
-
-            ReplayGame replay = new ReplayGame(shortName);
-            if (replay.ParseInfo())
-                replays.Add(replay);
-        }
-
-        private bool ValidateReplayVersions(ReplayGame replay)
-        {
-            string replaySpawnerVersion = replay.SpawnerVersion;
-            string currentSpawnerVersion = GetCurrentSpawnerVersion();
-
-            //if (!string.IsNullOrWhiteSpace(replaySpawnerVersion)
-            //    && !string.IsNullOrWhiteSpace(currentSpawnerVersion)
-            //    && !AreVersionStringsEquivalent(replaySpawnerVersion, currentSpawnerVersion))
-            //{
-            //    var msgBox = new XNAMessageBox(WindowManager, "Version Mismatch",
-            //        $"Replay spawner version ({replaySpawnerVersion}) does not match local spawner version ({currentSpawnerVersion}).\n\nPlayback is blocked to prevent desync.",
-            //        XNAMessageBoxButtons.OK);
-            //    msgBox.Show();
-            //    return false;
-            //}
-
-            //if (!string.IsNullOrWhiteSpace(replay.PhobosVersion))
-            //{
-            //    string currentPhobosVersion = GetCurrentPhobosVersion();
-            //    if (!string.IsNullOrWhiteSpace(currentPhobosVersion)
-            //        && !AreVersionStringsEquivalent(replay.PhobosVersion, currentPhobosVersion))
-            //    {
-            //        var msgBox = new XNAMessageBox(WindowManager, "Version Mismatch",
-            //            $"Replay Phobos version ({replay.PhobosVersion}) does not match local Phobos version ({currentPhobosVersion}).\n\nPlayback is blocked to prevent desync.",
-            //            XNAMessageBoxButtons.OK);
-            //        msgBox.Show();
-            //        return false;
-            //    }
-            //}
-
-            //if (!string.IsNullOrWhiteSpace(replay.GameClientVersion))
-            //{
-            //    string currentGameClientVersion = GetCurrentGameClientVersion();
-            //    if (!string.IsNullOrWhiteSpace(currentGameClientVersion)
-            //        && !AreComparableTextEquivalent(replay.GameClientVersion, currentGameClientVersion))
-            //    {
-            //        var msgBox = new XNAMessageBox(WindowManager, "Version Mismatch",
-            //            $"Replay game client version ({replay.GameClientVersion}) does not match local game client version ({currentGameClientVersion}).\n\nPlayback is blocked to prevent desync.",
-            //            XNAMessageBoxButtons.OK);
-            //        msgBox.Show();
-            //        return false;
-            //    }
-            //}
-
-            return true;
-        }
-
-        private static bool AreComparableTextEquivalent(string left, string right)
-        {
-            string normalizedLeft = NormalizeComparableText(left);
-            string normalizedRight = NormalizeComparableText(right);
-            return normalizedLeft.Equals(normalizedRight, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string NormalizeComparableText(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return string.Empty;
-
-            string[] parts = text
-                .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            return string.Join(" ", parts);
-        }
-
-        private static bool AreVersionStringsEquivalent(string left, string right)
-        {
-            if (left.Equals(right, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (!TryParseVersionComponents(left, out int[] leftParts)
-                || !TryParseVersionComponents(right, out int[] rightParts))
-            {
-                return false;
-            }
-
-            int maxLength = Math.Max(leftParts.Length, rightParts.Length);
-            for (int i = 0; i < maxLength; i++)
-            {
-                int leftValue = i < leftParts.Length ? leftParts[i] : 0;
-                int rightValue = i < rightParts.Length ? rightParts[i] : 0;
-                if (leftValue != rightValue)
-                    return false;
-            }
-
-            return true;
-        }
-
-        private static bool TryParseVersionComponents(string versionText, out int[] components)
-        {
-            components = Array.Empty<int>();
-
-            if (string.IsNullOrWhiteSpace(versionText))
-                return false;
-
-            string[] rawParts = versionText.Split('.');
-            if (rawParts.Length == 0)
-                return false;
-
-            var parsed = new List<int>(rawParts.Length);
-            foreach (string rawPart in rawParts)
-            {
-                if (!int.TryParse(rawPart.Trim(), out int value) || value < 0)
-                    return false;
-
-                parsed.Add(value);
-            }
-
-            while (parsed.Count > 0 && parsed[parsed.Count - 1] == 0)
-                parsed.RemoveAt(parsed.Count - 1);
-
-            if (parsed.Count == 0)
-                parsed.Add(0);
-
-            components = parsed.ToArray();
-            return true;
-        }
-
-        private string GetCurrentSpawnerVersion()
-        {
-            return GetLocalBinaryVersion(SPAWNER_BINARY_NAME);
-        }
-
-        private string GetCurrentPhobosVersion()
-        {
-            return GetLocalBinaryVersion(PHOBOS_BINARY_NAME);
-        }
-
-        private static string GetCurrentGameClientVersion()
-        {
-            if (string.IsNullOrWhiteSpace(Updater.GameVersion))
-                return string.Empty;
-
-            return $"{ClientConfiguration.Instance.LocalGame} {Updater.GameVersion}".Trim();
-        }
-
-        private string GetLocalBinaryVersion(string fileName)
-        {
-            string filePath = Path.Combine(ProgramConstants.GamePath, fileName);
-            if (!File.Exists(filePath))
-                return string.Empty;
-
-            try
-            {
-                FileVersionInfo fileVersionInfo = FileVersionInfo.GetVersionInfo(filePath);
-
-                if (!string.IsNullOrWhiteSpace(fileVersionInfo.FileVersion))
-                    return fileVersionInfo.FileVersion;
-
-                if (!string.IsNullOrWhiteSpace(fileVersionInfo.ProductVersion))
-                    return fileVersionInfo.ProductVersion;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Failed to read version from {fileName}: {ex.Message}");
-            }
-
-            return string.Empty;
-        }
-
-        /// <summary>
-        /// Populates the game speed dropdown based on game mode.
-        /// GameMode values: Campaign=0, LAN=3, Internet=4, Skirmish=5
-        /// </summary>
         private void PopulateGameSpeedDropdown(uint gameMode)
         {
-            // Store the previously selected text
             string previouslySelected = ddGameSpeed.Items.Count > 0
                 ? ddGameSpeed.Items[ddGameSpeed.SelectedIndex].Text
                 : null;
 
             ddGameSpeed.Items.Clear();
 
-            // Populate based on game mode ---
-            string[] speeds;
+            string[] speeds = gameMode == 5  // Skirmish has 7 speed options
+                ? new[] { "Fastest", "Faster", "Fast", "Normal", "Slow", "Slower", "Slowest" }
+                : new[] { "Fastest", "Faster", "Fast", "Normal", "Slow", "Slower" };
 
-            if (gameMode == 5) // Skirmish (7 options)
-            {
-                speeds = new[]
-                {
-                    "Fastest", "Faster", "Fast",
-                    "Normal",
-                    "Slow", "Slower", "Slowest"
-                };
-            }
-            else // LAN / Internet / Campaign (6 options)
-            {
-                speeds = new[]
-                {
-                    "Fastest", "Faster", "Fast",
-                    "Normal",
-                    "Slow", "Slower"
-                };
-            }
-
-            foreach (var s in speeds)
+            foreach (string s in speeds)
                 ddGameSpeed.AddItem(s);
 
-            // Restore selection by matching text
-            int restoredIndex = -1;
-
+            int idx = 0; // default to Fastest
             if (!string.IsNullOrEmpty(previouslySelected))
             {
-                for (int i = 0; i < ddGameSpeed.Items.Count; i++)
+                for (int i = 0; i < speeds.Length; i++)
                 {
-                    if (string.Equals(ddGameSpeed.Items[i].Text, previouslySelected,
-                                      StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(speeds[i], previouslySelected, StringComparison.OrdinalIgnoreCase))
                     {
-                        restoredIndex = i;
+                        idx = i;
                         break;
                     }
                 }
             }
-
-            if (restoredIndex == -1)
-            {
-                restoredIndex = Array.IndexOf(speeds, "Fastest");
-                if (restoredIndex < 0) restoredIndex = 0; // last fallback
-            }
-
-            ddGameSpeed.SelectedIndex = restoredIndex;
+            ddGameSpeed.SelectedIndex = idx;
         }
     }
 }

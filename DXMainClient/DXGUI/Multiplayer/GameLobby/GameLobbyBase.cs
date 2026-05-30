@@ -55,9 +55,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private const int DROP_DOWN_HEIGHT = 21;
         private const string SPAWNER_VERSION_SETTINGS_KEY = "SpawnerVersion";
         private const string PHOBOS_VERSION_SETTINGS_KEY = "PhobosVersion";
+        private const string ARES_VERSION_SETTINGS_KEY = "AresVersion";
         private const string GAME_CLIENT_VERSION_SETTINGS_KEY = "GameClientVersion";
         private const string SPAWNER_BINARY_NAME = "CnCNet-Spawner.dll";
         private const string PHOBOS_BINARY_NAME = "phobos.dll";
+        private const string ARES_BINARY_NAME = "Ares.dll";
         protected readonly string BTN_LAUNCH_GAME = "Launch Game".L10N("Client:Main:ButtonLaunchGame");
         protected readonly string BTN_LAUNCH_READY = "I'm Ready".L10N("Client:Main:ButtonIAmReady");
         protected readonly string BTN_LAUNCH_NOT_READY = "Not Ready".L10N("Client:Main:ButtonNotReady");
@@ -1654,6 +1656,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             settings.SetStringValue("UIMapName", Map.UntranslatedName);
             settings.SetStringValue(SPAWNER_VERSION_SETTINGS_KEY, GetLocalBinaryVersionOrUnknown(SPAWNER_BINARY_NAME));
             settings.SetStringValue(PHOBOS_VERSION_SETTINGS_KEY, GetLocalBinaryVersionOrUnknown(PHOBOS_BINARY_NAME));
+            settings.SetStringValue(ARES_VERSION_SETTINGS_KEY, GetLocalBinaryVersionOrUnknown(ARES_BINARY_NAME));
             string gameClientVersion = string.IsNullOrWhiteSpace(Updater.GameVersion) ? "Unknown" : Updater.GameVersion;
             settings.SetStringValue(GAME_CLIENT_VERSION_SETTINGS_KEY, $"{ClientConfiguration.Instance.LocalGame} {gameClientVersion}".Trim());
 
@@ -2187,41 +2190,91 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             UpdateDiscordPresence(true);
 
-            // Only save replay.dat if we're not exiting from replay playback
             if (!GameProcessLogic.IsReplayPlayback)
             {
                 try
                 {
-                    string replaySource = Path.Combine(ProgramConstants.GamePath, "replay.dat");
-                    if (File.Exists(replaySource))
-                    {
-                        string replayDir = Path.Combine(ProgramConstants.GamePath, "replays");
-                        Directory.CreateDirectory(replayDir);
-
-                        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                        string replayDest = Path.Combine(replayDir, $"Replay_{timestamp}.yrrp");
-
-                        // If file already exists, add a counter
-                        int counter = 1;
-                        string baseName = replayDest;
-                        while (File.Exists(replayDest))
-                        {
-                            replayDest = baseName.Replace(".yrrp", $"_{counter}.yrrp");
-                            counter++;
-                        }
-
-                        File.Move(replaySource, replayDest);
-                        Logger.Log($"Replay saved to: {replayDest}");
-                    }
+                    PackageReplayIfRecorded();
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log($"Failed to move replay.dat: {ex.Message}");
+                    Logger.Log($"Replay packaging failed: {ex.Message}");
                 }
             }
             else
             {
-                Logger.Log("Skipping replay.dat save - exiting from replay playback");
+                Logger.Log("Skipping replay packaging - exiting from replay playback");
+                CleanupPlaybackFiles();
+            }
+        }
+
+        /// <summary>
+        /// Packages RECORD.BIN + spawn.ini + spawnmap.ini into a .yrrp replay file,
+        /// if the spawner wrote a spawn_recording_active.flag confirming it recorded.
+        /// </summary>
+        private void PackageReplayIfRecorded()
+        {
+            string flagPath = Path.Combine(ProgramConstants.GamePath, "spawn_recording_active.flag");
+            if (!File.Exists(flagPath))
+                return;
+
+            string recordBinPath = Path.Combine(ProgramConstants.GamePath, "RECORD.BIN");
+            if (!File.Exists(recordBinPath))
+            {
+                Logger.Log("Replay: RECORD.BIN not found after recording session");
+                SafePath.DeleteFileIfExists(flagPath);
+                return;
+            }
+
+            string spawnIniPath = SafePath.GetFile(ProgramConstants.GamePath, ProgramConstants.SPAWNER_SETTINGS).FullName;
+            string spawnMapPath = Path.Combine(ProgramConstants.GamePath, "spawnmap.ini");
+
+            string replayDir = Path.Combine(ProgramConstants.GamePath, "replays");
+            Directory.CreateDirectory(replayDir);
+
+            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string outputPath = Path.Combine(replayDir, $"Replay_{timestamp}.yrrp");
+            int counter = 1;
+            while (File.Exists(outputPath))
+            {
+                outputPath = Path.Combine(replayDir, $"Replay_{timestamp}_{counter}.yrrp");
+                counter++;
+            }
+
+            string gameClientVersion = string.IsNullOrWhiteSpace(Updater.GameVersion)
+                ? "Unknown"
+                : $"{ClientConfiguration.Instance.LocalGame} {Updater.GameVersion}".Trim();
+
+            ReplayGame.Package(
+                outputPath,
+                spawnIniPath,
+                spawnMapPath,
+                recordBinPath,
+                GetLocalBinaryVersionOrUnknown(SPAWNER_BINARY_NAME),
+                GetLocalBinaryVersionOrUnknown(ARES_BINARY_NAME),
+                GetLocalBinaryVersionOrUnknown(PHOBOS_BINARY_NAME),
+                gameClientVersion);
+
+            Logger.Log($"Replay packaged: {outputPath}");
+
+            SafePath.DeleteFileIfExists(recordBinPath);
+            SafePath.DeleteFileIfExists(flagPath);
+        }
+
+        /// <summary>
+        /// Removes temporary files written by the replay extraction step.
+        /// </summary>
+        private void CleanupPlaybackFiles()
+        {
+            try
+            {
+                string currentDir = SafePath.GetDirectory(ProgramConstants.GamePath, "replays", "current").FullName;
+                if (Directory.Exists(currentDir))
+                    Directory.Delete(currentDir, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Replay cleanup failed: {ex.Message}");
             }
         }
 
