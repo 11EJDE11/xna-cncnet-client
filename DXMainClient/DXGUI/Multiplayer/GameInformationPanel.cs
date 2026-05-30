@@ -318,23 +318,19 @@ namespace DTAClient.DXGUI.Multiplayer
                 {
                     bool isChecked = value != 0;
                     string iconName = isChecked ? checkbox.EnabledIcon : checkbox.DisabledIcon;
-                    if (!string.IsNullOrEmpty(iconName))
+                    Texture2D icon = string.IsNullOrEmpty(iconName) ? null : AssetLoader.LoadTexture(iconName);
+
+                    if (checkbox.ShowInGameInformationPanelAsIconOnly)
                     {
-                        Texture2D icon = AssetLoader.LoadTexture(iconName);
+                        // Icon-only mode has nothing to show without an icon
                         if (icon != null)
-                        {
-                            if (checkbox.ShowInGameInformationPanelAsIconOnly)
-                            {
-                                // Show icon only
-                                optionIconsOnly.Add((icon, checkbox.SortOrder));
-                            }
-                            else
-                            {
-                                // Show with text
-                                string text = $"{checkbox.Text}: {(isChecked ? "On".L10N("Client:Main:On") : "Off".L10N("Client:Main:Off"))}";
-                                optionIconsWithText.Add((icon, text, checkbox.SortOrder));
-                            }
-                        }
+                            optionIconsOnly.Add((icon, checkbox.SortOrder));
+                    }
+                    else
+                    {
+                        // Show with text; the icon is optional
+                        string text = $"{checkbox.Text}: {(isChecked ? "On".L10N("Client:Main:On") : "Off".L10N("Client:Main:Off"))}";
+                        optionIconsWithText.Add((icon, text, checkbox.SortOrder));
                     }
                 }
                 else if (setting is GameLobbyDropDown dropdown && dropdown.ShowInGameInformationPanel)
@@ -342,19 +338,18 @@ namespace DTAClient.DXGUI.Multiplayer
                     if (value >= 0 && value < dropdown.Items.Count)
                     {
                         Texture2D icon = dropdown.Items[value].Texture;
-                        if (icon != null)
+
+                        if (dropdown.ShowInGameInformationPanelAsIconOnly)
                         {
-                            if (dropdown.ShowInGameInformationPanelAsIconOnly)
-                            {
-                                // Show icon only
+                            // Icon-only mode has nothing to show without an icon
+                            if (icon != null)
                                 optionIconsOnly.Add((icon, dropdown.SortOrder));
-                            }
-                            else
-                            {
-                                // Show with text
-                                string text = $"{dropdown.OptionName}: {dropdown.Items[value].Text}";
-                                optionIconsWithText.Add((icon, text, dropdown.SortOrder));
-                            }
+                        }
+                        else
+                        {
+                            // Show with text; the icon is optional
+                            string text = $"{dropdown.OptionName}: {dropdown.Items[value].Text}";
+                            optionIconsWithText.Add((icon, text, dropdown.SortOrder));
                         }
                     }
                 }
@@ -397,7 +392,7 @@ namespace DTAClient.DXGUI.Multiplayer
             if (optionIconsWithText.Count > 0)
             {
                 var sortedIconsWithText = optionIconsWithText.OrderBy(x => x.sortOrder).ToList();
-                int maxIconWidth = sortedIconsWithText.Max(option => option.icon.Width);
+                int maxIconWidth = sortedIconsWithText.Max(option => option.icon?.Width ?? 0);
 
                 int itemIndex = 0;
                 int leftY = currentY;

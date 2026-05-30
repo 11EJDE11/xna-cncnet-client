@@ -32,22 +32,27 @@ namespace DTAClient.DXGUI.Multiplayer
         {
             base.Draw(gameTime);
 
-            if (icon == null)
-                return;
-
             var textSize = Renderer.GetTextDimensions(label, FontIndex);
             int textHeight = (int)textSize.Y;
 
-            int iconY = (textHeight - icon.Height) / 2;
-            if (iconY < 0) 
-                iconY = 0;
+            int iconWidth = icon?.Width ?? 0;
+            int iconHeight = icon?.Height ?? 0;
 
-            DrawTexture(icon, new Rectangle(0, iconY, icon.Width, icon.Height), Color.White);
+            if (icon != null)
+            {
+                int iconY = (textHeight - icon.Height) / 2;
+                if (iconY < 0)
+                    iconY = 0;
 
-            int panelHeight = Math.Max(icon.Height, textHeight);
+                DrawTexture(icon, new Rectangle(0, iconY, icon.Width, icon.Height), Color.White);
+            }
+
+            int panelHeight = Math.Max(iconHeight, textHeight);
             float textY = (panelHeight - textHeight) / 2f;
 
-            int textStartX = maxIconWidth > 0 ? maxIconWidth + iconLabelSpacing : icon.Width + iconLabelSpacing;
+            // Keep text aligned with icon-bearing rows when sharing a column (maxIconWidth),
+            // otherwise start at the icon width (0 when there is no icon).
+            int textStartX = maxIconWidth > 0 ? maxIconWidth + iconLabelSpacing : iconWidth + iconLabelSpacing;
 
             DrawString(label, FontIndex, new Vector2(textStartX, textY), UISettings.ActiveSettings.TextColor);
         }
