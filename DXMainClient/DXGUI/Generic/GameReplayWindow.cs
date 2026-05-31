@@ -35,7 +35,7 @@ namespace DTAClient.DXGUI.Generic
         private XNAClientDropDown ddGameSpeed;
 
         private XNALabel lblPlaybackSettings;
-        private XNAClientCheckBox chkShroudEnabled;
+        private XNAClientCheckBox chkRevealShroud;
         private XNAClientCheckBox chkLockedViewport;
         private XNAClientCheckBox chkSelectUnits;
 
@@ -82,25 +82,27 @@ namespace DTAClient.DXGUI.Generic
             int checkboxY = 360;
             int checkboxSpacing = 25;
 
-            chkShroudEnabled = new XNAClientCheckBox(WindowManager);
-            chkShroudEnabled.Name = nameof(chkShroudEnabled);
-            chkShroudEnabled.ClientRectangle = new Rectangle(checkboxX, checkboxY, 250, 20);
-            chkShroudEnabled.Text = "Enable shroud".L10N("Client:Main:EnableShroud");
-            chkShroudEnabled.Checked = false;
-            chkShroudEnabled.ToolTipText = "Fog of war will be enabled for the recording player.".L10N("Client:Main:ReplayShroudTooltip");
+            // Playback loads as a normal player, so expose a local reveal option instead of implying true spectator mode.
+            chkRevealShroud = new XNAClientCheckBox(WindowManager);
+            chkRevealShroud.Name = nameof(chkRevealShroud);
+            chkRevealShroud.ClientRectangle = new Rectangle(checkboxX, checkboxY, 250, 20);
+            chkRevealShroud.Text = "Reveal shroud".L10N("Client:Main:RevealShroud");
+            chkRevealShroud.Checked = true;
+            chkRevealShroud.ToolTipText = "Reveals the whole map during playback.".L10N("Client:Main:ReplayRevealShroudTooltip");
 
             chkLockedViewport = new XNAClientCheckBox(WindowManager);
             chkLockedViewport.Name = nameof(chkLockedViewport);
             chkLockedViewport.ClientRectangle = new Rectangle(checkboxX + 260, checkboxY, 200, 20);
             chkLockedViewport.Text = "Lock viewport".L10N("Client:Main:LockViewport");
-            chkLockedViewport.Checked = false;
+            chkLockedViewport.Checked = true;
             chkLockedViewport.ToolTipText = "Locks the viewport to what the recording player was seeing.".L10N("Client:Main:ReplayLockViewportTooltip");
 
+            // Recorded selection and recorded viewport are separate playback visuals, so let users toggle selection mirroring independently.
             chkSelectUnits = new XNAClientCheckBox(WindowManager);
             chkSelectUnits.Name = nameof(chkSelectUnits);
             chkSelectUnits.ClientRectangle = new Rectangle(checkboxX, checkboxY + checkboxSpacing, 250, 20);
             chkSelectUnits.Text = "Select units".L10N("Client:Main:SelectUnits");
-            chkSelectUnits.Checked = false;
+            chkSelectUnits.Checked = true;
             chkSelectUnits.ToolTipText = "Shows which units were selected by the recording player.".L10N("Client:Main:ReplaySelectUnitsTooltip");
 
             btnLaunch = new XNAClientButton(WindowManager);
@@ -127,7 +129,7 @@ namespace DTAClient.DXGUI.Generic
             AddChild(lblGameSpeed);
             AddChild(ddGameSpeed);
             AddChild(lblPlaybackSettings);
-            AddChild(chkShroudEnabled);
+            AddChild(chkRevealShroud);
             AddChild(chkLockedViewport);
             AddChild(chkSelectUnits);
             AddChild(btnLaunch);
@@ -213,9 +215,9 @@ namespace DTAClient.DXGUI.Generic
             spawnIni.SetStringValue("Settings", "ReplayDataDir", currentDir);
             spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
             spawnIni.SetIntValue("Settings", "GameSpeed", ddGameSpeed.SelectedIndex);
-            spawnIni.SetIntValue("Settings", "ReplayShroudEnabled", chkShroudEnabled.Checked ? 1 : 0);
-            spawnIni.SetIntValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked ? 1 : 0);
-            spawnIni.SetIntValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked ? 1 : 0);
+            spawnIni.SetBooleanValue("Settings", "ReplayRevealShroud", chkRevealShroud.Checked);
+            spawnIni.SetBooleanValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked);
+            spawnIni.SetBooleanValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked);
             spawnIni.WriteIniFile();
 
             // Write spawnmap.ini extracted from replay
