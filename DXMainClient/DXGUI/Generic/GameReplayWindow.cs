@@ -35,9 +35,10 @@ namespace DTAClient.DXGUI.Generic
         private XNAClientDropDown ddGameSpeed;
 
         private XNALabel lblPlaybackSettings;
-        private XNAClientCheckBox chkRevealShroud;
+        private XNAClientCheckBox chkSpectator;
         private XNAClientCheckBox chkLockedViewport;
         private XNAClientCheckBox chkSelectUnits;
+        private XNAClientCheckBox chkHideSidebar;
 
         private List<ReplayGame> replays = new List<ReplayGame>();
         private bool wasEnabled = false;
@@ -82,13 +83,15 @@ namespace DTAClient.DXGUI.Generic
             int checkboxY = 360;
             int checkboxSpacing = 25;
 
-            // Playback loads as a normal player, so expose a local reveal option instead of implying true spectator mode.
-            chkRevealShroud = new XNAClientCheckBox(WindowManager);
-            chkRevealShroud.Name = nameof(chkRevealShroud);
-            chkRevealShroud.ClientRectangle = new Rectangle(checkboxX, checkboxY, 250, 20);
-            chkRevealShroud.Text = "Reveal shroud".L10N("Client:Main:RevealShroud");
-            chkRevealShroud.Checked = true;
-            chkRevealShroud.ToolTipText = "Reveals the whole map during playback.".L10N("Client:Main:ReplayRevealShroudTooltip");
+            // Spectator view makes the local player the Observer during playback: reveals the whole map and
+            // shows cloaked/disguised units. Unchecked watches from the recording player's own perspective.
+            chkSpectator = new XNAClientCheckBox(WindowManager);
+            chkSpectator.Name = nameof(chkSpectator);
+            chkSpectator.ClientRectangle = new Rectangle(checkboxX, checkboxY, 250, 20);
+            chkSpectator.Text = "Spectator view".L10N("Client:Main:Spectator");
+            chkSpectator.Checked = true;
+            chkSpectator.ToolTipText = ("Watch as a spectator: reveals the whole map and shows cloaked, submerged" + Environment.NewLine +
+                "and disguised units. Uncheck to watch from the recording player's perspective.").L10N("Client:Main:ReplaySpectatorTooltip");
 
             chkLockedViewport = new XNAClientCheckBox(WindowManager);
             chkLockedViewport.Name = nameof(chkLockedViewport);
@@ -104,6 +107,14 @@ namespace DTAClient.DXGUI.Generic
             chkSelectUnits.Text = "Select units".L10N("Client:Main:SelectUnits");
             chkSelectUnits.Checked = true;
             chkSelectUnits.ToolTipText = "Shows which units were selected by the recording player.".L10N("Client:Main:ReplaySelectUnitsTooltip");
+
+            // Hides the sidebar and widens the tactical view; independent of the spectator/player perspective.
+            chkHideSidebar = new XNAClientCheckBox(WindowManager);
+            chkHideSidebar.Name = nameof(chkHideSidebar);
+            chkHideSidebar.ClientRectangle = new Rectangle(checkboxX + 260, checkboxY + checkboxSpacing, 200, 20);
+            chkHideSidebar.Text = "Hide sidebar".L10N("Client:Main:HideSidebar");
+            chkHideSidebar.Checked = false;
+            chkHideSidebar.ToolTipText = "Hides the sidebar during playback to enlarge the game view.".L10N("Client:Main:ReplayHideSidebarTooltip");
 
             btnLaunch = new XNAClientButton(WindowManager);
             btnLaunch.Name = nameof(btnLaunch);
@@ -129,9 +140,10 @@ namespace DTAClient.DXGUI.Generic
             AddChild(lblGameSpeed);
             AddChild(ddGameSpeed);
             AddChild(lblPlaybackSettings);
-            AddChild(chkRevealShroud);
+            AddChild(chkSpectator);
             AddChild(chkLockedViewport);
             AddChild(chkSelectUnits);
+            AddChild(chkHideSidebar);
             AddChild(btnLaunch);
             AddChild(btnDelete);
             AddChild(btnCancel);
@@ -215,9 +227,10 @@ namespace DTAClient.DXGUI.Generic
             spawnIni.SetStringValue("Settings", "ReplayDataDir", currentDir);
             spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
             spawnIni.SetIntValue("Settings", "GameSpeed", ddGameSpeed.SelectedIndex);
-            spawnIni.SetBooleanValue("Settings", "ReplayRevealShroud", chkRevealShroud.Checked);
+            spawnIni.SetBooleanValue("Settings", "ReplaySpectator", chkSpectator.Checked);
             spawnIni.SetBooleanValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked);
             spawnIni.SetBooleanValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked);
+            spawnIni.SetBooleanValue("Settings", "ReplayHideSidebar", chkHideSidebar.Checked);
             spawnIni.WriteIniFile();
 
             // Write spawnmap.ini extracted from replay
