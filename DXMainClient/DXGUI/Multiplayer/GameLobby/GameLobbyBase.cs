@@ -1804,6 +1804,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
+            spawnIni.SetStringValue("Settings", "MapSHA1", Map.SHA1);
             string packedGameOptionValues = GetPackedGameOptionValuesString();
             spawnIni.SetStringValue("Settings", "BroadcastedGameOptionValues", packedGameOptionValues);
 

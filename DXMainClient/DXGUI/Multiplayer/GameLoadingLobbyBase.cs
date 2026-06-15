@@ -67,6 +67,7 @@ namespace DTAClient.DXGUI.Multiplayer
 
         private string loadedGameID;
 
+        protected string SavedMapSHA1 = string.Empty;
         protected string SavedBroadcastOptionValues = string.Empty;
 
         private bool isSettingUp = false;
@@ -403,6 +404,7 @@ namespace DTAClient.DXGUI.Multiplayer
             IniFile spawnSGIni = new IniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, "Saved Games", "spawnSG.ini"));
 
             loadedGameID = spawnSGIni.GetStringValue("Settings", "GameID", "0");
+            SavedMapSHA1 = spawnSGIni.GetStringValue("Settings", "MapSHA1", string.Empty);
             SavedBroadcastOptionValues = spawnSGIni.GetStringValue("Settings", "BroadcastedGameOptionValues", string.Empty);
             lblMapNameValue.Tag = spawnSGIni.GetStringValue("Settings", "UIMapName", string.Empty);
             lblMapNameValue.Text = ((string)lblGameModeValue.Tag).L10N($"INI:Maps:{spawnSGIni.GetStringValue("Settings", "MapID", string.Empty)}:Description");
