@@ -241,6 +241,9 @@ namespace DTAClient.DXGUI
 
             buildServiceProviderTask.GetAwaiter().GetResult();
 
+            // Enable drag-and-drop import of map files onto the client window.
+            serviceProvider.GetService<DroppedMapHandler>().Initialize();
+
             Logger.Log("Initializing loading screen.");
             LoadingScreen ls = serviceProvider.GetService<LoadingScreen>();
             wm.AddAndInitializeControl(ls);
@@ -275,6 +278,7 @@ namespace DTAClient.DXGUI
                             .AddSingleton<DiscordHandler>()
                             .AddSingleton<PrivateMessageHandler>()
                             .AddSingleton<MapLoader>()
+                            .AddSingleton<DroppedMapHandler>()
                             .AddSingleton<Random>(GetRandom())
                             .AddSingleton<DirectDrawWrapperManager>();
 
