@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Rampastring.Tools;
@@ -33,8 +34,7 @@ public class V3PlayerNegotiator : IDisposable
     /// </summary>
     private readonly bool _isDecider;
     private readonly bool _p2pEnabled;
-    private readonly TaskCompletionSource<IPEndPoint?> _p2pPeerEndpointTcs = new();
-    private readonly Func<Task>? _sendP2PInfoViaIRC;
+    private readonly TaskCompletionSource<IReadOnlyList<IPEndPoint>?> _p2pPeerEndpointTcs = new();
     private readonly CancellationTokenSource _negotiationCts = new();
     private int _disposeState;
     private int _completionRaised;
@@ -55,7 +55,20 @@ public class V3PlayerNegotiator : IDisposable
     private static readonly TimeSpan DECIDER_PING_PHASE_TIMEOUT = TimeSpan.FromSeconds(15);
     private const int PINGS_PER_TUNNEL = 5;
     private const int PING_TIMEOUT_MS = 2000; //consider it dropped, move on to the next ping
+
+    // P2P paths respond in ~1-3ms on a LAN and up to ~150ms across networks. Use a tighter
+    // ping budget than relay negotiation so a doomed candidate (e.g. the reflexive address
+    // between same-NAT peers, which needs NAT hairpinning) doesn't stall the upgrade decision.
+    private const int P2P_PINGS_PER_TUNNEL = 4;
+    private const int P2P_PING_TIMEOUT_MS = 1000;
     private const int NON_DECIDER_CONNECTED_INTERVAL_MS = 500; //delay Connected packets a bit to avoid overloading
+
+    // P2P upgrade round: how long to wait for the peer's candidate addresses, how long the
+    // non-decider waits for the upgrade tunnel choice, and how long the decider waits for the
+    // peer to start punching the direct paths before falling back to the relay.
+    private const int P2P_CANDIDATE_EXCHANGE_TIMEOUT_MS = 3000;
+    private const int P2P_UPGRADE_NONDECIDER_TIMEOUT_MS = 10000;
+    private static readonly TimeSpan P2P_UPGRADE_CONNECTED_TIMEOUT = TimeSpan.FromSeconds(3);
 
     // When the decider has picked a tunnel, they need to inform the non-decider.
     // As it's UDP and not guaranteed to make it, we need an acknowledgement.
@@ -76,14 +89,13 @@ public class V3PlayerNegotiator : IDisposable
     private static readonly byte[] SINGLE_BYTE_TRUE = [0x01];
 
     public V3PlayerNegotiator(V3PlayerInfo localPlayer, V3PlayerInfo remotePlayer, List<CnCNetTunnel> tunnels,
-        TunnelHandler tunnelHandler, bool p2pEnabled = false, Func<Task>? sendP2PInfoViaIRC = null)
+        TunnelHandler tunnelHandler, bool p2pEnabled = false)
     {
         _localPlayer = localPlayer;
         _remotePlayer = remotePlayer;
         _tunnels = tunnels;
         _tunnelHandler = tunnelHandler;
         _p2pEnabled = p2pEnabled;
-        _sendP2PInfoViaIRC = sendP2PInfoViaIRC;
         // The decider drives tunnel selection; the other peer waits for its choice.
         // Use the ID ordering, but fall back to player name ordering if the IDs
         // collide so exactly one side still becomes decider (otherwise both peers
@@ -118,14 +130,20 @@ public class V3PlayerNegotiator : IDisposable
 
             bool negotiationSucceeded = await _negotiationCompletionSource.Task;
 
-            try
+            // P2P upgrade round: now that a relay tunnel is agreed (and can carry the exchange),
+            // offer direct candidate addresses through it and re-run the same negotiation over
+            // the direct paths, which may now win.
+            if (negotiationSucceeded && _p2pEnabled && _remotePlayer.Tunnel != null)
             {
-                await TryP2PPhaseAsync(_remotePlayer.Tunnel);
-            }
-            catch (OperationCanceledException) { }
-            catch (Exception ex)
-            {
-                Logger.Log($"V3PlayerNegotiator: P2P phase error with {_remotePlayer.Name}: {ex.Message}");
+                try
+                {
+                    await PerformP2PUpgradeRoundAsync(_remotePlayer.Tunnel);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    Logger.Log($"V3PlayerNegotiator: P2P upgrade error with {_remotePlayer.Name}: {ex.Message}");
+                }
             }
 
             PrintNegotiationResults();
@@ -160,9 +178,16 @@ public class V3PlayerNegotiator : IDisposable
     // Deciders wait for a Connected packet to be received. When received, they begin 
     // sending Ping Requests. When all tunnels are pinged/timed out, pick the best tunnel
     // and inform the other player.
-    private async Task PerformDeciderNegotiationAsync()
+    // <paramref name="tunnelsToAwait"/> limits which tunnels we wait for results on (defaults to
+    // all). The P2P upgrade round passes just the direct paths so the already-completed relay
+    // results don't trip the early-selection threshold; SelectBestTunnel still picks the global
+    // best across relay and direct, so the choice is sent through whichever tunnel wins.
+    private async Task PerformDeciderNegotiationAsync(
+        IReadOnlyCollection<CnCNetTunnel>? tunnelsToAwait = null,
+        TimeSpan? connectedTimeout = null)
     {
-        int totalTunnels = _remotePlayer.TunnelResults.Count;
+        var awaitTunnels = tunnelsToAwait ?? _remotePlayer.TunnelResults.Keys.ToList();
+        int totalTunnels = awaitTunnels.Count;
         if (totalTunnels == 0)
         {
             Logger.Log($"V3PlayerNegotiator: No tunnels available for decider negotiation with {_remotePlayer.Name}");
@@ -176,11 +201,14 @@ public class V3PlayerNegotiator : IDisposable
         var completionLock = new object();
         var selectionTcs = new TaskCompletionSource<bool>();
 
-        foreach (var kvp in _remotePlayer.TunnelResults)
+        foreach (var tunnel in awaitTunnels)
         {
-            var tunnel = kvp.Key;
-            var result = kvp.Value;
-            _ = WaitForTunnelResultsAsync(result, _negotiationCts.Token, () => {
+            var result = _remotePlayer.GetTunnelResult(tunnel);
+            if (result == null)
+                continue;
+
+            _ = WaitForTunnelResultsAsync(result, _negotiationCts.Token,
+                connectedTimeout ?? DECIDER_CONNECTED_PHASE_TIMEOUT, () => {
                 lock (completionLock)
                 {
                     completedTunnels++;
@@ -225,7 +253,8 @@ public class V3PlayerNegotiator : IDisposable
         }
     }
 
-    private static async Task WaitForTunnelResultsAsync(TunnelTestResult result, CancellationToken cancellationToken, Action onComplete)
+    private static async Task WaitForTunnelResultsAsync(TunnelTestResult result, CancellationToken cancellationToken,
+        TimeSpan connectedTimeout, Action onComplete)
     {
         try
         {
@@ -233,7 +262,7 @@ public class V3PlayerNegotiator : IDisposable
             // for up to 30s after the negotiator has been disposed/cancelled.
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var connectedTask = result.ConnectedTcs.Task;
-            var connectedTimeoutTask = Task.Delay(DECIDER_CONNECTED_PHASE_TIMEOUT, timeoutCts.Token);
+            var connectedTimeoutTask = Task.Delay(connectedTimeout, timeoutCts.Token);
             var completedTask = await Task.WhenAny(connectedTask, connectedTimeoutTask);
 
             if (completedTask == connectedTask)
@@ -263,7 +292,10 @@ public class V3PlayerNegotiator : IDisposable
     // Non-deciders continuously send "Connected" packets to the other player
     // until they receive a Ping Request. Then they reply with Ping Responses
     // and await the tunnel choice from the Decider.
-    private async Task PerformNonDeciderNegotiationAsync()
+    // In the P2P upgrade round (<paramref name="isUpgradeRound"/>) a timeout is benign: the relay
+    // tunnel from round 1 is already agreed, so we just keep it rather than reporting a failure.
+    private async Task PerformNonDeciderNegotiationAsync(
+        bool isUpgradeRound = false, int totalTimeoutMs = NON_DECIDER_TOTAL_TIMEOUT_MS)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(_negotiationCts.Token);
         Task connectedPacketsTask = SendConnectedPacketsAsync(cts.Token);
@@ -271,12 +303,20 @@ public class V3PlayerNegotiator : IDisposable
         try
         {
             //wait for tunnel choice or negotiation timeout
-            var negotiationTimeout = Task.Delay(NON_DECIDER_TOTAL_TIMEOUT_MS, cts.Token);
+            var negotiationTimeout = Task.Delay(totalTimeoutMs, cts.Token);
             var completed = await Task.WhenAny(_negotiationCompletionSource.Task, negotiationTimeout);
 
             if (completed == negotiationTimeout && !_negotiationCompletionSource.Task.IsCompleted)
             {
-                Logger.Log($"V3PlayerNegotiator: Timeout waiting for tunnel selection from {_remotePlayer.Name} after {NON_DECIDER_TOTAL_TIMEOUT_MS / 1000} seconds.");
+                if (isUpgradeRound)
+                {
+                    Logger.Log($"V3PlayerNegotiator: No P2P upgrade choice from {_remotePlayer.Name}; keeping relay {_remotePlayer.Tunnel?.Name}");
+                    _negotiationCompletionSource.TrySetResult(true);
+                    cts.Cancel();
+                    return;
+                }
+
+                Logger.Log($"V3PlayerNegotiator: Timeout waiting for tunnel selection from {_remotePlayer.Name} after {totalTimeoutMs / 1000} seconds.");
                 _negotiationCompletionSource.TrySetResult(false);
                 cts.Cancel();
 
@@ -328,9 +368,10 @@ public class V3PlayerNegotiator : IDisposable
     }
 
     //send a ping, wait for response or timeout, next ping...
-    private async Task PerformPingsAsync(CnCNetTunnel tunnel, TunnelTestResult result)
+    private async Task PerformPingsAsync(CnCNetTunnel tunnel, TunnelTestResult result,
+        int pingCount = PINGS_PER_TUNNEL, int pingTimeoutMs = PING_TIMEOUT_MS)
     {
-        for (int i = 0; i < PINGS_PER_TUNNEL && !_negotiationCts.Token.IsCancellationRequested; i++)
+        for (int i = 0; i < pingCount && !_negotiationCts.Token.IsCancellationRequested; i++)
         {
             var ping = result.AddPing(i, Stopwatch.GetTimestamp());
 
@@ -348,7 +389,7 @@ public class V3PlayerNegotiator : IDisposable
             // Wait for a ping response or timeout
             try
             {
-                var timeoutTask = Task.Delay(PING_TIMEOUT_MS, _negotiationCts.Token);
+                var timeoutTask = Task.Delay(pingTimeoutMs, _negotiationCts.Token);
                 var completedTask = await Task.WhenAny(ping.CompletionSource.Task, timeoutTask);
 
                 if (completedTask == timeoutTask)
@@ -375,11 +416,15 @@ public class V3PlayerNegotiator : IDisposable
         {
             case TunnelPacketType.Connected:
                 //if we receive a connected packet, move on to the pinging phase.
+                //Direct P2P paths use a tighter ping budget so a doomed candidate doesn't stall.
                 if (_isDecider && !result.ConnectedReceived)
                 {
                     result.ConnectedReceived = true;
                     result.ConnectedTcs.TrySetResult(true);
-                    _ = PerformPingsAsync(tunnel, result);
+                    if (tunnel is P2PTunnel)
+                        _ = PerformPingsAsync(tunnel, result, P2P_PINGS_PER_TUNNEL, P2P_PING_TIMEOUT_MS);
+                    else
+                        _ = PerformPingsAsync(tunnel, result);
                 }
                 break;
 
@@ -444,11 +489,11 @@ public class V3PlayerNegotiator : IDisposable
                 break;
 
             case TunnelPacketType.P2PInfo:
-                if (payload.Length == 6)
+                if (payload.Length >= 6 && payload.Length % 6 == 0)
                 {
-                    var peerEp = DecodeP2PEndpoint(payload);
-                    Logger.Log($"V3PlayerNegotiator: Received P2PInfo from {_remotePlayer.Name}: {peerEp}");
-                    _p2pPeerEndpointTcs.TrySetResult(peerEp);
+                    var peerEps = DecodeP2PEndpoints(payload);
+                    Logger.Log($"V3PlayerNegotiator: Received {peerEps.Count} P2P candidate(s) from {_remotePlayer.Name}: {string.Join(", ", peerEps)}");
+                    _p2pPeerEndpointTcs.TrySetResult(peerEps);
                 }
                 break;
 
@@ -458,9 +503,6 @@ public class V3PlayerNegotiator : IDisposable
                 break;
         }
     }
-
-    public void NotifyP2PInfoFromIRC(IPEndPoint ep) =>
-        _p2pPeerEndpointTcs.TrySetResult(ep);
 
     // Informs the other player of the tunnel to use.
     // Returns true if an acknowledgment was received, false if all retries are exhausted.
@@ -575,136 +617,163 @@ public class V3PlayerNegotiator : IDisposable
         Logger.Log(sb.ToString());
     }
 
-    private async Task TryP2PPhaseAsync(CnCNetTunnel? relayTunnel)
+    /// <summary>
+    /// Second negotiation round: exchange direct candidate addresses over the agreed relay
+    /// tunnel, then re-run the same Connected → Ping → Choice → Ack negotiation over the direct
+    /// paths. The decider pings them and, via SelectBestTunnel, picks the global best (relay vs
+    /// direct), sending its choice through the winning tunnel; the non-decider adopts whatever
+    /// tunnel that choice arrives on. If P2P doesn't pan out, both simply stay on the relay.
+    /// </summary>
+    private async Task PerformP2PUpgradeRoundAsync(CnCNetTunnel relayTunnel)
     {
-        // Over relay: 2s is a safety net — normal path is immediate (both sides always send something).
-        // IRC fallback (relayTunnel == null): 10s to allow for IRC delivery latency.
-        int timeoutMs = relayTunnel != null ? 2000 : 10000;
+        var localEps = await GatherLocalCandidatesAsync();
+        if (localEps.Count == 0)
+            return; // No way for the peer to reach us directly; keep the relay.
+
+        var peerEps = await ExchangeCandidatesAsync(localEps, relayTunnel);
+        if (peerEps.Count == 0)
+        {
+            Logger.Log($"V3PlayerNegotiator: No P2P candidates from {_remotePlayer.Name}; keeping relay");
+            return;
+        }
+
+        var p2pTunnels = BuildP2PTunnels(peerEps);
+        Logger.Log($"V3PlayerNegotiator: P2P upgrade round with {_remotePlayer.Name} over {p2pTunnels.Count} direct path(s)");
+
+        // Reset the per-round signals before any round-two packet can arrive, so a fast
+        // TunnelChoice lands on this round's completion source rather than round one's.
+        _negotiationCompletionSource = new TaskCompletionSource<bool>();
+        _tunnelAckReceived = new TaskCompletionSource<bool>();
+
+        // Punch from both sides so each NAT opens before pinging. The relay protocol only has
+        // the non-decider send Connected, which is enough to reach a public relay server but not
+        // to traverse a direct path where both peers' NATs need a mapping. Sent a few times since
+        // the very first datagrams open the mapping and may themselves be dropped.
+        for (int i = 0; i < 3; i++)
+        {
+            foreach (var tunnel in p2pTunnels)
+                _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
+                    TunnelPacketType.Connected, null);
+
+            await Task.Delay(150, _negotiationCts.Token);
+        }
 
         if (_isDecider)
-            await TryP2PDeciderAsync(relayTunnel, timeoutMs);
+            await PerformDeciderNegotiationAsync(p2pTunnels, P2P_UPGRADE_CONNECTED_TIMEOUT);
         else
-            await TryP2PNonDeciderAsync(relayTunnel, timeoutMs);
-    }
+            await PerformNonDeciderNegotiationAsync(isUpgradeRound: true, totalTimeoutMs: P2P_UPGRADE_NONDECIDER_TIMEOUT_MS);
 
-    private async Task TryP2PDeciderAsync(CnCNetTunnel? relayTunnel, int safetyTimeoutMs)
-    {
-        IPEndPoint? localEp = null;
+        bool upgradeAgreed = await _negotiationCompletionSource.Task;
 
-        if (_p2pEnabled)
+        // If round two wasn't agreed (e.g. the decider couldn't get its choice acknowledged),
+        // SelectBestTunnel may have optimistically pointed us at a direct path the peer never
+        // committed to. Fall back to the relay both sides agreed on in round one.
+        if (!upgradeAgreed)
         {
-            localEp = await _tunnelHandler.GetOrDiscoverP2PEndpointAsync();
-            if (localEp == null)
-                Logger.Log("V3PlayerNegotiator: STUN failed — sending P2PDecline");
-        }
-
-        await SendP2PStatusAsync(localEp, relayTunnel);
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_negotiationCts.Token);
-        cts.CancelAfter(safetyTimeoutMs);
-        try
-        {
-            var peerEp = await _p2pPeerEndpointTcs.Task.WaitAsync(cts.Token);
-            if (peerEp != null && localEp != null)
-                await MeasureAndUpgradeP2PAsync(peerEp, relayTunnel);
-        }
-        catch (OperationCanceledException)
-        {
-            Logger.Log($"V3PlayerNegotiator: No P2P response from {_remotePlayer.Name} (safety timeout)");
+            _remotePlayer.Tunnel = relayTunnel;
+            Logger.Log($"V3PlayerNegotiator: P2P upgrade with {_remotePlayer.Name} not agreed; staying on relay {relayTunnel.Name}");
         }
     }
 
-    private async Task TryP2PNonDeciderAsync(CnCNetTunnel? relayTunnel, int safetyTimeoutMs)
+    /// <summary>
+    /// Gathers this peer's P2P candidates: every local LAN endpoint (which lets peers
+    /// behind the same NAT connect without hairpinning) plus the STUN reflexive endpoint
+    /// (which covers peers on different networks). Returns an empty list if P2P is disabled
+    /// or no candidates could be gathered.
+    /// </summary>
+    private async Task<List<IPEndPoint>> GatherLocalCandidatesAsync()
     {
+        var eps = new List<IPEndPoint>();
+        if (!_p2pEnabled)
+            return eps;
+
+        eps.AddRange(_tunnelHandler.GetLocalP2PEndpoints());
+
+        var reflexive = await _tunnelHandler.GetOrDiscoverP2PEndpointAsync();
+        if (reflexive != null)
+            eps.Add(reflexive);
+        else if (eps.Count == 0)
+            Logger.Log("V3PlayerNegotiator: STUN failed and no local candidates — P2P unavailable");
+
+        // De-duplicate (the reflexive address can coincide with a public LAN address).
+        return eps.GroupBy(e => e.ToString()).Select(g => g.First()).ToList();
+    }
+
+    /// <summary>
+    /// Advertises our candidate addresses through the established relay tunnel and waits for the
+    /// peer's. Sent a few times since it's a single UDP packet on a path that, while just
+    /// validated, can still drop a datagram. Returns the peer's candidates, or empty on timeout.
+    /// </summary>
+    private async Task<IReadOnlyList<IPEndPoint>> ExchangeCandidatesAsync(
+        IReadOnlyList<IPEndPoint> localEps, CnCNetTunnel relayTunnel)
+    {
+        var payload = EncodeP2PEndpoints(localEps);
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(_negotiationCts.Token);
-        cts.CancelAfter(safetyTimeoutMs);
+        cts.CancelAfter(P2P_CANDIDATE_EXCHANGE_TIMEOUT_MS);
         try
         {
-            var peerEp = await _p2pPeerEndpointTcs.Task.WaitAsync(cts.Token);
-
-            IPEndPoint? localEp = null;
-            if (peerEp != null && _p2pEnabled)
+            for (int attempt = 0; attempt < 3 && !_p2pPeerEndpointTcs.Task.IsCompleted; attempt++)
             {
-                localEp = await _tunnelHandler.GetOrDiscoverP2PEndpointAsync();
-                if (localEp == null)
-                    Logger.Log("V3PlayerNegotiator: STUN failed — sending P2PDecline");
-            }
-
-            await SendP2PStatusAsync(localEp, relayTunnel);
-
-            if (peerEp != null && localEp != null)
-                await MeasureAndUpgradeP2PAsync(peerEp, relayTunnel);
-        }
-        catch (OperationCanceledException)
-        {
-            Logger.Log($"V3PlayerNegotiator: No P2P signal from decider {_remotePlayer.Name} (safety timeout)");
-            // Send decline so the decider isn't left waiting its full timeout
-            await SendP2PStatusAsync(null, relayTunnel);
-        }
-    }
-
-    private async Task SendP2PStatusAsync(IPEndPoint? localEp, CnCNetTunnel? relayTunnel)
-    {
-        if (localEp != null)
-        {
-            var payload = EncodeP2PEndpoint(localEp);
-            if (relayTunnel != null)
                 _tunnelHandler.SendPacket(relayTunnel, _localPlayer.Id, _remotePlayer.Id,
                     TunnelPacketType.P2PInfo, payload);
-            else if (_sendP2PInfoViaIRC != null)
-                await _sendP2PInfoViaIRC();
+
+                var completed = await Task.WhenAny(_p2pPeerEndpointTcs.Task, Task.Delay(150, cts.Token));
+                if (completed == _p2pPeerEndpointTcs.Task)
+                    break;
+            }
+
+            var peerEps = await _p2pPeerEndpointTcs.Task.WaitAsync(cts.Token);
+            return peerEps ?? (IReadOnlyList<IPEndPoint>)Array.Empty<IPEndPoint>();
         }
-        else if (relayTunnel != null)
+        catch (OperationCanceledException)
         {
-            _tunnelHandler.SendPacket(relayTunnel, _localPlayer.Id, _remotePlayer.Id,
-                TunnelPacketType.P2PDecline, null);
-        }
-        // No IRC equivalent for Decline — IRC fallback times out naturally if no P2PInfo arrives
-    }
-
-    private async Task MeasureAndUpgradeP2PAsync(IPEndPoint peerEp, CnCNetTunnel? relayTunnel)
-    {
-        var p2pTunnel = new P2PTunnel(peerEp, _remotePlayer.Name);
-        _tunnelHandler.AddP2PTunnel(p2pTunnel);
-
-        // Punch hole from this side; the peer's sends punch from theirs
-        _tunnelHandler.SendPacket(p2pTunnel, _localPlayer.Id, _remotePlayer.Id,
-            TunnelPacketType.Connected, null);
-
-        var p2pResult = _remotePlayer.AddTunnelResult(p2pTunnel);
-        await PerformPingsAsync(p2pTunnel, p2pResult);
-
-        double? relayRtt = relayTunnel != null
-            ? _remotePlayer.GetTunnelResult(relayTunnel)?.AverageRtt
-            : null;
-
-        if (p2pResult.AverageRtt.HasValue &&
-            (relayRtt == null || p2pResult.AverageRtt.Value < relayRtt.Value))
-        {
-            Logger.Log($"V3PlayerNegotiator: P2P ({p2pResult.AverageRtt.Value:F1}ms) beats " +
-                       $"relay ({relayRtt?.ToString("F1") ?? "none"}ms) — switching to direct");
-            _remotePlayer.Tunnel = p2pTunnel;
-        }
-        else
-        {
-            Logger.Log($"V3PlayerNegotiator: P2P available ({p2pResult.AverageRtt?.ToString("F1") ?? "no response"}ms) " +
-                       $"but relay ({relayRtt?.ToString("F1") ?? "none"}ms) is better; keeping relay");
+            Logger.Log($"V3PlayerNegotiator: No P2P candidates received from {_remotePlayer.Name} (timeout)");
+            return Array.Empty<IPEndPoint>();
         }
     }
 
-    private static byte[] EncodeP2PEndpoint(IPEndPoint ep)
+    /// <summary>
+    /// Turns the peer's advertised candidates into <see cref="P2PTunnel"/>s, registers them so
+    /// their packets are dispatched, and adds them to the negotiation tunnel set for round two.
+    /// </summary>
+    private List<CnCNetTunnel> BuildP2PTunnels(IReadOnlyList<IPEndPoint> peerEps)
     {
-        var buf = new byte[6];
-        ep.Address.GetAddressBytes().CopyTo(buf, 0);
-        BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(4), (ushort)ep.Port);
+        var tunnels = new List<CnCNetTunnel>();
+        foreach (var ep in peerEps)
+        {
+            var p2pTunnel = new P2PTunnel(ep, _remotePlayer.Name);
+            _tunnelHandler.AddP2PTunnel(p2pTunnel);
+            _remotePlayer.AddTunnelResult(p2pTunnel);
+            _tunnels.Add(p2pTunnel);
+            tunnels.Add(p2pTunnel);
+        }
+        return tunnels;
+    }
+
+    private static byte[] EncodeP2PEndpoints(IReadOnlyList<IPEndPoint> eps)
+    {
+        var ipv4 = eps.Where(e => e.Address.AddressFamily == AddressFamily.InterNetwork).ToList();
+        var buf = new byte[ipv4.Count * 6];
+        for (int i = 0; i < ipv4.Count; i++)
+        {
+            ipv4[i].Address.GetAddressBytes().CopyTo(buf, i * 6);
+            BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(i * 6 + 4), (ushort)ipv4[i].Port);
+        }
         return buf;
     }
 
-    private static IPEndPoint DecodeP2PEndpoint(ReadOnlyMemory<byte> payload)
+    private static List<IPEndPoint> DecodeP2PEndpoints(ReadOnlyMemory<byte> payload)
     {
-        var ip = new IPAddress(payload.Span[..4].ToArray());
-        ushort port = BinaryPrimitives.ReadUInt16BigEndian(payload.Span[4..]);
-        return new IPEndPoint(ip, port);
+        var eps = new List<IPEndPoint>();
+        var span = payload.Span;
+        for (int i = 0; i + 6 <= span.Length; i += 6)
+        {
+            var ip = new IPAddress(span.Slice(i, 4).ToArray());
+            ushort port = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(i + 4, 2));
+            eps.Add(new IPEndPoint(ip, port));
+        }
+        return eps;
     }
 
     public void Dispose()

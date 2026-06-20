@@ -80,6 +80,13 @@ public class V3TunnelCommunicator
     public bool IsInitialized => _udpClient != null;
 
     /// <summary>
+    /// The local UDP port the communicator is bound to. P2P candidates must use this
+    /// port so the LAN/reflexive endpoints map to the same socket used for game data.
+    /// Returns 0 if not initialized.
+    /// </summary>
+    public int LocalPort => _udpClient != null ? ((IPEndPoint)_udpClient.Client.LocalEndPoint!).Port : 0;
+
+    /// <summary>
     /// Initializes the communicator with the provided V3-compatible tunnels,
     /// sets up UDP socket, and starts the background receive thread.
     /// </summary>

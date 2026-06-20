@@ -242,8 +242,7 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
         V3PlayerInfo localPlayer,
         TunnelHandler tunnelHandler,
         List<CnCNetTunnel> availableTunnels,
-        bool p2pEnabled = false,
-        Func<Task>? sendP2PInfoViaIRC = null)
+        bool p2pEnabled = false)
     {
         if (this == localPlayer)
             throw new InvalidOperationException("Cannot start negotiation with yourself.");
@@ -264,8 +263,7 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
         HasNegotiated = false;
         IsNegotiating = true;
 
-        var negotiator = new V3PlayerNegotiator(localPlayer, this, availableTunnels, tunnelHandler,
-            p2pEnabled, sendP2PInfoViaIRC);
+        var negotiator = new V3PlayerNegotiator(localPlayer, this, availableTunnels, tunnelHandler, p2pEnabled);
         SetNegotiator(negotiator);
 
         _ = NegotiationWorkerAsync(negotiator);
