@@ -632,7 +632,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (status == NegotiationStatus.Failed)
                 return "Tunnel negotiation failed".L10N("Client:Main:TunnelNegotiationFailed");
 
-            if (v3Info?.Tunnel != null && status == NegotiationStatus.Succeeded)
+            if (v3Info?.Tunnel != null && status is null or NegotiationStatus.Succeeded)
             {
                 // NegotiatedPacketLoss is set on both peers (decider measures it, non-decider
                 // receives it in the TunnelChoice packet), so both sides display correct stats.
