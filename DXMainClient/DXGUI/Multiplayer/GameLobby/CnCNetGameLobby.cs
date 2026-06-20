@@ -45,6 +45,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private const string NEGOTIATION_INFO_MESSAGE = "NEGINFO";
         private const string TUNNEL_RENEGOTIATE_MESSAGE = "TNLRENEG";
         private const string TUNNEL_FAILED_MESSAGE = "TNLFAIL";
+        private const string P2P_INFO_MESSAGE = "P2PINFO";
 
         public CnCNetGameLobby(
             WindowManager windowManager,
@@ -103,7 +104,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(NEGOTIATION_INFO_MESSAGE, HandleNegotiationInfoMessage),
                 new StringCommandHandler(TUNNEL_RENEGOTIATE_MESSAGE, HandleTunnelRenegotiateMessage),
                 new StringCommandHandler(TUNNEL_FAILED_MESSAGE, HandleTunnelFailedMessage),
-                new StringCommandHandler("GSETTINGS", ApplyGameLobbySettings)
+                new StringCommandHandler("GSETTINGS", ApplyGameLobbySettings),
+                new StringCommandHandler(P2P_INFO_MESSAGE, HandleP2PInfoMessage)
             };
 
             MapSharer.MapDownloadFailed += MapSharer_MapDownloadFailed;
@@ -181,6 +183,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private Random random;
 
         private readonly List<V3PlayerInfo> _v3PlayerInfos = new();
+        private readonly Dictionary<string, IPEndPoint> _playerP2PEndpoints = new();
         private bool _useLegacyTunnels;
         private bool _useDynamicTunnels;
 
@@ -934,6 +937,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             _negotiationStatusPanel?.Disable();
 
             _v3PlayerInfos.Clear();
+            _playerP2PEndpoints.Clear();
 
             if (channel != null)
             {
@@ -1185,7 +1189,18 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             try
             {
-                var startResult = player.StartNegotiation(localV3Player, tunnelHandler, availableTunnels);
+                var startResult = player.StartNegotiation(
+                    localV3Player,
+                    tunnelHandler,
+                    availableTunnels,
+                    p2pEnabled: UserINISettings.Instance.EnableP2P,
+                    sendP2PInfoViaIRC: async () =>
+                    {
+                        var ep = await tunnelHandler.GetOrDiscoverP2PEndpointAsync();
+                        if (ep != null)
+                            channel.SendCTCPMessage($"{P2P_INFO_MESSAGE} {ep}",
+                                QueuedMessageType.SYSTEM_MESSAGE, 10);
+                    });
 
                 switch (startResult)
                 {
@@ -1244,6 +1259,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     }
                 }
 
+                _playerP2PEndpoints.Remove(playerName);
                 Players.Remove(pInfo);
                 CopyPlayerDataToUI();
 
@@ -2864,6 +2880,20 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private void HandleTunnelFailedMessage(string sender, string tunnelName)
         {
             AddNotice($"{sender} can no longer connect to tunnel: {tunnelName}. The host needs to change the tunnel or the game won't start.", Color.Orange);
+        }
+
+        private void HandleP2PInfoMessage(string sender, string message)
+        {
+            message = message.Trim();
+            int lastColon = message.LastIndexOf(':');
+            if (lastColon < 0) return;
+            if (!int.TryParse(message.Substring(lastColon + 1), out int port) || port < 1 || port > 65535) return;
+            if (!IPAddress.TryParse(message.Substring(0, lastColon), out var ip)) return;
+
+            var ep = new IPEndPoint(ip, port);
+            _playerP2PEndpoints[sender] = ep;
+            var v3Player = _v3PlayerInfos.FirstOrDefault(p => p.Name == sender);
+            v3Player?.Negotiator?.NotifyP2PInfoFromIRC(ep);
         }
 
         private void AutoSelectBestTunnel()

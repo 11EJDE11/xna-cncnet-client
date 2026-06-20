@@ -503,6 +503,12 @@ namespace ClientCore
 
         public bool DisableDiscordIntegration => networkDefinitionsIni.GetBooleanValue(SETTINGS, "DisableDiscordIntegration", false);
 
+        /// <summary>
+        /// Semicolon-delimited list of additional STUN server hosts to query for P2P endpoint discovery.
+        /// Falls back to official/recommended tunnel addresses if not set.
+        /// </summary>
+        public string P2PStunServers => networkDefinitionsIni.GetStringValue(SETTINGS, "P2PStunServers", string.Empty);
+
         public List<string> IRCServers => GetIRCServers();
 
         #endregion

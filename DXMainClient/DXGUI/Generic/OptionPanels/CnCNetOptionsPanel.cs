@@ -15,10 +15,11 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
     class CnCNetOptionsPanel : XNAOptionsPanel
     {
         public CnCNetOptionsPanel(WindowManager windowManager, UserINISettings iniSettings,
-            GameCollection gameCollection)
+            GameCollection gameCollection, TunnelHandler tunnelHandler)
             : base(windowManager, iniSettings)
         {
             this.gameCollection = gameCollection;
+            this.tunnelHandler = tunnelHandler;
         }
 
         XNAClientCheckBox chkPingUnofficialTunnels;
@@ -39,8 +40,10 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
 
         XNAClientCheckBox chkUseLegacyTunnels;
         XNAClientCheckBox chkUseDynamicTunnels;
+        XNAClientCheckBox chkEnableP2P;
 
         GameCollection gameCollection;
+        TunnelHandler tunnelHandler;
 
         List<XNAClientCheckBox> followedGameChks = new List<XNAClientCheckBox>();
 
@@ -193,6 +196,21 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
                 chkUseLegacyTunnels.Bottom + 9, 0, 0);
             chkUseDynamicTunnels.Text = "Use dynamic tunnels when hosting".L10N("Client:DTAConfig:DynamicTunnels");
             AddChild(chkUseDynamicTunnels);
+
+            chkEnableP2P = new XNAClientCheckBox(WindowManager);
+            chkEnableP2P.Name = nameof(chkEnableP2P);
+            chkEnableP2P.ClientRectangle = new Rectangle(
+                chkUseDynamicTunnels.X,
+                chkUseDynamicTunnels.Bottom + 9, 0, 0);
+            chkEnableP2P.Text = "Enable direct P2P connections (shares your IP with other opted-in players)".L10N("Client:DTAConfig:EnableP2P");
+            chkEnableP2P.CheckedChanged += ChkEnableP2P_CheckedChanged;
+            AddChild(chkEnableP2P);
+        }
+
+        private void ChkEnableP2P_CheckedChanged(object sender, EventArgs e)
+        {
+            if (chkEnableP2P.Checked)
+                tunnelHandler.ClearP2PEndpointCache();
         }
 
         private void InitAllowPrivateMessagesFromDropdown()
@@ -366,6 +384,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             chkSteamIntegration.Checked = IniSettings.SteamIntegration;
             chkUseLegacyTunnels.Checked = IniSettings.UseLegacyTunnels;
             chkUseDynamicTunnels.Checked = IniSettings.UseDynamicTunnels;
+            chkEnableP2P.Checked = IniSettings.EnableP2P;
 
             chkDiscordIntegration.Checked = !ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled
                 && IniSettings.DiscordIntegration;
@@ -406,6 +425,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             IniSettings.SteamIntegration.Value = chkSteamIntegration.Checked;
             IniSettings.UseLegacyTunnels.Value = chkUseLegacyTunnels.Checked;
             IniSettings.UseDynamicTunnels.Value = chkUseDynamicTunnels.Checked;
+            IniSettings.EnableP2P.Value = chkEnableP2P.Checked;
 
             if (!ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled)
             {

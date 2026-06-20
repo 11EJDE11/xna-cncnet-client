@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -60,6 +61,8 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public CnCNetTunnel CurrentTunnel { get; set; } = null;
         public V3GameTunnelBridge GameTunnelBridge;
 
+        private IPEndPoint _cachedP2PEndpoint;
+
         public event EventHandler TunnelsRefreshed;
         public event EventHandler CurrentTunnelPinged;
         public event EventHandler<CnCNetTunnel> TunnelFailed;
@@ -101,12 +104,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         {
             Enabled = false;
             _tunnelCommunicator.Shutdown();
+            _cachedP2PEndpoint = null;
         }
 
         private void ConnectionManager_Disconnected(object sender, EventArgs e)
         {
             Enabled = false;
             _tunnelCommunicator.Shutdown();
+            _cachedP2PEndpoint = null;
         }
 
         private void RefreshTunnelsAsync()
@@ -454,6 +459,48 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             if (!_tunnelCommunicator.IsInitialized && Tunnels.Count > 0)
                 _tunnelCommunicator.Initialize(Tunnels);
         }
+
+        /// <summary>
+        /// Returns the cached STUN-discovered external endpoint for this session,
+        /// or discovers it by querying official tunnel servers as STUN endpoints.
+        /// Returns null if the NAT is symmetric or no STUN servers respond.
+        /// </summary>
+        public async Task<IPEndPoint> GetOrDiscoverP2PEndpointAsync()
+        {
+            if (_cachedP2PEndpoint != null)
+                return _cachedP2PEndpoint;
+
+            var stunHosts = Tunnels
+                .Where(t => t.Official || t.Recommended)
+                .Select(t => t.Address)
+                .Distinct()
+                .Take(8)
+                .ToList();
+
+            // Prepend any configured STUN hosts
+            string configuredHosts = ClientConfiguration.Instance.P2PStunServers;
+            if (!string.IsNullOrWhiteSpace(configuredHosts))
+            {
+                var configured = configuredHosts.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                stunHosts.InsertRange(0, configured);
+            }
+
+            var ep = await StunHelper.DiscoverExternalEndpointAsync(_tunnelCommunicator, stunHosts).ConfigureAwait(false);
+            _cachedP2PEndpoint = ep;
+            return ep;
+        }
+
+        /// <summary>
+        /// Registers a P2P peer's endpoint with the communicator so packets from
+        /// that address are dispatched correctly.
+        /// </summary>
+        public void AddP2PTunnel(P2PTunnel tunnel) => _tunnelCommunicator.AddP2PTunnel(tunnel);
+
+        /// <summary>
+        /// Clears the cached STUN result so the next P2P negotiation re-queries.
+        /// Call when P2P is enabled in options or after a network change.
+        /// </summary>
+        public void ClearP2PEndpointCache() => _cachedP2PEndpoint = null;
 
         public void RegisterV3PacketHandler(uint localId, uint remoteId, PacketHandler handler) => _tunnelCommunicator.RegisterHandler(localId, remoteId, handler);
 

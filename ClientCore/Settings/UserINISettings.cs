@@ -167,6 +167,7 @@ namespace ClientCore
 
             UseLegacyTunnels = new BoolSetting(iniFile, MULTIPLAYER, "UseLegacyTunnels", false);
             UseDynamicTunnels = new BoolSetting(iniFile, MULTIPLAYER, "UseDynamicTunnels", true);
+            EnableP2P = new BoolSetting(iniFile, MULTIPLAYER, "EnableP2P", false);
 
             CheckForUpdates = new BoolSetting(iniFile, OPTIONS, "CheckforUpdates", true);
 
@@ -270,6 +271,7 @@ namespace ClientCore
 
         public BoolSetting UseLegacyTunnels { get; private set; }
         public BoolSetting UseDynamicTunnels { get; private set; }
+        public BoolSetting EnableP2P { get; private set; }
 
         public BoolSetting NotifyOnUserListChange { get; private set; }
 

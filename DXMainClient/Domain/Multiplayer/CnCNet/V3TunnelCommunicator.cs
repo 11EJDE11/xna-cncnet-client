@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 
 #nullable enable
 
@@ -38,7 +39,9 @@ public enum TunnelPacketType : byte
     TunnelAck = 0x05,
     NegotiationFailed = 0x06,
     Register = 0x07,
-    GameData = 0x08
+    GameData = 0x08,
+    P2PInfo = 0x09,    // payload: 4 bytes IPv4 + 2 bytes port (big-endian) — "I have P2P"
+    P2PDecline = 0x0A  // payload: empty — "I don't use P2P"
 }
 
 /// <summary>
@@ -71,6 +74,7 @@ public class V3TunnelCommunicator
     private readonly ConcurrentDictionary<IPEndPoint, CnCNetTunnel> _endpointToTunnel = new();
     private readonly ConcurrentDictionary<CnCNetTunnel, IPEndPoint> _tunnelToEndpoint = new();
     private readonly ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler> _handlers = new();
+    private readonly ConcurrentDictionary<IPEndPoint, TaskCompletionSource<byte[]>> _pendingStunQueries = new();
     private readonly object _initLock = new();
 
     public bool IsInitialized => _udpClient != null;
@@ -86,7 +90,7 @@ public class V3TunnelCommunicator
             if (IsInitialized)
                 return;
 
-            var v3Tunnels = tunnels.Where(t => t.Version == 3 &&
+            var v3Tunnels = tunnels.Where(t => t.Version == 3 && t is not P2PTunnel &&
                 (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended))
                 .ToList();
 
@@ -117,6 +121,9 @@ public class V3TunnelCommunicator
             _endpointToTunnel.Clear();
             _tunnelToEndpoint.Clear();
             _handlers.Clear();
+            foreach (var tcs in _pendingStunQueries.Values)
+                tcs.TrySetCanceled();
+            _pendingStunQueries.Clear();
             Logger.Log("V3TunnelCommunicator: Shut down");
         }
 
@@ -133,7 +140,7 @@ public class V3TunnelCommunicator
             return;
 
         int added = 0;
-        foreach (var tunnel in tunnels.Where(t => t.Version == 3))
+        foreach (var tunnel in tunnels.Where(t => t.Version == 3 && t is not P2PTunnel))
         {
             var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
 
@@ -230,8 +237,8 @@ public class V3TunnelCommunicator
         if (!IsInitialized)
             return;
 
-        var targetTunnels = tunnels?.Where(t => t.Version == 3).ToList() ??
-                            [.. _endpointToTunnel.Values];
+        var targetTunnels = tunnels?.Where(t => t.Version == 3 && t is not P2PTunnel).ToList() ??
+                            _endpointToTunnel.Values.Where(t => t is not P2PTunnel).ToList();
 
         var packet = CreatePacket(localId, 0u, TunnelPacketType.Register);
         foreach (var tunnel in targetTunnels)
@@ -282,6 +289,60 @@ public class V3TunnelCommunicator
         catch (Exception ex)
         {
             Logger.Log($"V3TunnelCommunicator:  Failed to send {packetType} packet to {tunnel.Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Registers a P2P peer's external endpoint so packets from that address
+    /// are dispatched to the appropriate handler. Must be called before the
+    /// P2P negotiation phase starts.
+    /// </summary>
+    public void AddP2PTunnel(P2PTunnel tunnel)
+    {
+        if (!IsInitialized)
+            return;
+
+        if (_tunnelToEndpoint.TryAdd(tunnel, tunnel.PeerEndpoint))
+        {
+            _endpointToTunnel[tunnel.PeerEndpoint] = tunnel;
+            Logger.Log($"V3TunnelCommunicator: Registered P2P endpoint {tunnel.PeerEndpoint} for {tunnel.Name}");
+        }
+    }
+
+    /// <summary>
+    /// Sends a STUN request via the communicator's own UDP socket and returns the
+    /// raw 40-byte response, or null on timeout. Using the communicator's socket
+    /// ensures the STUN-discovered external port matches the port used for game data.
+    /// </summary>
+    public async Task<byte[]?> QueryStunAsync(IPEndPoint stunServer, int timeoutMs = 2000)
+    {
+        if (!IsInitialized)
+            return null;
+
+        var tcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pendingStunQueries[stunServer] = tcs;
+
+        try
+        {
+            var request = StunHelper.CreateRequest();
+            _udpClient!.Send(request, request.Length, stunServer);
+
+            using var cts = new CancellationTokenSource(timeoutMs);
+            return await tcs.Task.WaitAsync(cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.Log($"V3TunnelCommunicator: STUN query to {stunServer} timed out");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"V3TunnelCommunicator: STUN query to {stunServer} failed: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            _pendingStunQueries.TryRemove(stunServer, out _);
         }
     }
 
@@ -407,13 +468,25 @@ public class V3TunnelCommunicator
             {
                 try
                 {
+                    if (udpClient.Client == null)
+                        break;
+
                     if (udpClient.Client.Poll(500_000, SelectMode.SelectRead)) // 500ms
                     {
+                        if (udpClient.Client == null)
+                            break;
+
                         int received = udpClient.Client.ReceiveFrom(receiveBuffer, ref remoteEndpoint);
                         var receivedTime = Stopwatch.GetTimestamp();
 
                         if (_endpointToTunnel.TryGetValue((IPEndPoint)remoteEndpoint, out var tunnel))
                             ProcessReceivedPacket(receiveBuffer.AsMemory(0, received), receivedTime, tunnel);
+                        else if (_pendingStunQueries.TryRemove((IPEndPoint)remoteEndpoint, out var stunTcs))
+                        {
+                            var stunData = new byte[received];
+                            Buffer.BlockCopy(receiveBuffer, 0, stunData, 0, received);
+                            stunTcs.TrySetResult(stunData);
+                        }
                         else
                             Logger.Log($"V3TunnelCommunicator: Received packet from unknown endpoint: {remoteEndpoint}");
                     }
@@ -438,6 +511,10 @@ public class V3TunnelCommunicator
         catch (ObjectDisposedException)
         {
             Logger.Log("V3TunnelCommunicator: Receive thread: Socket disposed");
+        }
+        catch (NullReferenceException)
+        {
+            Logger.Log("V3TunnelCommunicator: Receive thread: Socket closed during receive");
         }
         catch (Exception ex)
         {

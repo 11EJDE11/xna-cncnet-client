@@ -191,6 +191,17 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     public TunnelTestResult? GetTunnelResult(CnCNetTunnel tunnel) => TunnelResults.TryGetValue(tunnel, out var result) ? result : null;
 
     /// <summary>
+    /// Registers a tunnel at runtime (e.g. a P2P tunnel discovered post-relay-negotiation)
+    /// and returns its fresh <see cref="TunnelTestResult"/>.
+    /// </summary>
+    public TunnelTestResult AddTunnelResult(CnCNetTunnel tunnel)
+    {
+        var result = new TunnelTestResult();
+        TunnelResults[tunnel] = result;
+        return result;
+    }
+
+    /// <summary>
     /// Selects the best available tunnel based on RTT and packet loss
     /// </summary>
     public CnCNetTunnel? SelectBestTunnel()
@@ -227,7 +238,12 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
         HasNegotiated = false;
     }
 
-    public NegotiationStartResult StartNegotiation(V3PlayerInfo localPlayer, TunnelHandler tunnelHandler, List<CnCNetTunnel> availableTunnels)
+    public NegotiationStartResult StartNegotiation(
+        V3PlayerInfo localPlayer,
+        TunnelHandler tunnelHandler,
+        List<CnCNetTunnel> availableTunnels,
+        bool p2pEnabled = false,
+        Func<Task>? sendP2PInfoViaIRC = null)
     {
         if (this == localPlayer)
             throw new InvalidOperationException("Cannot start negotiation with yourself.");
@@ -248,7 +264,8 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
         HasNegotiated = false;
         IsNegotiating = true;
 
-        var negotiator = new V3PlayerNegotiator(localPlayer, this, availableTunnels, tunnelHandler);
+        var negotiator = new V3PlayerNegotiator(localPlayer, this, availableTunnels, tunnelHandler,
+            p2pEnabled, sendP2PInfoViaIRC);
         SetNegotiator(negotiator);
 
         _ = NegotiationWorkerAsync(negotiator);

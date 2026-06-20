@@ -17,6 +17,16 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         public CnCNetTunnel() { }
 
+        protected CnCNetTunnel(string address, int port, string name, int version)
+        {
+            Address = address;
+            Port = port;
+            Name = name;
+            Version = version;
+            Official = false;
+            Recommended = true;
+        }
+
         /// <summary>
         /// Parses a formatted string that contains the tunnel server's 
         /// information into a CnCNetTunnel instance.
