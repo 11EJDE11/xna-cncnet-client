@@ -241,8 +241,13 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return;
             }
 
-            if (!lbTunnelList.IsValidIndexSelected())
-                return;
+            CnCNetTunnel selectedTunnel = null;
+            if (!UserINISettings.Instance.UseDynamicTunnels)
+            {
+                if (!lbTunnelList.IsValidIndexSelected())
+                    return;
+                selectedTunnel = lbTunnelList.GetSelectedTunnel();
+            }
 
             IniFile spawnSGIni =
                 new IniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, ProgramConstants.SAVED_GAME_SPAWN_INI));
@@ -252,7 +257,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             GameCreationEventArgs ea = new GameCreationEventArgs(gameName,
                 spawnSGIni.GetIntValue("Settings", "PlayerCount", 2), password,
-                lbTunnelList.GetSelectedTunnel(), ddSkillLevel.SelectedIndex);
+                selectedTunnel, ddSkillLevel.SelectedIndex);
             LoadedGameCreated?.Invoke(this, ea);
         }
 
