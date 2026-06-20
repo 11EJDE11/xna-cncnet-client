@@ -1,6 +1,7 @@
 ﻿using ClientCore.Extensions;
 using ClientCore;
 using DTAClient.Domain.Multiplayer.CnCNet;
+using DTAClient.DXGUI.Multiplayer.CnCNet;
 using ClientGUI;
 using Microsoft.Xna.Framework;
 using Rampastring.XNAUI;
@@ -38,8 +39,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
 
         XNAClientDropDown ddAllowPrivateMessagesFrom;
 
-        XNAClientCheckBox chkUseLegacyTunnels;
-        XNAClientCheckBox chkUseDynamicTunnels;
+        XNAClientDropDown ddTunnelMode;
         XNAClientCheckBox chkEnableP2P;
 
         GameCollection gameCollection;
@@ -179,29 +179,43 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
 
             AddChild(chkSteamIntegration);
 
-            chkUseLegacyTunnels = new XNAClientCheckBox(WindowManager);
-            chkUseLegacyTunnels.Name = nameof(chkUseLegacyTunnels);
-            chkUseLegacyTunnels.ClientRectangle = new Rectangle(
+            XNALabel lblTunnelMode = new XNALabel(WindowManager);
+            lblTunnelMode.Name = nameof(lblTunnelMode);
+            lblTunnelMode.Text = "Tunnel mode when hosting:".L10N("Client:DTAConfig:TunnelMode");
+            lblTunnelMode.ClientRectangle = new Rectangle(
                 chkSteamIntegration.X,
-                chkSteamIntegration.Bottom + 9, 0, 0);
-            chkUseLegacyTunnels.Text = "Use legacy tunnels when hosting".L10N("Client:DTAConfig:LegacyTunnels");
-            chkUseLegacyTunnels.CheckedChanged += ChkUseLegacyTunnels_CheckedChanged;
+                chkSteamIntegration.Bottom + 12, 165, 0);
 
-            AddChild(chkUseLegacyTunnels);
+            AddChild(lblTunnelMode);
 
-            chkUseDynamicTunnels = new XNAClientCheckBox(WindowManager);
-            chkUseDynamicTunnels.Name = nameof(chkUseDynamicTunnels);
-            chkUseDynamicTunnels.ClientRectangle = new Rectangle(
-                chkUseLegacyTunnels.X,
-                chkUseLegacyTunnels.Bottom + 9, 0, 0);
-            chkUseDynamicTunnels.Text = "Use dynamic tunnels when hosting".L10N("Client:DTAConfig:DynamicTunnels");
-            AddChild(chkUseDynamicTunnels);
+            ddTunnelMode = new XNAClientDropDown(WindowManager);
+            ddTunnelMode.Name = nameof(ddTunnelMode);
+            ddTunnelMode.ClientRectangle = new Rectangle(
+                lblTunnelMode.X,
+                lblTunnelMode.Y + 22, 220, 0);
+            ddTunnelMode.AddItem(new XNADropDownItem()
+            {
+                Text = "Dynamic (V3)".L10N("Client:Main:TunnelSelModeDynamic"),
+                Tag = TunnelMode.V3Dynamic,
+            });
+            ddTunnelMode.AddItem(new XNADropDownItem()
+            {
+                Text = "Static (V3)".L10N("Client:Main:TunnelSelModeStatic"),
+                Tag = TunnelMode.V3Static,
+            });
+            ddTunnelMode.AddItem(new XNADropDownItem()
+            {
+                Text = "Legacy (V2)".L10N("Client:Main:TunnelSelModeLegacy"),
+                Tag = TunnelMode.V2Legacy,
+            });
+
+            AddChild(ddTunnelMode);
 
             chkEnableP2P = new XNAClientCheckBox(WindowManager);
             chkEnableP2P.Name = nameof(chkEnableP2P);
             chkEnableP2P.ClientRectangle = new Rectangle(
-                chkUseDynamicTunnels.X,
-                chkUseDynamicTunnels.Bottom + 9, 0, 0);
+                ddTunnelMode.X,
+                ddTunnelMode.Bottom + 9, 0, 0);
             chkEnableP2P.Text = "Enable direct P2P connections (shares your IP with other opted-in players)".L10N("Client:DTAConfig:EnableP2P");
             chkEnableP2P.CheckedChanged += ChkEnableP2P_CheckedChanged;
             AddChild(chkEnableP2P);
@@ -338,14 +352,6 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             }
         }
 
-        private void ChkUseLegacyTunnels_CheckedChanged(object sender, EventArgs e)
-        {
-            if (chkUseLegacyTunnels.Checked)
-                chkUseDynamicTunnels.Checked = false;
-
-            chkUseDynamicTunnels.AllowChecking = !chkUseLegacyTunnels.Checked;
-        }
-
         private void ChkSkipLoginWindow_CheckedChanged(object sender, EventArgs e)
         {
             CheckConnectOnStartupAllowance();
@@ -382,8 +388,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             chkSkipLoginWindow.Checked = IniSettings.SkipConnectDialog;
             chkPersistentMode.Checked = IniSettings.PersistentMode;
             chkSteamIntegration.Checked = IniSettings.SteamIntegration;
-            chkUseLegacyTunnels.Checked = IniSettings.UseLegacyTunnels;
-            chkUseDynamicTunnels.Checked = IniSettings.UseDynamicTunnels;
+            SetTunnelMode();
             chkEnableP2P.Checked = IniSettings.EnableP2P;
 
             chkDiscordIntegration.Checked = !ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled
@@ -406,7 +411,6 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
                 chkBox.Checked = IniSettings.IsGameFollowed(chkBox.Name);
             }
 
-            ChkUseLegacyTunnels_CheckedChanged(null, EventArgs.Empty);
         }
 
         public override bool Save()
@@ -423,8 +427,9 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             IniSettings.SkipConnectDialog.Value = chkSkipLoginWindow.Checked;
             IniSettings.PersistentMode.Value = chkPersistentMode.Checked;
             IniSettings.SteamIntegration.Value = chkSteamIntegration.Checked;
-            IniSettings.UseLegacyTunnels.Value = chkUseLegacyTunnels.Checked;
-            IniSettings.UseDynamicTunnels.Value = chkUseDynamicTunnels.Checked;
+            var tunnelMode = (TunnelMode)(ddTunnelMode.SelectedItem?.Tag ?? TunnelMode.V3Static);
+            IniSettings.UseLegacyTunnels.Value = tunnelMode == TunnelMode.V2Legacy;
+            IniSettings.UseDynamicTunnels.Value = tunnelMode == TunnelMode.V3Dynamic;
             IniSettings.EnableP2P.Value = chkEnableP2P.Checked;
 
             if (!ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled)
@@ -440,6 +445,23 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             }
 
             return restartRequired;
+        }
+
+        private void SetTunnelMode()
+        {
+            TunnelMode mode;
+            if (IniSettings.UseLegacyTunnels)
+                mode = TunnelMode.V2Legacy;
+            else if (IniSettings.UseDynamicTunnels)
+                mode = TunnelMode.V3Dynamic;
+            else
+                mode = TunnelMode.V3Static;
+
+            var selectedIndex = ddTunnelMode.Items.FindIndex(i => (TunnelMode)i.Tag == mode);
+            if (selectedIndex < 0)
+                selectedIndex = ddTunnelMode.Items.FindIndex(i => (TunnelMode)i.Tag == TunnelMode.V3Static);
+
+            ddTunnelMode.SelectedIndex = selectedIndex;
         }
 
         private void SetAllowPrivateMessagesFromState(int state)
