@@ -414,6 +414,10 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             StringBuilder message = new StringBuilder(OPTIONS_CTCP_COMMAND + " ");
             message.Append(ddSavedGame.SelectedIndex);
             message.Append(";");
+            int tunnelModeValue = _useDynamicTunnels ? (int)TunnelMode.V3Dynamic :
+                (_useLegacyTunnels ? (int)TunnelMode.V2Legacy : (int)TunnelMode.V3Static);
+            message.Append(tunnelModeValue);
+            message.Append(";");
             foreach (PlayerInfo pInfo in Players)
             {
                 message.Append(pInfo.Name);
@@ -459,22 +463,26 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void ShowTunnelSelectionWindow(string description)
         {
-            if (_useDynamicTunnels)
-            {
-                AddNotice("Cannot manually select tunnel when using dynamic tunnels.", Color.Yellow);
-                return;
-            }
+            TunnelMode currentMode = _useDynamicTunnels ? TunnelMode.V3Dynamic :
+                (_useLegacyTunnels ? TunnelMode.V2Legacy : TunnelMode.V3Static);
 
             tunnelSelectionWindow.Open(description,
                 tunnelHandler.CurrentTunnel?.Address,
-                targetVersion: _useLegacyTunnels ? 2 : 3);
+                currentMode);
         }
 
         private void TunnelSelectionWindow_TunnelSelected(object sender, TunnelEventArgs e)
         {
-            channel.SendCTCPMessage($"{CHANGE_TUNNEL_SERVER_MESSAGE} {e.Tunnel.Address}:{e.Tunnel.Port}",
-                QueuedMessageType.SYSTEM_MESSAGE, 10);
-            HandleTunnelServerChange(e.Tunnel);
+            HandleTunnelModeChange(e.Mode, true);
+
+            if (e.Mode != TunnelMode.V3Dynamic && e.Tunnel != null)
+            {
+                channel.SendCTCPMessage($"{CHANGE_TUNNEL_SERVER_MESSAGE} {e.Tunnel.Address}:{e.Tunnel.Port}",
+                    QueuedMessageType.SYSTEM_MESSAGE, 10);
+                HandleTunnelServerChange(e.Tunnel);
+            }
+
+            BroadcastOptions();
         }
 
         #region CTCP Handlers
@@ -556,9 +564,17 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             ddSavedGame.SelectedIndex = sgIndex;
 
+            int tunnelModeFromOp = -1;
+            int playerStartIndex = 1;
+            if (parts.Length >= 2 && !parts[1].Contains(':') && int.TryParse(parts[1], out int parsedMode))
+            {
+                tunnelModeFromOp = parsedMode;
+                playerStartIndex = 2;
+            }
+
             Players.Clear();
 
-            for (int i = 1; i < parts.Length; i++)
+            for (int i = playerStartIndex; i < parts.Length; i++)
             {
                 string[] playerAndReadyStatus = parts[i].Split(':');
                 if (playerAndReadyStatus.Length < 2)
@@ -580,6 +596,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             CopyPlayerDataToUI();
 
             RegenerateV3PlayerInfos();
+
+            if (tunnelModeFromOp >= 0 && !IsHost)
+                HandleTunnelModeChange((TunnelMode)tunnelModeFromOp, false);
 
             if (_useDynamicTunnels && Players.Count > 1)
                 foreach (var v3Player in _v3PlayerInfos.Where(p => p.Name != ProgramConstants.PLAYERNAME && !p.HasNegotiated && !p.IsNegotiating))
@@ -1172,6 +1191,56 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             tunnelHandler.StartGameBridge(localV3Player.Id, localV3Player.PlayerGameId, _v3PlayerInfos);
             LoadGame();
+        }
+
+        private void HandleTunnelModeChange(TunnelMode mode, bool isHostInitiated)
+        {
+            bool newDynamic = mode == TunnelMode.V3Dynamic;
+            bool newLegacy = mode == TunnelMode.V2Legacy;
+
+            if (newDynamic == _useDynamicTunnels && newLegacy == _useLegacyTunnels)
+                return;
+
+            if (!newDynamic && _useDynamicTunnels)
+            {
+                foreach (var v3Player in _v3PlayerInfos)
+                {
+                    if (v3Player.Negotiator != null)
+                    {
+                        v3Player.Negotiator.NegotiationResult -= OnPlayerNegotiationResult;
+                        v3Player.Negotiator.NegotiationComplete -= OnPlayerNegotiationComplete;
+                    }
+                    v3Player.StopNegotiation();
+                }
+                _negotiationData.ClearAll();
+            }
+
+            _useDynamicTunnels = newDynamic;
+            _useLegacyTunnels = newLegacy;
+
+            string modeDescription = mode switch
+            {
+                TunnelMode.V3Dynamic => "dynamic tunnels (V3)".L10N("Client:Main:TunnelModeDynamicV3"),
+                TunnelMode.V2Legacy => "legacy tunnels (V2)".L10N("Client:Main:TunnelModeLegacyV2"),
+                _ => "static tunnels (V3)".L10N("Client:Main:TunnelModeStaticV3")
+            };
+
+            AddNotice(isHostInitiated
+                ? string.Format("Tunnel mode changed to {0}.".L10N("Client:Main:TunnelModeChanged"), modeDescription)
+                : string.Format("The game host has changed tunnel mode to {0}.".L10N("Client:Main:TunnelModeChangedByHost"), modeDescription));
+
+            if (newDynamic)
+            {
+                tunnelHandler.CurrentTunnel = null;
+                foreach (var v3Player in _v3PlayerInfos)
+                    v3Player.ResetNegotiator();
+
+                if (Players.Count > 1)
+                    foreach (var v3Player in _v3PlayerInfos.Where(p => p.Name != ProgramConstants.PLAYERNAME))
+                        StartTunnelNegotiationForPlayer(v3Player);
+            }
+
+            UpdateLoadGameButtonStatus();
         }
 
         private void RestartNegotiations(List<V3PlayerInfo> affectedPlayers)

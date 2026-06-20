@@ -342,7 +342,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             Refresh(isHost);
 
-            if (IsHost && !_useDynamicTunnels)
+            if (IsHost)
                 btnChangeTunnel.Enable();
             else
                 btnChangeTunnel.Disable();
@@ -713,22 +713,34 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void ShowTunnelSelectionWindow(string description)
         {
-            if (_useDynamicTunnels)
-            {
-                AddNotice("Cannot manually select tunnel when using dynamic tunnels.", Color.Yellow);
-                return;
-            }
+            TunnelMode currentMode = _useDynamicTunnels ? TunnelMode.V3Dynamic :
+                (_useLegacyTunnels ? TunnelMode.V2Legacy : TunnelMode.V3Static);
 
             tunnelSelectionWindow.Open(description,
                 tunnelHandler.CurrentTunnel?.Address,
-                _useLegacyTunnels ? 2 : 3);
+                currentMode);
         }
 
         private void TunnelSelectionWindow_TunnelSelected(object sender, TunnelEventArgs e)
         {
-            channel.SendCTCPMessage($"{CHANGE_TUNNEL_SERVER_MESSAGE} {e.Tunnel.Address}:{e.Tunnel.Port}",
-                QueuedMessageType.SYSTEM_MESSAGE, 10);
-            HandleTunnelServerChange(e.Tunnel);
+            int newModeInt = e.Mode switch
+            {
+                TunnelMode.V3Dynamic => TUNNEL_MODE_V3_DYNAMIC,
+                TunnelMode.V2Legacy => TUNNEL_MODE_V2_LEGACY,
+                _ => TUNNEL_MODE_V3_STATIC
+            };
+
+            HandleTunnelModeChange(newModeInt, true, autoSelectTunnel: e.Mode == TunnelMode.V3Dynamic);
+
+            if (e.Mode != TunnelMode.V3Dynamic && e.Tunnel != null)
+            {
+                channel.SendCTCPMessage($"{CHANGE_TUNNEL_SERVER_MESSAGE} {e.Tunnel.Address}:{e.Tunnel.Port}",
+                    QueuedMessageType.SYSTEM_MESSAGE, 10);
+                HandleTunnelServerChange(e.Tunnel);
+            }
+
+            OnGameOptionChanged();
+            ClearReadyStatuses();
         }
 
         private void BtnGameLobbySettings_LeftClick(object sender, EventArgs e)
@@ -2211,7 +2223,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
         }
 
-        private void HandleTunnelModeChange(int tunnelMode, bool isHostInitiated)
+        private void HandleTunnelModeChange(int tunnelMode, bool isHostInitiated, bool autoSelectTunnel = true)
         {
             bool newUseDynamic = tunnelMode == TUNNEL_MODE_V3_DYNAMIC;
             bool newUseLegacy = tunnelMode == TUNNEL_MODE_V2_LEGACY;
@@ -2248,16 +2260,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (IsHost)
             {
+                btnChangeTunnel.Enable();
                 if (newUseDynamic)
-                {
-                    btnChangeTunnel.Disable();
                     tunnelHandler.CurrentTunnel = null;
-                }
-                else
-                {
-                    btnChangeTunnel.Enable();
+                else if (autoSelectTunnel)
                     AutoSelectBestTunnel();
-                }
             }
             else
             {
