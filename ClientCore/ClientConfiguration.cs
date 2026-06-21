@@ -158,6 +158,8 @@ namespace ClientCore
 
         public string HoverOnGameColor => DTACnCNetClient_ini.GetStringValue(GENERAL, "HoverOnGameColor", "32,32,84");
 
+        public string GetReadyHighlightColor => DTACnCNetClient_ini.GetStringValue(GENERAL, "GetReadyHighlightColor", "255,215,0");
+
         public IniSection GetParserConstants() => DTACnCNetClient_ini.GetSection("ParserConstants");
 
         #endregion

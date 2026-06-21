@@ -767,6 +767,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             if (!IsHost)
             {
+                btnLaunchGame.StopFlashing();
                 RequestReadyStatus();
                 return;
             }
@@ -933,7 +934,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             AddNotice("The host wants to start the game but cannot because not all players are ready!".L10N("Client:Main:GetReadyNotification"));
             if (!IsHost && !Players.Find(p => p.Name == ProgramConstants.PLAYERNAME).Ready)
+            {
                 sndGetReadySound.Play();
+
+                btnLaunchGame.StartFlashing();
+            }
         }
 
         protected virtual void InsufficientPlayersNotification()
