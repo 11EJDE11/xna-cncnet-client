@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -172,8 +173,15 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     /// TunnelChoice packet, so both can display the same stats without extra IRC traffic.
     /// </summary>
     public double? NegotiatedPacketLoss { get; set; }
+
+    /// <summary>
+    /// Whether the remote player has P2P enabled. Learned from the TunnelAck/TunnelChoice
+    /// payload at the end of relay round 1, so the upgrade round is only attempted when
+    /// both sides have opted in.
+    /// </summary>
+    public bool P2PEnabled { get; set; }
     public V3PlayerNegotiator? Negotiator => _negotiator;
-    public Dictionary<CnCNetTunnel, TunnelTestResult> TunnelResults { get; } = [];
+    public ConcurrentDictionary<CnCNetTunnel, TunnelTestResult> TunnelResults { get; } = new();
 
     /// <summary>
     /// Creates a fresh set of <see cref="TunnelTestResult"/> entries for all available tunnels.
@@ -234,6 +242,7 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     {
         Tunnel = null;
         NegotiatedPacketLoss = null;
+        P2PEnabled = false;
         IsNegotiating = false;
         HasNegotiated = false;
     }

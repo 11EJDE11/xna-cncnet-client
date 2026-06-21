@@ -86,14 +86,12 @@ public class V3PlayerNegotiator : IDisposable
     public event EventHandler<TunnelChosenEventArgs>? NegotiationResult;
     public event EventHandler? NegotiationComplete;
 
-    private static readonly byte[] SINGLE_BYTE_TRUE = [0x01];
-
     public V3PlayerNegotiator(V3PlayerInfo localPlayer, V3PlayerInfo remotePlayer, List<CnCNetTunnel> tunnels,
         TunnelHandler tunnelHandler, bool p2pEnabled = false)
     {
         _localPlayer = localPlayer;
         _remotePlayer = remotePlayer;
-        _tunnels = tunnels;
+        _tunnels = new List<CnCNetTunnel>(tunnels);
         _tunnelHandler = tunnelHandler;
         _p2pEnabled = p2pEnabled;
         // The decider drives tunnel selection; the other peer waits for its choice.
@@ -133,7 +131,7 @@ public class V3PlayerNegotiator : IDisposable
             // P2P upgrade round: now that a relay tunnel is agreed (and can carry the exchange),
             // offer direct candidate addresses through it and re-run the same negotiation over
             // the direct paths, which may now win.
-            if (negotiationSucceeded && _p2pEnabled && _remotePlayer.Tunnel != null)
+            if (negotiationSucceeded && _p2pEnabled && _remotePlayer.P2PEnabled && _remotePlayer.Tunnel != null)
             {
                 try
                 {
@@ -462,12 +460,17 @@ public class V3PlayerNegotiator : IDisposable
                     if (payload.Length >= 8)
                         _remotePlayer.NegotiatedPacketLoss = BinaryPrimitives.ReadInt32LittleEndian(payload.Span[4..]) / 10.0;
 
-                    Logger.Log($"V3PlayerNegotiator: {_remotePlayer.Name} chose {tunnel.Name} (Ping: {ping}ms)");
+                    // P2P capability flag — whether the decider has P2P enabled.
+                    if (payload.Length >= 9)
+                        _remotePlayer.P2PEnabled = payload.Span[8] != 0;
+
+                    Logger.Log($"V3PlayerNegotiator: {_remotePlayer.Name} chose {tunnel.Name} (Ping: {ping}ms, P2P: {_remotePlayer.P2PEnabled})");
 
                     _remotePlayer.Tunnel = tunnel;
 
+                    // TunnelAck carries our own P2P flag so the decider knows whether to upgrade.
                     _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
-                        TunnelPacketType.TunnelAck, SINGLE_BYTE_TRUE);
+                        TunnelPacketType.TunnelAck, [0x01, _p2pEnabled ? (byte)0x01 : (byte)0x00]);
 
                     _negotiationCompletionSource.TrySetResult(true);
                     RaiseNegotiationResult(tunnel, ping);
@@ -477,7 +480,11 @@ public class V3PlayerNegotiator : IDisposable
             case TunnelPacketType.TunnelAck:
                 if (_isDecider)
                 {
-                    Logger.Log($"V3PlayerNegotiator: Received acknowledgment from {_remotePlayer.Name} for tunnel {tunnel.Name}");
+                    // P2P capability flag — whether the non-decider has P2P enabled.
+                    if (payload.Length >= 2)
+                        _remotePlayer.P2PEnabled = payload.Span[1] != 0;
+
+                    Logger.Log($"V3PlayerNegotiator: Received acknowledgment from {_remotePlayer.Name} for tunnel {tunnel.Name} (P2P: {_remotePlayer.P2PEnabled})");
                     _tunnelAckReceived.TrySetResult(true);
                 }
                 break;
@@ -510,11 +517,13 @@ public class V3PlayerNegotiator : IDisposable
     {
         Logger.Log($"V3PlayerNegotiator: Sending tunnel choice to {_remotePlayer.Name}: {tunnel.Name} (Ping: {ping}ms, Loss: {packetLoss:F1}%)");
 
-        // Payload: ping (int32) followed by packet loss in tenths of a percent (int32),
-        // so the non-decider can show the same stats without any extra IRC traffic.
-        var pingBytes = new byte[8];
+        // Payload: ping (int32) + packet loss in tenths of a percent (int32) + P2P flag (byte).
+        // The non-decider reads these so it can show the same stats and knows whether to expect
+        // a P2P upgrade round.
+        var pingBytes = new byte[9];
         BinaryPrimitives.WriteInt32LittleEndian(pingBytes, ping);
         BinaryPrimitives.WriteInt32LittleEndian(pingBytes.AsSpan(4), (int)Math.Round(packetLoss * 10));
+        pingBytes[8] = _p2pEnabled ? (byte)0x01 : (byte)0x00;
 
         for (int attempt = 0; attempt < TUNNEL_CHOICE_MAX_RETRIES; attempt++)
         {
@@ -713,10 +722,16 @@ public class V3PlayerNegotiator : IDisposable
         cts.CancelAfter(P2P_CANDIDATE_EXCHANGE_TIMEOUT_MS);
         try
         {
-            for (int attempt = 0; attempt < 3 && !_p2pPeerEndpointTcs.Task.IsCompleted; attempt++)
+            // Always send at least once even if the peer's candidates already arrived early
+            // (they can arrive before STUN finishes, completing the TCS before we even enter
+            // this loop — if we skip the send, the peer never gets our candidates).
+            for (int attempt = 0; attempt < 3; attempt++)
             {
                 _tunnelHandler.SendPacket(relayTunnel, _localPlayer.Id, _remotePlayer.Id,
                     TunnelPacketType.P2PInfo, payload);
+
+                if (_p2pPeerEndpointTcs.Task.IsCompleted)
+                    break;
 
                 var completed = await Task.WhenAny(_p2pPeerEndpointTcs.Task, Task.Delay(150, cts.Token));
                 if (completed == _p2pPeerEndpointTcs.Task)

@@ -58,9 +58,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             ddMode.Y = lblDescription.Bottom + UIDesignConstants.CONTROL_VERTICAL_MARGIN;
             ddMode.Width = 220;
             ddMode.Height = UIDesignConstants.BUTTON_HEIGHT;
-            ddMode.AddItem("Dynamic (V3)".L10N("Client:Main:TunnelSelModeDynamic"));
-            ddMode.AddItem("Static (V3)".L10N("Client:Main:TunnelSelModeStatic"));
-            ddMode.AddItem("Legacy (V2)".L10N("Client:Main:TunnelSelModeLegacy"));
+            ddMode.AddItem(new XNADropDownItem { Text = "Dynamic (V3)".L10N("Client:Main:TunnelSelModeDynamic"), Tag = TunnelMode.V3Dynamic });
+            ddMode.AddItem(new XNADropDownItem { Text = "Static (V3)".L10N("Client:Main:TunnelSelModeStatic"), Tag = TunnelMode.V3Static });
+            ddMode.AddItem(new XNADropDownItem { Text = "Legacy (V2)".L10N("Client:Main:TunnelSelModeLegacy"), Tag = TunnelMode.V2Legacy });
             ddMode.SelectedIndexChanged += DdMode_SelectedIndexChanged;
             AddChild(ddMode);
 
@@ -97,13 +97,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             base.Initialize();
         }
 
-        private TunnelMode GetSelectedMode() => ddMode.SelectedIndex switch
-        {
-            0 => TunnelMode.V3Dynamic,
-            1 => TunnelMode.V3Static,
-            2 => TunnelMode.V2Legacy,
-            _ => TunnelMode.V3Dynamic
-        };
+        private TunnelMode GetSelectedMode() => (TunnelMode)(ddMode.SelectedItem?.Tag ?? TunnelMode.V3Dynamic);
 
         private void DdMode_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -160,13 +154,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             originalMode = currentMode;
 
             // Set mode dropdown — fires DdMode_SelectedIndexChanged which updates tunnel list version filter
-            ddMode.SelectedIndex = currentMode switch
-            {
-                TunnelMode.V3Dynamic => 0,
-                TunnelMode.V3Static => 1,
-                TunnelMode.V2Legacy => 2,
-                _ => 0
-            };
+            ddMode.SelectedIndex = Math.Max(0, ddMode.Items.FindIndex(i => (TunnelMode)i.Tag == currentMode));
 
             bool isDynamic = currentMode == TunnelMode.V3Dynamic;
             lbTunnelList.Enabled = !isDynamic;
@@ -190,15 +178,4 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         }
     }
 
-    class TunnelEventArgs : EventArgs
-    {
-        public TunnelEventArgs(CnCNetTunnel tunnel, TunnelMode mode)
-        {
-            Tunnel = tunnel;
-            Mode = mode;
-        }
-
-        public CnCNetTunnel Tunnel { get; }
-        public TunnelMode Mode { get; }
-    }
 }
