@@ -217,7 +217,7 @@ public class V3PlayerNegotiator : IDisposable
                         selectionTcs.TrySetResult(true);
                     }
                 }
-            });
+            }, $"{_remotePlayer.Name} via {tunnel.Name}");
         }
 
         // Wait for early selection or all completion
@@ -252,7 +252,7 @@ public class V3PlayerNegotiator : IDisposable
     }
 
     private static async Task WaitForTunnelResultsAsync(TunnelTestResult result, CancellationToken cancellationToken,
-        TimeSpan connectedTimeout, Action onComplete)
+        TimeSpan connectedTimeout, Action onComplete, string tunnelDescription = "")
     {
         try
         {
@@ -276,6 +276,10 @@ public class V3PlayerNegotiator : IDisposable
 
                 if (pingCompletedTask == pingsTask)
                     pingTimeoutCts.Cancel();
+            }
+            else if (tunnelDescription.Length > 0)
+            {
+                Logger.Log($"V3PlayerNegotiator: No Connected from {tunnelDescription} within {connectedTimeout.TotalSeconds:F0}s, skipping tunnel");
             }
         }
         catch (OperationCanceledException)
@@ -419,6 +423,7 @@ public class V3PlayerNegotiator : IDisposable
                 {
                     result.ConnectedReceived = true;
                     result.ConnectedTcs.TrySetResult(true);
+                    Logger.Log($"V3PlayerNegotiator: Connected received from {_remotePlayer.Name} on {tunnel.Name}, starting pings");
                     if (tunnel is P2PTunnel)
                         _ = PerformPingsAsync(tunnel, result, P2P_PINGS_PER_TUNNEL, P2P_PING_TIMEOUT_MS);
                     else
@@ -577,51 +582,73 @@ public class V3PlayerNegotiator : IDisposable
 
     private void PrintNegotiationResults()
     {
-        if (!_isDecider)
-            return;
-
         var sb = new StringBuilder();
 
-        sb.AppendLine($"=== Negotiation Results for {_remotePlayer.Name} (ID: {_remotePlayer.Id}) ===");
-
-        foreach (var tunnel in _tunnels)
+        if (_isDecider)
         {
-            var result = _remotePlayer.GetTunnelResult(tunnel);
-            if (result != null)
-            {
-                var (successfulPings, totalPings) = result.GetPingCounts();
+            sb.AppendLine($"=== Decider Results for {_remotePlayer.Name} (ID: {_remotePlayer.Id}) ===");
 
-                sb.AppendLine(
-                    $"Player: {_remotePlayer.Name} | " +
-                    $"Tunnel: {tunnel.Name} | " +
-                    $"Avg RTT: {(result.AverageRtt.HasValue ? $"{result.AverageRtt.Value:F1}ms" : "N/A")} | " +
-                    $"Real ping: {(tunnel.Ping.IsValid() ? $"{tunnel.Ping.Milliseconds:F1}ms" : "N/A")} | " +
-                    $"Real ping*2: {(tunnel.Ping.IsValid() ? $"{tunnel.Ping.Milliseconds * 2:F1}ms" : "N/A")} | " +
-                    $"Difference: {(tunnel.Ping.IsValid() && result.AverageRtt.HasValue ? $"{result.AverageRtt.Value - (tunnel.Ping.Milliseconds * 2):F1}ms" : "N/A")} | " +
-                    $"Packet Loss: {result.PacketLoss:F1}% | " +
-                    $"Pings: {successfulPings}/{totalPings} | " +
-                    $"Connected: {result.ConnectedReceived}"
-                );
-            }
-        }
-
-        var bestTunnel = _remotePlayer.SelectBestTunnel();
-        if (bestTunnel != null)
-        {
-            var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
-            if (bestResult != null)
+            foreach (var tunnel in _tunnels)
             {
-                var rttDisplay = bestResult.AverageRtt.HasValue ? $"{bestResult.AverageRtt.Value:F1}ms" : "N/A";
-                sb.AppendLine($"BEST TUNNEL for {_remotePlayer.Name}: {bestTunnel.Name} " +
-                    $"(RTT: {rttDisplay}, Loss: {bestResult.PacketLoss:F1}%)");
+                var result = _remotePlayer.GetTunnelResult(tunnel);
+                if (result != null)
+                {
+                    var (successfulPings, totalPings) = result.GetPingCounts();
+
+                    sb.AppendLine(
+                        $"Player: {_remotePlayer.Name} | " +
+                        $"Tunnel: {tunnel.Name} | " +
+                        $"Avg RTT: {(result.AverageRtt.HasValue ? $"{result.AverageRtt.Value:F1}ms" : "N/A")} | " +
+                        $"Real ping: {(tunnel.Ping.IsValid() ? $"{tunnel.Ping.Milliseconds:F1}ms" : "N/A")} | " +
+                        $"Real ping*2: {(tunnel.Ping.IsValid() ? $"{tunnel.Ping.Milliseconds * 2:F1}ms" : "N/A")} | " +
+                        $"Difference: {(tunnel.Ping.IsValid() && result.AverageRtt.HasValue ? $"{result.AverageRtt.Value - (tunnel.Ping.Milliseconds * 2):F1}ms" : "N/A")} | " +
+                        $"Packet Loss: {result.PacketLoss:F1}% | " +
+                        $"Pings: {successfulPings}/{totalPings} | " +
+                        $"Connected: {result.ConnectedReceived}"
+                    );
+                }
             }
+
+            var bestTunnel = _remotePlayer.Tunnel;
+            if (bestTunnel != null)
+            {
+                var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
+                if (bestResult != null)
+                {
+                    var rttDisplay = bestResult.AverageRtt.HasValue ? $"{bestResult.AverageRtt.Value:F1}ms" : "N/A";
+                    sb.AppendLine($"BEST TUNNEL for {_remotePlayer.Name}: {bestTunnel.Name} " +
+                        $"(RTT: {rttDisplay}, Loss: {bestResult.PacketLoss:F1}%)");
+                }
+            }
+            else
+            {
+                sb.AppendLine($"NO VIABLE TUNNEL found for {_remotePlayer.Name}");
+            }
+
+            sb.AppendLine($"=== End Decider Results for {_remotePlayer.Name} ===");
         }
         else
         {
-            sb.AppendLine($"NO VIABLE TUNNEL found for {_remotePlayer.Name}");
-        }
+            // Non-decider: log what we could observe — which tunnels the decider reached us on.
+            // No RTT data (the decider measures that); this shows bidirectional connectivity per tunnel.
+            sb.AppendLine($"=== Non-Decider Results for {_remotePlayer.Name} (ID: {_remotePlayer.Id}) ===");
 
-        sb.AppendLine($"=== End Results for {_remotePlayer.Name} ===");
+            foreach (var tunnel in _tunnels)
+            {
+                var result = _remotePlayer.GetTunnelResult(tunnel);
+                if (result != null)
+                {
+                    sb.AppendLine(
+                        $"Tunnel: {tunnel.Name} | " +
+                        $"PingRequest received: {result.PingRequestReceived} | " +
+                        $"Connected timed out: {result.ConnectedTimedOut}"
+                    );
+                }
+            }
+
+            sb.AppendLine($"Agreed tunnel: {_remotePlayer.Tunnel?.Name ?? "None"}");
+            sb.AppendLine($"=== End Non-Decider Results for {_remotePlayer.Name} ===");
+        }
 
         Logger.Log(sb.ToString());
     }
@@ -637,7 +664,10 @@ public class V3PlayerNegotiator : IDisposable
     {
         var localEps = await GatherLocalCandidatesAsync();
         if (localEps.Count == 0)
-            return; // No way for the peer to reach us directly; keep the relay.
+        {
+            Logger.Log($"V3PlayerNegotiator: P2P upgrade skipped for {_remotePlayer.Name} — no local candidates gathered");
+            return;
+        }
 
         var peerEps = await ExchangeCandidatesAsync(localEps, relayTunnel);
         if (peerEps.Count == 0)
@@ -703,9 +733,16 @@ public class V3PlayerNegotiator : IDisposable
             eps.Add(reflexive);
         else if (eps.Count == 0)
             Logger.Log("V3PlayerNegotiator: STUN failed and no local candidates — P2P unavailable");
+        else
+            Logger.Log("V3PlayerNegotiator: STUN failed; proceeding with LAN-only P2P candidates");
 
         // De-duplicate (the reflexive address can coincide with a public LAN address).
-        return eps.GroupBy(e => e.ToString()).Select(g => g.First()).ToList();
+        var candidates = eps.GroupBy(e => e.ToString()).Select(g => g.First()).ToList();
+
+        if (candidates.Count > 0)
+            Logger.Log($"V3PlayerNegotiator: Gathered {candidates.Count} local P2P candidate(s): {string.Join(", ", candidates)}");
+
+        return candidates;
     }
 
     /// <summary>
