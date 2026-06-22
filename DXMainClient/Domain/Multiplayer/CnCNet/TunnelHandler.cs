@@ -63,8 +63,8 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public CnCNetTunnel CurrentTunnel { get; set; } = null;
         public V3GameTunnelBridge GameTunnelBridge;
 
-        private IPEndPoint _cachedP2PEndpoint;
-        private Task<IPEndPoint> _p2pDiscoveryTask;
+        private IPEndPoint? _cachedP2PEndpoint;
+        private Task<IPEndPoint?>? _p2pDiscoveryTask;
         private readonly object _p2pDiscoveryLock = new object();
 
         public event EventHandler TunnelsRefreshed;
@@ -469,10 +469,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// or discovers it by querying official tunnel servers as STUN endpoints.
         /// Returns null if the NAT is symmetric or no STUN servers respond.
         /// </summary>
-        public Task<IPEndPoint> GetOrDiscoverP2PEndpointAsync()
+        public Task<IPEndPoint?> GetOrDiscoverP2PEndpointAsync()
         {
             if (_cachedP2PEndpoint != null)
-                return Task.FromResult(_cachedP2PEndpoint);
+                return Task.FromResult<IPEndPoint?>(_cachedP2PEndpoint);
 
             // Single-flight: several player negotiations can run at once (3+ player games), so
             // share one in-flight discovery rather than racing STUN queries to the same servers
@@ -480,13 +480,13 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             lock (_p2pDiscoveryLock)
             {
                 if (_cachedP2PEndpoint != null)
-                    return Task.FromResult(_cachedP2PEndpoint);
+                    return Task.FromResult<IPEndPoint?>(_cachedP2PEndpoint);
 
                 return _p2pDiscoveryTask ??= DiscoverP2PEndpointAsync();
             }
         }
 
-        private async Task<IPEndPoint> DiscoverP2PEndpointAsync()
+        private async Task<IPEndPoint?> DiscoverP2PEndpointAsync()
         {
             try
             {
@@ -562,6 +562,11 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// that address are dispatched correctly.
         /// </summary>
         public void AddP2PTunnel(P2PTunnel tunnel) => _tunnelCommunicator.AddP2PTunnel(tunnel);
+
+        /// <summary>
+        /// Removes a P2P peer's endpoint from the communicator's routing tables.
+        /// </summary>
+        public void RemoveP2PTunnel(P2PTunnel tunnel) => _tunnelCommunicator.RemoveP2PTunnel(tunnel);
 
         /// <summary>
         /// Clears the cached STUN result so the next P2P negotiation re-queries.

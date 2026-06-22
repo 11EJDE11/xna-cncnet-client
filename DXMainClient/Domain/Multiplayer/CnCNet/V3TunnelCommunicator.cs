@@ -317,6 +317,16 @@ public class V3TunnelCommunicator
     }
 
     /// <summary>
+    /// Removes a P2P peer's endpoint from the routing tables. Called when the
+    /// negotiator that created the tunnel is disposed so stale entries don't accumulate.
+    /// </summary>
+    public void RemoveP2PTunnel(P2PTunnel tunnel)
+    {
+        if (_tunnelToEndpoint.TryRemove(tunnel, out var endpoint))
+            _endpointToTunnel.TryRemove(endpoint, out _);
+    }
+
+    /// <summary>
     /// Sends a STUN request via the communicator's own UDP socket and returns the
     /// raw 40-byte response, or null on timeout. Using the communicator's socket
     /// ensures the STUN-discovered external port matches the port used for game data.

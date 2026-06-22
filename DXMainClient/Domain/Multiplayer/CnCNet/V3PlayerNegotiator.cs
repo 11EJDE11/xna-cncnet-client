@@ -838,6 +838,10 @@ public class V3PlayerNegotiator : IDisposable
         _negotiationCompletionSource.TrySetCanceled();
         _p2pPeerEndpointTcs.TrySetCanceled();
         _tunnelHandler.UnregisterV3PacketHandler(_localPlayer.Id, _remotePlayer.Id);
+
+        foreach (var tunnel in _tunnels.OfType<P2PTunnel>())
+            _tunnelHandler.RemoveP2PTunnel(tunnel);
+
         _negotiationCts.Dispose();
     }
 }
