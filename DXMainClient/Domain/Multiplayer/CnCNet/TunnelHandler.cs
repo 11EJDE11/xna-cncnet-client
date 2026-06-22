@@ -4,8 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -57,15 +55,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             connectionManager.ConnectionLost += ConnectionManager_ConnectionLost;
 
             _tunnelCommunicator = new V3TunnelCommunicator();
+            _p2pEndpointDiscovery = new P2PEndpointDiscovery(_tunnelCommunicator);
         }
 
         public List<CnCNetTunnel> Tunnels { get; private set; } = [];
         public CnCNetTunnel CurrentTunnel { get; set; } = null;
         public V3GameTunnelBridge GameTunnelBridge;
 
-        private IPEndPoint? _cachedP2PEndpoint;
-        private Task<IPEndPoint?>? _p2pDiscoveryTask;
-        private readonly object _p2pDiscoveryLock = new object();
+        private readonly P2PEndpointDiscovery _p2pEndpointDiscovery;
 
         public event EventHandler TunnelsRefreshed;
         public event EventHandler CurrentTunnelPinged;
@@ -108,14 +105,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         {
             Enabled = false;
             _tunnelCommunicator.Shutdown();
-            _cachedP2PEndpoint = null;
+            _p2pEndpointDiscovery.ClearCache();
         }
 
         private void ConnectionManager_Disconnected(object sender, EventArgs e)
         {
             Enabled = false;
             _tunnelCommunicator.Shutdown();
-            _cachedP2PEndpoint = null;
+            _p2pEndpointDiscovery.ClearCache();
         }
 
         private void RefreshTunnelsAsync()
@@ -469,93 +466,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// or discovers it by querying official tunnel servers as STUN endpoints.
         /// Returns null if the NAT is symmetric or no STUN servers respond.
         /// </summary>
-        public Task<IPEndPoint?> GetOrDiscoverP2PEndpointAsync()
-        {
-            if (_cachedP2PEndpoint != null)
-                return Task.FromResult<IPEndPoint?>(_cachedP2PEndpoint);
-
-            // Single-flight: several player negotiations can run at once (3+ player games), so
-            // share one in-flight discovery rather than racing STUN queries to the same servers
-            // on the shared communicator socket (which would clobber each other's pending query).
-            lock (_p2pDiscoveryLock)
-            {
-                if (_cachedP2PEndpoint != null)
-                    return Task.FromResult<IPEndPoint?>(_cachedP2PEndpoint);
-
-                return _p2pDiscoveryTask ??= DiscoverP2PEndpointAsync();
-            }
-        }
-
-        private async Task<IPEndPoint?> DiscoverP2PEndpointAsync()
-        {
-            try
-            {
-                var stunHosts = Tunnels
-                    .Where(t => t.Official || t.Recommended)
-                    .Select(t => t.Address)
-                    .Distinct()
-                    .Take(8)
-                    .ToList();
-
-                // Prepend any configured STUN hosts
-                string configuredHosts = ClientConfiguration.Instance.P2PStunServers;
-                if (!string.IsNullOrWhiteSpace(configuredHosts))
-                {
-                    var configured = configuredHosts.Split(';', StringSplitOptions.RemoveEmptyEntries);
-                    stunHosts.InsertRange(0, configured);
-                }
-
-                var ep = await StunHelper.DiscoverExternalEndpointAsync(_tunnelCommunicator, stunHosts).ConfigureAwait(false);
-                _cachedP2PEndpoint = ep;
-                return ep;
-            }
-            finally
-            {
-                // Release the in-flight slot: a success is now served from _cachedP2PEndpoint,
-                // and a failure (null) can be retried (serially) by a later negotiation.
-                lock (_p2pDiscoveryLock)
-                    _p2pDiscoveryTask = null;
-            }
-        }
+        public Task<IPEndPoint?> GetOrDiscoverP2PEndpointAsync() => _p2pEndpointDiscovery.GetOrDiscoverAsync(Tunnels);
 
         /// <summary>
-        /// Returns this machine's local (LAN) endpoints — every non-loopback IPv4
-        /// unicast address paired with the communicator's UDP port. These are offered as
-        /// additional P2P candidates so peers behind the same NAT (e.g. on the same LAN)
-        /// can connect directly without relying on NAT hairpinning of the reflexive address.
+        /// Returns this machine's local (LAN) endpoints offered as additional P2P candidates.
         /// </summary>
-        public List<IPEndPoint> GetLocalP2PEndpoints()
-        {
-            var result = new List<IPEndPoint>();
-            int port = _tunnelCommunicator.LocalPort;
-            if (port == 0)
-                return result;
-
-            try
-            {
-                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
-                {
-                    if (ni.OperationalStatus != OperationalStatus.Up ||
-                        ni.NetworkInterfaceType == NetworkInterfaceType.Loopback)
-                        continue;
-
-                    foreach (var addr in ni.GetIPProperties().UnicastAddresses)
-                    {
-                        if (addr.Address.AddressFamily != AddressFamily.InterNetwork ||
-                            IPAddress.IsLoopback(addr.Address))
-                            continue;
-
-                        result.Add(new IPEndPoint(addr.Address, port));
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"TunnelHandler: Failed to enumerate local endpoints: {ex.Message}");
-            }
-
-            return result;
-        }
+        public List<IPEndPoint> GetLocalP2PEndpoints() => _p2pEndpointDiscovery.GetLocalEndpoints();
 
         /// <summary>
         /// Registers a P2P peer's endpoint with the communicator so packets from
@@ -572,7 +488,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// Clears the cached STUN result so the next P2P negotiation re-queries.
         /// Call when P2P is enabled in options or after a network change.
         /// </summary>
-        public void ClearP2PEndpointCache() => _cachedP2PEndpoint = null;
+        public void ClearP2PEndpointCache() => _p2pEndpointDiscovery.ClearCache();
 
         public void RegisterV3PacketHandler(uint localId, uint remoteId, PacketHandler handler) => _tunnelCommunicator.RegisterHandler(localId, remoteId, handler);
 

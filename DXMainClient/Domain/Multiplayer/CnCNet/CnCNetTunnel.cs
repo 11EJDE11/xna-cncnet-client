@@ -96,6 +96,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public PingValue Ping { get; set; } = PingValue.Unknown;
 
         /// <summary>
+        /// Whether this is a direct peer-to-peer path rather than a relay tunnel server.
+        /// Relay tunnels are always false; <see cref="P2PTunnel"/> overrides this to true.
+        /// Used to exclude synthetic P2P entries from relay-only operations (registration,
+        /// endpoint mapping, ping refresh).
+        /// </summary>
+        public virtual bool IsDirect => false;
+
+        /// <summary>
         /// Updates this tunnel's metadata from another tunnel instance, preserving Address, Port, and existing Ping.
         /// </summary>
         internal void UpdateFrom(CnCNetTunnel updatedTunnel)

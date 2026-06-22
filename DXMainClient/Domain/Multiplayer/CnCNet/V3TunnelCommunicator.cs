@@ -97,7 +97,7 @@ public class V3TunnelCommunicator
             if (IsInitialized)
                 return;
 
-            var v3Tunnels = tunnels.Where(t => t.Version == 3 && t is not P2PTunnel &&
+            var v3Tunnels = tunnels.Where(t => t.Version == 3 && !t.IsDirect &&
                 (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended))
                 .ToList();
 
@@ -147,7 +147,7 @@ public class V3TunnelCommunicator
             return;
 
         int added = 0;
-        foreach (var tunnel in tunnels.Where(t => t.Version == 3 && t is not P2PTunnel))
+        foreach (var tunnel in tunnels.Where(t => t.Version == 3 && !t.IsDirect))
         {
             var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
 
@@ -244,8 +244,8 @@ public class V3TunnelCommunicator
         if (!IsInitialized)
             return;
 
-        var targetTunnels = tunnels?.Where(t => t.Version == 3 && t is not P2PTunnel).ToList() ??
-                            _endpointToTunnel.Values.Where(t => t is not P2PTunnel).ToList();
+        var targetTunnels = tunnels?.Where(t => t.Version == 3 && !t.IsDirect).ToList() ??
+                            _endpointToTunnel.Values.Where(t => !t.IsDirect).ToList();
 
         var packet = CreatePacket(localId, 0u, TunnelPacketType.Register);
         foreach (var tunnel in targetTunnels)

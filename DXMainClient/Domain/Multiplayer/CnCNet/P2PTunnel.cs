@@ -14,6 +14,8 @@ public class P2PTunnel : CnCNetTunnel
 {
     public IPEndPoint PeerEndpoint { get; }
 
+    public override bool IsDirect => true;
+
     public P2PTunnel(IPEndPoint peerEndpoint, string peerName)
         : base(peerEndpoint.Address.ToString(), peerEndpoint.Port, $"Direct ({peerName})", version: 3)
     {

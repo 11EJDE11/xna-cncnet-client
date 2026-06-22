@@ -21,7 +21,11 @@ public class V3PlayerNegotiator : IDisposable
 {
     private readonly V3PlayerInfo _localPlayer; //our V3PlayerInfo ID
     private readonly V3PlayerInfo _remotePlayer;
+    // Tunnels to test with. Mutated when the P2P upgrade round adds direct paths, while other
+    // tasks enumerate it (Connected sends, result printing), so all access goes through
+    // _tunnelsLock; enumerators take a snapshot via TunnelsSnapshot().
     private readonly List<CnCNetTunnel> _tunnels; //list of tunnels to test with
+    private readonly object _tunnelsLock = new();
     private readonly TunnelHandler _tunnelHandler;
 
     /// <summary>
@@ -41,7 +45,10 @@ public class V3PlayerNegotiator : IDisposable
 
     // Signals negotiation complete. Deciders = set when tunnel choice is made.
     // Non-deciders = set when tunnel choice is received from decider.
-    private TaskCompletionSource<bool> _negotiationCompletionSource = new();
+    // volatile: reassigned for the P2P upgrade round on the negotiation task while the
+    // communicator receive thread reads it in OnPacketReceived, so both must observe the
+    // latest instance.
+    private volatile TaskCompletionSource<bool> _negotiationCompletionSource = new();
 
     // How long the non-decider will keep sending Connected packets overall.
     private const int NON_DECIDER_TOTAL_TIMEOUT_MS = 20000;
@@ -79,7 +86,9 @@ public class V3PlayerNegotiator : IDisposable
     // will be high ping or timing out.
     private const double EARLY_SELECTION_THRESHOLD = 0.5;
 
-    private TaskCompletionSource<bool> _tunnelAckReceived = new(); //true when tunnel choice ack'd
+    // volatile: reassigned for the P2P upgrade round (see _negotiationCompletionSource) and
+    // read by the receive thread when a TunnelAck arrives.
+    private volatile TaskCompletionSource<bool> _tunnelAckReceived = new(); //true when tunnel choice ack'd
 
     public V3PlayerInfo RemotePlayer => _remotePlayer;
 
@@ -110,6 +119,13 @@ public class V3PlayerNegotiator : IDisposable
         _tunnelHandler.RegisterV3PacketHandler(_localPlayer.Id, _remotePlayer.Id, OnPacketReceived);
     }
 
+    // A snapshot of the current tunnel set, safe to enumerate without holding the lock.
+    private List<CnCNetTunnel> TunnelsSnapshot()
+    {
+        lock (_tunnelsLock)
+            return new List<CnCNetTunnel>(_tunnels);
+    }
+
     public async Task<bool> NegotiateAsync()
     {
         try
@@ -119,7 +135,7 @@ public class V3PlayerNegotiator : IDisposable
             _negotiationCompletionSource = new TaskCompletionSource<bool>();
             _tunnelAckReceived = new TaskCompletionSource<bool>();
 
-            _tunnelHandler.SendRegistrationToTunnels(_localPlayer.Id, _tunnels);
+            _tunnelHandler.SendRegistrationToTunnels(_localPlayer.Id, TunnelsSnapshot());
 
             if (_isDecider)
                 await PerformDeciderNegotiationAsync();
@@ -323,7 +339,7 @@ public class V3PlayerNegotiator : IDisposable
                 cts.Cancel();
 
                 // Notify the decider so it stops retrying TunnelChoice packets
-                foreach (var tunnel in _tunnels)
+                foreach (var tunnel in TunnelsSnapshot())
                     _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id, TunnelPacketType.NegotiationFailed, null);
 
                 RaiseNegotiationResult(null, 0, "Timeout waiting for tunnel selection");
@@ -352,7 +368,7 @@ public class V3PlayerNegotiator : IDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            foreach (var tunnel in _tunnels)
+            foreach (var tunnel in TunnelsSnapshot())
             {
                 var result = _remotePlayer.GetTunnelResult(tunnel);
                 if (result == null || result.ConnectedTimedOut || result.PingRequestReceived)
@@ -424,7 +440,7 @@ public class V3PlayerNegotiator : IDisposable
                     result.ConnectedReceived = true;
                     result.ConnectedTcs.TrySetResult(true);
                     Logger.Log($"V3PlayerNegotiator: Connected received from {_remotePlayer.Name} on {tunnel.Name}, starting pings");
-                    if (tunnel is P2PTunnel)
+                    if (tunnel.IsDirect)
                         _ = PerformPingsAsync(tunnel, result, P2P_PINGS_PER_TUNNEL, P2P_PING_TIMEOUT_MS);
                     else
                         _ = PerformPingsAsync(tunnel, result);
@@ -588,7 +604,7 @@ public class V3PlayerNegotiator : IDisposable
         {
             sb.AppendLine($"=== Decider Results for {_remotePlayer.Name} (ID: {_remotePlayer.Id}) ===");
 
-            foreach (var tunnel in _tunnels)
+            foreach (var tunnel in TunnelsSnapshot())
             {
                 var result = _remotePlayer.GetTunnelResult(tunnel);
                 if (result != null)
@@ -633,7 +649,7 @@ public class V3PlayerNegotiator : IDisposable
             // No RTT data (the decider measures that); this shows bidirectional connectivity per tunnel.
             sb.AppendLine($"=== Non-Decider Results for {_remotePlayer.Name} (ID: {_remotePlayer.Id}) ===");
 
-            foreach (var tunnel in _tunnels)
+            foreach (var tunnel in TunnelsSnapshot())
             {
                 var result = _remotePlayer.GetTunnelResult(tunnel);
                 if (result != null)
@@ -797,7 +813,8 @@ public class V3PlayerNegotiator : IDisposable
             var p2pTunnel = new P2PTunnel(ep, _remotePlayer.Name);
             _tunnelHandler.AddP2PTunnel(p2pTunnel);
             _remotePlayer.AddTunnelResult(p2pTunnel);
-            _tunnels.Add(p2pTunnel);
+            lock (_tunnelsLock)
+                _tunnels.Add(p2pTunnel);
             tunnels.Add(p2pTunnel);
         }
         return tunnels;
