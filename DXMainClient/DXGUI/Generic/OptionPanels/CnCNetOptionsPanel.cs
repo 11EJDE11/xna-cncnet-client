@@ -216,15 +216,30 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             chkEnableP2P.ClientRectangle = new Rectangle(
                 ddTunnelMode.X,
                 ddTunnelMode.Bottom + 9, 0, 0);
-            chkEnableP2P.Text = "Enable direct P2P connections (shares your IP with other opted-in players)".L10N("Client:DTAConfig:EnableP2P");
+            chkEnableP2P.Text = "Enable direct P2P connections".L10N("Client:DTAConfig:EnableP2P");
             chkEnableP2P.CheckedChanged += ChkEnableP2P_CheckedChanged;
             AddChild(chkEnableP2P);
         }
 
         private void ChkEnableP2P_CheckedChanged(object sender, EventArgs e)
         {
-            if (chkEnableP2P.Checked)
-                tunnelHandler.ClearP2PEndpointCache();
+            if (!chkEnableP2P.Checked)
+                return;
+
+            var msgBox = new XNAMessageBox(WindowManager,
+                "Direct P2P Warning".L10N("Client:DTAConfig:P2PWarningTitle"),
+                ("Enabling P2P allows players to connect directly to each other\n" +
+                 "instead of routing traffic through CnCNet relay servers.\n\n" +
+                 "This will share your IP address with all other players\n" +
+                 "in your game session. Your IP address can reveal your\n" +
+                 "approximate location and may expose you to risks if\n" +
+                 "shared with someone with malicious intent.\n\n" +
+                 "Only enable this if you trust the players you play with.\n\n" +
+                 "Do you want to enable P2P connections?").L10N("Client:DTAConfig:P2PWarningText"),
+                XNAMessageBoxButtons.YesNo);
+            msgBox.YesClickedAction = _ => tunnelHandler.ClearP2PEndpointCache();
+            msgBox.NoClickedAction = _ => chkEnableP2P.Checked = false;
+            msgBox.Show();
         }
 
         private void InitAllowPrivateMessagesFromDropdown()
