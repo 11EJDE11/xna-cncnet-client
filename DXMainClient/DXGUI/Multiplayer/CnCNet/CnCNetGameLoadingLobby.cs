@@ -886,7 +886,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private void UpdateLoadGameButtonStatus()
         {
             if (IsHost)
-                btnLoadGame.AllowClick = _tunnelMode != TunnelMode.V3Dynamic || _negotiator.AreAllNegotiationsSuccessful();
+                btnLoadGame.AllowClick = true;
         }
 
         // IV3NegotiationHost implementation — the shared negotiation orchestration lives in

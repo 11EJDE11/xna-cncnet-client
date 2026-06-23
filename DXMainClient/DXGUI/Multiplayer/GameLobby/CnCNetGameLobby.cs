@@ -948,6 +948,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (index > -1)
             {
+                _negotiator.RemovePlayer(e.UserName);
                 Players.RemoveAt(index);
                 CopyPlayerDataToUI();
                 UpdateDiscordPresence();
@@ -2484,10 +2485,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override bool UpdateLaunchGameButtonStatus()
         {
-            // In dynamic tunnel mode the host can't launch until every player pair has
-            // successfully negotiated a tunnel (AreAllNegotiationsSuccessful is a no-op in
-            // the other tunnel modes). Only gate the host so non-host ready-up is unaffected.
-            btnLaunchGame.Enabled = base.UpdateLaunchGameButtonStatus() && !tunnelErrorMode && (!IsHost || _negotiator.AreAllNegotiationsSuccessful());
+            btnLaunchGame.Enabled = base.UpdateLaunchGameButtonStatus() && !tunnelErrorMode;
             return btnLaunchGame.Enabled;
         }
 
