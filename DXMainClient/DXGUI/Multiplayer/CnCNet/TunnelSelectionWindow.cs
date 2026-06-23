@@ -7,13 +7,6 @@ using System;
 
 namespace DTAClient.DXGUI.Multiplayer.CnCNet
 {
-    enum TunnelMode
-    {
-        V3Static = 0,
-        V3Dynamic = 1,
-        V2Legacy = 2
-    }
-
     /// <summary>
     /// A window for selecting a CnCNet tunnel server and tunnel mode.
     /// </summary>

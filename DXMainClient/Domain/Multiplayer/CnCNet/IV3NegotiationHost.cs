@@ -1,0 +1,54 @@
+using System.Collections.Generic;
+
+using Microsoft.Xna.Framework;
+
+#nullable enable
+
+namespace DTAClient.Domain.Multiplayer.CnCNet;
+
+/// <summary>
+/// Implemented by a lobby that wants V3 dynamic-tunnel negotiation orchestrated by
+/// <see cref="V3TunnelNegotiationManager"/>. The manager owns the shared negotiation
+/// state and protocol; the host provides the bits that differ between lobbies
+/// (player list, channel, message transport) and reacts to UI-affecting callbacks.
+/// </summary>
+public interface IV3NegotiationHost
+{
+    /// <summary>The lobby's current player list.</summary>
+    List<PlayerInfo> Players { get; }
+
+    /// <summary>The IRC channel name, used to derive deterministic player IDs.</summary>
+    string ChannelName { get; }
+
+    TunnelMode TunnelMode { get; }
+
+    /// <summary>Sends a negotiation CTCP message to the channel.</summary>
+    void SendNegotiationMessage(string message);
+
+    /// <summary>Adds a notice to the lobby chat.</summary>
+    void AddNotice(string message, Color color);
+
+    /// <summary>
+    /// Raised whenever the overall negotiation state may have changed, so the lobby can
+    /// refresh launch/load buttons and any status panels.
+    /// </summary>
+    void OnNegotiationStateChanged();
+
+    /// <summary>
+    /// Raised when a locally driven negotiation updates a peer's status. <paramref name="ping"/>
+    /// is negative when unknown (e.g. failure or in-progress).
+    /// </summary>
+    void OnLocalNegotiationStatus(PlayerInfo player, NegotiationStatus status, int ping);
+
+    /// <summary>
+    /// Raised when a remote NEGINFO message updates the status of a player relevant to the
+    /// local view. <paramref name="ping"/> is negative when unknown.
+    /// </summary>
+    void OnRemoteNegotiationStatus(PlayerInfo player, NegotiationStatus status, int ping);
+
+    /// <summary>
+    /// Raised when negotiations are reset/restarted, so the lobby can clear any one-shot
+    /// state (e.g. a "negotiations complete" notice guard).
+    /// </summary>
+    void OnNegotiationsRestarted();
+}
