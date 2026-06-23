@@ -404,7 +404,9 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             chkPersistentMode.Checked = IniSettings.PersistentMode;
             chkSteamIntegration.Checked = IniSettings.SteamIntegration;
             SetTunnelMode();
+            chkEnableP2P.CheckedChanged -= ChkEnableP2P_CheckedChanged;
             chkEnableP2P.Checked = IniSettings.EnableP2P;
+            chkEnableP2P.CheckedChanged += ChkEnableP2P_CheckedChanged;
 
             chkDiscordIntegration.Checked = !ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled
                 && IniSettings.DiscordIntegration;
