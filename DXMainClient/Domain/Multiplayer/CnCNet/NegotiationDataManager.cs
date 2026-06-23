@@ -1,8 +1,8 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-
-#nullable enable
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 
