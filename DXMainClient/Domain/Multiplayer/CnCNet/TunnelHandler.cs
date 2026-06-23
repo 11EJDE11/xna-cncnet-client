@@ -466,7 +466,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// or discovers it by querying official tunnel servers as STUN endpoints.
         /// Returns null if the NAT is symmetric or no STUN servers respond.
         /// </summary>
+#nullable enable
         public Task<IPEndPoint?> GetOrDiscoverP2PEndpointAsync() => _p2pEndpointDiscovery.GetOrDiscoverAsync(Tunnels);
+#nullable restore
 
         /// <summary>
         /// Returns this machine's local (LAN) endpoints offered as additional P2P candidates.
