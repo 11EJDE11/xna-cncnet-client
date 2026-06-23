@@ -75,6 +75,8 @@ public class V3TunnelCommunicator
     private readonly ConcurrentDictionary<CnCNetTunnel, IPEndPoint> _tunnelToEndpoint = new();
     private readonly ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler> _handlers = new();
     private readonly ConcurrentDictionary<IPEndPoint, TaskCompletionSource<byte[]>> _pendingStunQueries = new();
+    private readonly ConcurrentDictionary<(uint localId, uint remoteId), string> _p2pPeerNames = new();
+    private readonly ConcurrentDictionary<(uint localId, uint remoteId), ConcurrentBag<IPEndPoint>> _autoLearnedEndpoints = new();
     private readonly object _initLock = new();
 
     public bool IsInitialized => _udpClient != null;
@@ -131,6 +133,8 @@ public class V3TunnelCommunicator
             foreach (var tcs in _pendingStunQueries.Values)
                 tcs.TrySetCanceled();
             _pendingStunQueries.Clear();
+            _p2pPeerNames.Clear();
+            _autoLearnedEndpoints.Clear();
             Logger.Log("V3TunnelCommunicator: Shut down");
         }
 
@@ -175,7 +179,8 @@ public class V3TunnelCommunicator
     }
 
     /// <summary>
-    /// Removes the handler for the specified local/remote ID pair.
+    /// Removes the handler for the specified local/remote ID pair and cleans up any
+    /// auto-learned P2P endpoints that were registered for this pair.
     /// </summary>
     /// <param name="localId">The local player V3PlayerInfo ID.</param>
     /// <param name="remoteId">The remote player V3PlayerInfo ID.</param>
@@ -185,6 +190,17 @@ public class V3TunnelCommunicator
             Logger.Log($"V3TunnelCommunicator: Unregistered handler for {localId} <-> {remoteId}");
         else
             Logger.Log($"V3TunnelCommunicator: Handler not found for {localId} <-> {remoteId} while attempting unregistration");
+
+        _p2pPeerNames.TryRemove((localId, remoteId), out _);
+
+        if (_autoLearnedEndpoints.TryRemove((localId, remoteId), out var learnedEps))
+        {
+            foreach (var ep in learnedEps)
+            {
+                if (_endpointToTunnel.TryRemove(ep, out var learnedTunnel))
+                    _tunnelToEndpoint.TryRemove(learnedTunnel, out _);
+            }
+        }
     }
 
     /// <summary>
@@ -300,11 +316,12 @@ public class V3TunnelCommunicator
     }
 
     /// <summary>
-    /// Registers a P2P peer's external endpoint so packets from that address
-    /// are dispatched to the appropriate handler. Must be called before the
-    /// P2P negotiation phase starts.
+    /// Registers a P2P peer's external endpoint so packets from that address are dispatched
+    /// to the appropriate handler. <paramref name="localId"/> and <paramref name="remoteId"/>
+    /// are used to auto-learn additional endpoints if the peer sends from an address that
+    /// wasn't in the original candidate list.
     /// </summary>
-    public void AddP2PTunnel(P2PTunnel tunnel)
+    public void AddP2PTunnel(P2PTunnel tunnel, uint localId, uint remoteId)
     {
         if (!IsInitialized)
             return;
@@ -312,8 +329,10 @@ public class V3TunnelCommunicator
         if (_tunnelToEndpoint.TryAdd(tunnel, tunnel.PeerEndpoint))
         {
             _endpointToTunnel[tunnel.PeerEndpoint] = tunnel;
-            Logger.Log($"V3TunnelCommunicator: Registered P2P endpoint {tunnel.PeerEndpoint} for {tunnel.Name}");
+            Logger.Log($"V3TunnelCommunicator: Registered P2P path {tunnel.Name}");
         }
+
+        _p2pPeerNames[(localId, remoteId)] = tunnel.PeerName;
     }
 
     /// <summary>
@@ -467,6 +486,41 @@ public class V3TunnelCommunicator
     }
 
     /// <summary>
+    /// When a negotiation packet arrives from an endpoint not in <see cref="_endpointToTunnel"/>,
+    /// attempts to match it to a known P2P pair by sender/receiver ID and — if found — registers
+    /// the unexpected source address as an additional P2P path and dispatches the packet.
+    /// This handles peers whose actual sending IP differs from their advertised candidates
+    /// (e.g. a mobile hotspot whose local adapter IP was not enumerated by <see cref="P2PEndpointDiscovery"/>).
+    /// </summary>
+    /// <returns><c>true</c> if the packet was dispatched; <c>false</c> if it remains unrecognised.</returns>
+    private bool TryAutoLearnAndDispatch(ReadOnlyMemory<byte> data, long receivedTime, IPEndPoint remoteEndpoint)
+    {
+        var parsed = ParsePacket(data);
+        if (!parsed.NegotiationType.HasValue)
+            return false;
+
+        var handlerKey = (parsed.ReceiverId, parsed.SenderId);
+        if (!_p2pPeerNames.TryGetValue(handlerKey, out var peerName))
+            return false;
+
+        var learnedTunnel = _endpointToTunnel.GetOrAdd(remoteEndpoint, ep =>
+        {
+            var t = new P2PTunnel(ep, peerName);
+            _autoLearnedEndpoints.GetOrAdd(handlerKey, _ => new ConcurrentBag<IPEndPoint>()).Add(ep);
+            Logger.Log($"V3TunnelCommunicator: Auto-learned P2P path {t.Name}");
+            return t;
+        });
+
+        // Also register the reverse direction so SendPacket can reach the auto-learned tunnel.
+        // _endpointToTunnel maps endpoint→tunnel (for receive routing); _tunnelToEndpoint maps
+        // tunnel→endpoint (for send routing). Auto-learned tunnels need both populated.
+        _tunnelToEndpoint.TryAdd(learnedTunnel, remoteEndpoint);
+
+        ProcessReceivedPacket(data, receivedTime, learnedTunnel);
+        return true;
+    }
+
+    /// <summary>
     /// Continuously listens for UDP packets from all known tunnel endpoints.
     /// Each packet is parsed and dispatched on arrival.
     /// </summary>
@@ -504,7 +558,7 @@ public class V3TunnelCommunicator
                             Buffer.BlockCopy(receiveBuffer, 0, stunData, 0, received);
                             stunTcs.TrySetResult(stunData);
                         }
-                        else
+                        else if (!TryAutoLearnAndDispatch(receiveBuffer.AsMemory(0, received), receivedTime, (IPEndPoint)remoteEndpoint))
                             Logger.Log($"V3TunnelCommunicator: Received packet from unknown endpoint: {remoteEndpoint}");
                     }
                 }

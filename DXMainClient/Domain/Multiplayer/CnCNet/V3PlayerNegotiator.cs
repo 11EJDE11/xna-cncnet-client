@@ -428,7 +428,32 @@ public class V3PlayerNegotiator : IDisposable
     {
         var result = _remotePlayer.GetTunnelResult(tunnel);
         if (result == null)
-            return;
+        {
+            // Auto-learned P2P path: the peer sent from an endpoint not in their original
+            // candidate list (e.g. a phone-hotspot that NATs to a different local IP).
+            // Register it on-the-fly so we can ping it and include it in SelectBestTunnel.
+            if (tunnel is not P2PTunnel)
+                return;
+
+            result = _remotePlayer.TunnelResults.GetOrAdd(tunnel, static _ => new TunnelTestResult());
+
+            bool firstSeen;
+            lock (_tunnelsLock)
+            {
+                firstSeen = !_tunnels.Contains(tunnel);
+                if (firstSeen)
+                    _tunnels.Add(tunnel);
+            }
+
+            if (firstSeen)
+            {
+                // Send Connected back so the NAT on the peer's side (e.g. phone hotspot)
+                // has a return mapping and can forward our pings/choice to them.
+                _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
+                    TunnelPacketType.Connected, null);
+                Logger.Log($"V3PlayerNegotiator: Auto-learned P2P path {tunnel.Name} from {_remotePlayer.Name}, sending Connected back");
+            }
+        }
 
         switch (packetType)
         {
@@ -811,7 +836,7 @@ public class V3PlayerNegotiator : IDisposable
         foreach (var ep in peerEps)
         {
             var p2pTunnel = new P2PTunnel(ep, _remotePlayer.Name);
-            _tunnelHandler.AddP2PTunnel(p2pTunnel);
+            _tunnelHandler.AddP2PTunnel(p2pTunnel, _localPlayer.Id, _remotePlayer.Id);
             _remotePlayer.AddTunnelResult(p2pTunnel);
             lock (_tunnelsLock)
                 _tunnels.Add(p2pTunnel);

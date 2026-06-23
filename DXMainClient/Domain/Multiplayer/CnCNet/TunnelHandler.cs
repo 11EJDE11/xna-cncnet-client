@@ -479,7 +479,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// Registers a P2P peer's endpoint with the communicator so packets from
         /// that address are dispatched correctly.
         /// </summary>
-        public void AddP2PTunnel(P2PTunnel tunnel) => _tunnelCommunicator.AddP2PTunnel(tunnel);
+        public void AddP2PTunnel(P2PTunnel tunnel, uint localId, uint remoteId) => _tunnelCommunicator.AddP2PTunnel(tunnel, localId, remoteId);
 
         /// <summary>
         /// Removes a P2P peer's endpoint from the communicator's routing tables.

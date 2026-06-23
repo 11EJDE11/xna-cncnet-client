@@ -105,7 +105,7 @@ public class P2PEndpointDiscovery
         {
             foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
             {
-                if (ni.OperationalStatus != OperationalStatus.Up ||
+                if ((ni.OperationalStatus != OperationalStatus.Up && ni.OperationalStatus != OperationalStatus.Unknown) ||
                     ni.NetworkInterfaceType == NetworkInterfaceType.Loopback)
                     continue;
 
