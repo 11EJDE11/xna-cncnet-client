@@ -118,6 +118,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             AddChatBoxCommand(new ChatBoxCommand("NEGSTATUS",
                 "Toggle the tunnel negotiation status display".L10N("Client:Main:NegStatusCommand"),
                 false, ToggleNegotiationStatus));
+            AddChatBoxCommand(new ChatBoxCommand("NS",
+                "Shorthand for /NEGSTATUS".L10N("Client:Main:NSCommand"),
+                false, ToggleNegotiationStatus));
         }
 
         public event EventHandler GameLeft;
