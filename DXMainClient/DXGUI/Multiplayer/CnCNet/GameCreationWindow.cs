@@ -54,7 +54,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             lbTunnelList = new TunnelListBox(WindowManager, tunnelHandler);
             lbTunnelList.Name = nameof(lbTunnelList);
 
-            lbTunnelList.TargetVersion = UserINISettings.Instance.UseLegacyTunnels ? 2 : 3;
+            lbTunnelList.TargetVersion = (TunnelMode)UserINISettings.Instance.TunnelMode.Value == TunnelMode.V2Legacy ? 2 : 3;
 
             SkillLevelOptions = ClientConfiguration.Instance.GetSkillLevelOptions();
 
@@ -242,7 +242,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             }
 
             CnCNetTunnel selectedTunnel = null;
-            if (!UserINISettings.Instance.UseDynamicTunnels)
+            if ((TunnelMode)UserINISettings.Instance.TunnelMode.Value != TunnelMode.V3Dynamic)
             {
                 if (!lbTunnelList.IsValidIndexSelected())
                     return;
@@ -274,7 +274,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             }
 
             CnCNetTunnel selectedTunnel = null;
-            if (!UserINISettings.Instance.UseDynamicTunnels)
+            if ((TunnelMode)UserINISettings.Instance.TunnelMode.Value != TunnelMode.V3Dynamic)
             {
                 if (!lbTunnelList.IsValidIndexSelected())
                     return;
@@ -339,7 +339,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 btnDisplayAdvancedOptions.Visible = !isAdvancedMode;
             }
 
-            lbTunnelList.TargetVersion = UserINISettings.Instance.UseLegacyTunnels ? 2 : 3;
+            lbTunnelList.TargetVersion = (TunnelMode)UserINISettings.Instance.TunnelMode.Value == TunnelMode.V2Legacy ? 2 : 3;
 
             btnLoadMPGame.AllowClick = AllowLoadingGame();
         }
@@ -368,7 +368,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         /// </summary>
         private bool ShouldShowTunnelList()
         {
-            return UserINISettings.Instance.UseLegacyTunnels || !UserINISettings.Instance.UseDynamicTunnels;
+            return (TunnelMode)UserINISettings.Instance.TunnelMode.Value != TunnelMode.V3Dynamic;
         }
     }
 }

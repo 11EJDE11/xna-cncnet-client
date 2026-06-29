@@ -445,8 +445,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
             IniSettings.PersistentMode.Value = chkPersistentMode.Checked;
             IniSettings.SteamIntegration.Value = chkSteamIntegration.Checked;
             var tunnelMode = (TunnelMode)(ddTunnelMode.SelectedItem?.Tag ?? TunnelMode.V3Static);
-            IniSettings.UseLegacyTunnels.Value = tunnelMode == TunnelMode.V2Legacy;
-            IniSettings.UseDynamicTunnels.Value = tunnelMode == TunnelMode.V3Dynamic;
+            IniSettings.TunnelMode.Value = (int)tunnelMode;
             IniSettings.EnableP2P.Value = chkEnableP2P.Checked;
 
             if (!ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled)
@@ -466,14 +465,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
 
         private void SetTunnelMode()
         {
-            TunnelMode mode;
-            if (IniSettings.UseLegacyTunnels)
-                mode = TunnelMode.V2Legacy;
-            else if (IniSettings.UseDynamicTunnels)
-                mode = TunnelMode.V3Dynamic;
-            else
-                mode = TunnelMode.V3Static;
-
+            var mode = (TunnelMode)IniSettings.TunnelMode.Value;
             var selectedIndex = ddTunnelMode.Items.FindIndex(i => (TunnelMode)i.Tag == mode);
             if (selectedIndex < 0)
                 selectedIndex = ddTunnelMode.Items.FindIndex(i => (TunnelMode)i.Tag == TunnelMode.V3Static);

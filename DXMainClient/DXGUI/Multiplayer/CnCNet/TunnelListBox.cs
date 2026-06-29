@@ -89,12 +89,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private bool isManuallySelectedTunnel;
         private string manuallySelectedTunnelAddress;
 
-        /// <summary>
-        /// Gets filtered list of tunnels based on the UseLegacyTunnels setting.
-        /// </summary>
         private List<CnCNetTunnel> GetFilteredTunnels()
         {
-            int targetVersion = TargetVersion ?? (UserINISettings.Instance.UseLegacyTunnels ? 2 : 3);
+            int targetVersion = TargetVersion ?? ((TunnelMode)UserINISettings.Instance.TunnelMode.Value == TunnelMode.V2Legacy ? 2 : 3);
             return tunnelHandler.Tunnels.Where(tunnel => tunnel.Version == targetVersion).ToList();
         }
 

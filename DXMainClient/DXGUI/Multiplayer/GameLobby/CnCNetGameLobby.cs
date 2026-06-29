@@ -61,7 +61,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             this.cncnetUserData = cncnetUserData;
             this.pmWindow = pmWindow;
             this.random = random;
-            this._tunnelMode = UserINISettings.Instance.UseDynamicTunnels ? TunnelMode.V3Dynamic : TunnelMode.V3Static;
+            this._tunnelMode = (TunnelMode)UserINISettings.Instance.TunnelMode.Value;
             _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler);
 
             gameHostInactiveChecker = ClientConfiguration.Instance.InactiveHostKickEnabled? new GameHostInactiveChecker(WindowManager) : null;
