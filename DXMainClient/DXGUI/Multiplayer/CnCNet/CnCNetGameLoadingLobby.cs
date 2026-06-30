@@ -70,7 +70,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 new StringCommandHandler(START_GAME_CTCP_COMMAND, HandleStartGameCommand),
                 new IntCommandHandler(PLAYER_READY_CTCP_COMMAND, HandlePlayerReadyRequest),
                 new StringCommandHandler(TunnelNegotiationCommands.ChangeTunnelServer, HandleTunnelServerChangeMessage),
-                new StringCommandHandler(TunnelNegotiationCommands.NegotiationInfo, HandleNegotiationInfoMessage),
+                new StringCommandHandler(TunnelNegotiationCommands.NegotiationReport, HandleNegotiationReportMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelRenegotiate, HandleTunnelRenegotiateMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelFailed, HandleTunnelFailedMessage),
             };
@@ -713,8 +713,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             }
         }
 
-        private void HandleNegotiationInfoMessage(string sender, string message)
-            => _negotiator.HandleNegotiationInfoMessage(sender, message);
+        private void HandleNegotiationReportMessage(string sender, string data)
+            => _negotiator.HandleNegotiationReportMessage(sender, data);
 
         private void HandleTunnelRenegotiateMessage(string sender, string tunnelAddressAndPort)
             => _negotiator.HandleRemoteTunnelRenegotiate(sender, tunnelAddressAndPort);
@@ -897,8 +897,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         TunnelMode IV3NegotiationHost.TunnelMode => _tunnelMode;
 
-        void IV3NegotiationHost.SendNegotiationMessage(string message)
-            => channel.SendCTCPMessage(message, QueuedMessageType.SYSTEM_MESSAGE, 10);
+        void IV3NegotiationHost.SendNegotiationReport(string message)
+            => channel.SendCTCPMessage(message, QueuedMessageType.GAME_NEGOTIATION_MESSAGE, 10);
 
         void IV3NegotiationHost.AddNotice(string message, Color color) => AddNotice(message, color);
 

@@ -96,7 +96,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(DICE_ROLL_MESSAGE, HandleDiceRollResult),
                 new NoParamCommandHandler(CHEAT_DETECTED_MESSAGE, HandleCheatDetectedMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.ChangeTunnelServer, HandleTunnelServerChangeMessage),
-                new StringCommandHandler(TunnelNegotiationCommands.NegotiationInfo, HandleNegotiationInfoMessage),
+                new StringCommandHandler(TunnelNegotiationCommands.NegotiationReport, HandleNegotiationReportMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelRenegotiate, HandleTunnelRenegotiateMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelFailed, HandleTunnelFailedMessage),
                 new StringCommandHandler("GSETTINGS", ApplyGameLobbySettings)
@@ -386,7 +386,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
 
             var playerNames = Players.Select(p => p.Name).ToList();
-            _negotiationStatusPanel.UpdateNegotiationStatus(playerNames, _negotiator.NegotiationData);
+            _negotiationStatusPanel.UpdateNegotiationStatus(playerNames, _negotiator.NegotiationData, inferInProgress: true);
 
             if (IsHost)
             {
@@ -1199,8 +1199,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         TunnelMode IV3NegotiationHost.TunnelMode => _tunnelMode;
 
-        void IV3NegotiationHost.SendNegotiationMessage(string message)
-            => channel.SendCTCPMessage(message, QueuedMessageType.SYSTEM_MESSAGE, 10);
+        void IV3NegotiationHost.SendNegotiationReport(string message)
+            => channel.SendCTCPMessage(message, QueuedMessageType.GAME_NEGOTIATION_MESSAGE, 10);
 
         void IV3NegotiationHost.AddNotice(string message, Color color) => AddNotice(message, color);
 
@@ -1542,9 +1542,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             _negotiator.StartPendingNegotiations();
         }
 
-        private void HandleNegotiationInfoMessage(string sender, string message)
+        private void HandleNegotiationReportMessage(string sender, string data)
         {
-            _negotiator.HandleNegotiationInfoMessage(sender, message);
+            _negotiator.HandleNegotiationReportMessage(sender, data);
             CheckAllNegotiationsComplete();
         }
 

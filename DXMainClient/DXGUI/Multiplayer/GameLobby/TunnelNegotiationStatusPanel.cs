@@ -122,7 +122,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         Disable();
     }
 
-    public void UpdateNegotiationStatus(List<string> players, NegotiationDataManager negotiationData)
+    public void UpdateNegotiationStatus(List<string> players, NegotiationDataManager negotiationData, bool inferInProgress = false)
     {
         while (matrixPanel.Children.Count > 0)
             matrixPanel.RemoveChild(matrixPanel.Children[0]);
@@ -155,11 +155,11 @@ public class TunnelNegotiationStatusPanel : XNAPanel
 
         CenterOnParent();
 
-        BuildMatrixView(players, negotiationData);
-        BuildListView(players, negotiationData);
+        BuildMatrixView(players, negotiationData, inferInProgress);
+        BuildListView(players, negotiationData, inferInProgress);
     }
 
-    private void BuildMatrixView(List<string> players, NegotiationDataManager negotiationData)
+    private void BuildMatrixView(List<string> players, NegotiationDataManager negotiationData, bool inferInProgress = false)
     {
         for (int i = 0; i < players.Count; i++)
         {
@@ -214,8 +214,10 @@ public class TunnelNegotiationStatusPanel : XNAPanel
 
                 var status = negotiationData.GetNegotiationStatus(players[i], players[j]);
                 var ping = negotiationData.GetPing(players[i], players[j]);
+                var displayStatus = inferInProgress && status == NegotiationStatus.NotStarted
+                    ? NegotiationStatus.InProgress : status;
 
-                UpdateCell(statusCell, status, ping);
+                UpdateCell(statusCell, displayStatus, ping);
                 statusCell.AnchorPoint = new Vector2(CELL_WIDTH / 2f, CELL_HEIGHT / 2f);
 
                 cellPanel.AddChild(statusCell);
@@ -224,13 +226,15 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         }
     }
 
-    private void BuildListView(List<string> players, NegotiationDataManager negotiationData)
+    private void BuildListView(List<string> players, NegotiationDataManager negotiationData, bool inferInProgress = false)
     {
         var pairs = new List<(string p1, string p2, NegotiationStatus status, PingValue? ping)>();
 
         foreach (var (p1, p2) in negotiationData.GetPlayerPairs(players))
         {
             var status = negotiationData.GetNegotiationStatus(p1, p2);
+            if (inferInProgress && status == NegotiationStatus.NotStarted)
+                status = NegotiationStatus.InProgress;
             var ping = negotiationData.GetPing(p1, p2);
             pairs.Add((p1, p2, status, ping));
         }

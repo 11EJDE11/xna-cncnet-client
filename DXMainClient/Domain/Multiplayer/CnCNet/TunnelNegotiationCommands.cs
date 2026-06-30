@@ -7,8 +7,8 @@ namespace DTAClient.Domain.Multiplayer.CnCNet;
 /// </summary>
 public static class TunnelNegotiationCommands
 {
-    /// <summary>Reports a player's negotiation status/ping for a given peer.</summary>
-    public const string NegotiationInfo = "NEGINFO";
+    /// <summary>Full negotiation state report: all known local→peer statuses packed into one coalescing message.</summary>
+    public const string NegotiationReport = "NEGRPT";
 
     /// <summary>Asks peers to renegotiate the tunnel they share with the sender.</summary>
     public const string TunnelRenegotiate = "TNLRENEG";

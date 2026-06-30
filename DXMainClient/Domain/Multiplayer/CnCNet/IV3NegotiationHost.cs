@@ -22,8 +22,11 @@ public interface IV3NegotiationHost
 
     TunnelMode TunnelMode { get; }
 
-    /// <summary>Sends a negotiation CTCP message to the channel.</summary>
-    void SendNegotiationMessage(string message);
+    /// <summary>
+    /// Sends a full-state negotiation report to the channel as a coalescing GAME_NEGOTIATION_MESSAGE
+    /// (replaces any previously queued report, so rapid state changes collapse to one wire message).
+    /// </summary>
+    void SendNegotiationReport(string message);
 
     /// <summary>Adds a notice to the lobby chat.</summary>
     void AddNotice(string message, Color color);
@@ -41,7 +44,7 @@ public interface IV3NegotiationHost
     void OnLocalNegotiationStatus(PlayerInfo player, NegotiationStatus status, int ping);
 
     /// <summary>
-    /// Raised when a remote NEGINFO message updates the status of a player relevant to the
+    /// Raised when a remote NEGRPT message updates the status of a player relevant to the
     /// local view. <paramref name="ping"/> is negative when unknown.
     /// </summary>
     void OnRemoteNegotiationStatus(PlayerInfo player, NegotiationStatus status, int ping);

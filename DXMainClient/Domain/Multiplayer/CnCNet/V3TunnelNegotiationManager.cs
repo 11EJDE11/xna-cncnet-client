@@ -134,13 +134,13 @@ public class V3TunnelNegotiationManager
         if (availableTunnels.Count == 0)
         {
             host.AddNotice("Cannot negotiate tunnel: no V3 tunnels are available. Wait for the tunnel list to refresh or switch to a different tunnel mode.", Color.Yellow);
-            BroadcastNegotiationInfo(player.Name, NegotiationStatus.Failed);
+            BroadcastNegotiationInfo();
             host.OnNegotiationStateChanged();
             return;
         }
 
         _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, player.Name, NegotiationStatus.InProgress);
-        BroadcastNegotiationInfo(player.Name, NegotiationStatus.InProgress);
+        BroadcastNegotiationInfo();
 
         var pInfo = host.Players.Find(p => p.Name == player.Name);
         if (pInfo != null)
@@ -182,7 +182,7 @@ public class V3TunnelNegotiationManager
     private void MarkNegotiationFailed(string playerName, PlayerInfo? pInfo)
     {
         _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, playerName, NegotiationStatus.Failed);
-        BroadcastNegotiationInfo(playerName, NegotiationStatus.Failed);
+        BroadcastNegotiationInfo();
 
         if (pInfo != null)
             host.OnLocalNegotiationStatus(pInfo, NegotiationStatus.Failed, -1);
@@ -228,7 +228,7 @@ public class V3TunnelNegotiationManager
             host.OnNegotiationStateChanged();
 
             if (changed)
-                BroadcastNegotiationInfo(e.PlayerName, NegotiationStatus.Succeeded, e.NegotiationPing);
+                BroadcastNegotiationInfo();
         }
         else
         {
@@ -240,7 +240,7 @@ public class V3TunnelNegotiationManager
 
             host.OnNegotiationStateChanged();
 
-            BroadcastNegotiationInfo(e.PlayerName, NegotiationStatus.Failed);
+            BroadcastNegotiationInfo();
         }
     }
 
@@ -255,7 +255,7 @@ public class V3TunnelNegotiationManager
         {
             player.HasNegotiated = true;
             player.IsNegotiating = false;
-            BroadcastNegotiationInfo(player.Name, NegotiationStatus.Failed);
+            BroadcastNegotiationInfo();
         }
 
         negotiator.NegotiationResult -= OnPlayerNegotiationResult;
@@ -267,19 +267,42 @@ public class V3TunnelNegotiationManager
         host.OnNegotiationStateChanged();
     }
 
-    public void HandleNegotiationInfoMessage(string sender, string message)
+    /// <summary>
+    /// Parses an incoming NEGRPT payload (the data portion after the command name has been
+    /// stripped by the CTCP dispatcher). Each <c>|</c>-delimited entry is
+    /// <c>{hex_player_id}:{status_int}[:{ping_ms}]</c>. Entries for unknown IDs are silently
+    /// skipped so new players joining mid-parse don't crash the loop.
+    /// </summary>
+    public void HandleNegotiationReportMessage(string sender, string data)
     {
-        string[] parts = message.Split(';');
-        if (parts.Length < 2)
-            return;
+        foreach (var entry in data.Split('|'))
+        {
+            string[] parts = entry.Split(':');
+            if (parts.Length < 2)
+                continue;
 
-        string targetPlayer = parts[0];
-        if (!Enum.TryParse<NegotiationStatus>(parts[1], out var status))
-            return;
+            if (!uint.TryParse(parts[0], System.Globalization.NumberStyles.HexNumber, null, out uint id))
+                continue;
 
+            var v3Player = _v3PlayerInfos.FirstOrDefault(p => p.Id == id);
+            if (v3Player == null)
+                continue;
+
+            if (!int.TryParse(parts[1], out int statusInt) || !Enum.IsDefined(typeof(NegotiationStatus), statusInt))
+                continue;
+
+            int ping = parts.Length >= 3 && int.TryParse(parts[2], out int p) ? p : -1;
+            HandleNegotiationEntry(sender, v3Player.Name, (NegotiationStatus)statusInt, ping);
+        }
+
+        host.OnNegotiationStateChanged();
+    }
+
+    private void HandleNegotiationEntry(string sender, string targetPlayer, NegotiationStatus status, int ping)
+    {
         _negotiationData.UpdateStatus(sender, targetPlayer, status);
 
-        if (parts.Length >= 3 && int.TryParse(parts[2], out int ping) && ping >= 0)
+        if (ping >= 0)
         {
             _negotiationData.UpdatePing(sender, targetPlayer, ping);
 
@@ -298,22 +321,49 @@ public class V3TunnelNegotiationManager
         }
         else if (targetPlayer == ProgramConstants.PLAYERNAME)
         {
-            // No ping present, but another player's status with us changed.
             PlayerInfo? pInfo = host.Players.Find(p => p.Name == sender);
             if (pInfo != null)
                 host.OnRemoteNegotiationStatus(pInfo, status, -1);
         }
-
-        host.OnNegotiationStateChanged();
     }
 
-    private void BroadcastNegotiationInfo(string targetPlayer, NegotiationStatus status, int ping = -1)
+    /// <summary>
+    /// Builds and queues a full negotiation state report (NEGRPT) covering all known
+    /// local-player→peer statuses. Uses a replace-capable queue slot so multiple rapid
+    /// state changes within a single send-sleep window collapse into one wire message.
+    /// NotStarted entries are omitted (receivers assume NotStarted for any absent peer ID).
+    /// </summary>
+    private void BroadcastNegotiationInfo()
     {
-        string message = ping >= 0
-            ? $"{TunnelNegotiationCommands.NegotiationInfo} {targetPlayer};{status};{ping}"
-            : $"{TunnelNegotiationCommands.NegotiationInfo} {targetPlayer};{status}";
+        string localName = ProgramConstants.PLAYERNAME;
+        var sb = new System.Text.StringBuilder();
 
-        host.SendNegotiationMessage(message);
+        foreach (var peer in _v3PlayerInfos)
+        {
+            if (peer.Name == localName)
+                continue;
+
+            var peerStatus = _negotiationData.GetNegotiationStatus(localName, peer.Name);
+            if (peerStatus == NegotiationStatus.NotStarted)
+                continue;
+
+            if (sb.Length > 0)
+                sb.Append('|');
+
+            sb.Append(peer.Id.ToString("x8")).Append(':').Append((int)peerStatus);
+
+            if (peerStatus == NegotiationStatus.Succeeded)
+            {
+                var peerPing = _negotiationData.GetPing(localName, peer.Name);
+                if (peerPing.HasValue && peerPing.Value.IsValid())
+                    sb.Append(':').Append(peerPing.Value.Milliseconds);
+            }
+        }
+
+        if (sb.Length == 0)
+            return;
+
+        host.SendNegotiationReport($"{TunnelNegotiationCommands.NegotiationReport} {sb}");
     }
 
     public bool AreAllNegotiationsSuccessful()
