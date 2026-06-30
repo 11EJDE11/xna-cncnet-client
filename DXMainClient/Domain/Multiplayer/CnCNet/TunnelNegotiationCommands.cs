@@ -10,6 +10,9 @@ public static class TunnelNegotiationCommands
     /// <summary>Full negotiation state report: all known local→peer statuses packed into one coalescing message.</summary>
     public const string NegotiationReport = "NEGRPT";
 
+    /// <summary>Host broadcasts this to ask all clients to restart all their tunnel negotiations.</summary>
+    public const string RenegotiateAll = "RENEGALL";
+
     /// <summary>Asks peers to renegotiate the tunnel they share with the sender.</summary>
     public const string TunnelRenegotiate = "TNLRENEG";
 

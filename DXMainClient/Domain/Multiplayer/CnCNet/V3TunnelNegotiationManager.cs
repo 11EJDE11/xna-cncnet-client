@@ -383,6 +383,13 @@ public class V3TunnelNegotiationManager
                         p.Tunnel?.Address == address && p.Tunnel?.Port == port)
             .ToList();
 
+    /// <summary>Tears down and restarts negotiations with every remote player.</summary>
+    public void RestartAllNegotiations()
+    {
+        var allRemote = _v3PlayerInfos.Where(p => p.Name != ProgramConstants.PLAYERNAME).ToList();
+        RestartNegotiations(allRemote);
+    }
+
     /// <summary>
     /// Tears down and restarts negotiations for the given players.
     /// </summary>

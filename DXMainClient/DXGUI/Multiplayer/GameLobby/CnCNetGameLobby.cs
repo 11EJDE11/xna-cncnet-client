@@ -99,6 +99,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(TunnelNegotiationCommands.NegotiationReport, HandleNegotiationReportMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelRenegotiate, HandleTunnelRenegotiateMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelFailed, HandleTunnelFailedMessage),
+                new NoParamCommandHandler(TunnelNegotiationCommands.RenegotiateAll, HandleRenegotiateAll),
                 new StringCommandHandler("GSETTINGS", ApplyGameLobbySettings)
             };
 
@@ -121,6 +122,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             AddChatBoxCommand(new ChatBoxCommand("NS",
                 "Shorthand for /NEGSTATUS".L10N("Client:Main:NSCommand"),
                 false, ToggleNegotiationStatus));
+            AddChatBoxCommand(new ChatBoxCommand("RENEGOTIATE",
+                "Force all players to renegotiate tunnel connections (V3 Dynamic, host only)".L10N("Client:Main:RenegotiateCommand"),
+                true, RenegotiateAllCommand));
         }
 
         public event EventHandler GameLeft;
@@ -130,6 +134,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private GameLobbySettingsWindow gameLobbySettingsWindow;
         private XNAClientButton btnChangeTunnel;
         private XNAClientButton btnGameLobbySettings;
+        private XNAClientButton? btnNegotiationStatus;
 
         private Channel channel;
         private CnCNetManager connectionManager;
@@ -262,7 +267,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             _negotiationStatusPanel.Name = nameof(_negotiationStatusPanel);
             _negotiationStatusPanel.X = Width - _negotiationStatusPanel.Width - 10;
             _negotiationStatusPanel.Y = MapPreviewBox.Y;
+            _negotiationStatusPanel.RenegotiateAllRequested += (s, e) => TriggerRenegotiateAll();
             AddChild(_negotiationStatusPanel);
+
+            btnNegotiationStatus = FindChild<XNAClientButton>(nameof(btnNegotiationStatus), optional: true);
+            if (btnNegotiationStatus != null)
+                btnNegotiationStatus?.LeftClick += (s, e) => ToggleNegotiationStatus(string.Empty);
 
             PostInitialize();
         }
@@ -338,6 +348,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 btnChangeTunnel.Enable();
             else
                 btnChangeTunnel.Disable();
+
+            _negotiationStatusPanel.SetIsHost(IsHost);
+            if (_tunnelMode == TunnelMode.V3Dynamic)
+                btnNegotiationStatus?.Enable();
+            else
+                btnNegotiationStatus?.Disable();
         }
 
         private void TunnelHandler_CurrentTunnelPinged(object sender, EventArgs e) => UpdatePing();
@@ -1548,6 +1564,33 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             CheckAllNegotiationsComplete();
         }
 
+        private void HandleRenegotiateAll(string sender)
+        {
+            if (IsHost)
+                return;
+
+            AddNotice(string.Format("{0} has requested all players renegotiate tunnel connections.".L10N("Client:Main:RenegotiateAllReceived"), sender));
+            _negotiator.RestartAllNegotiations();
+        }
+
+        private void RenegotiateAllCommand(string parameters)
+        {
+            if (_tunnelMode != TunnelMode.V3Dynamic)
+            {
+                AddNotice("Renegotiate is only available when using dynamic tunnels.".L10N("Client:Main:RenegotiateOnlyDynamic"));
+                return;
+            }
+
+            TriggerRenegotiateAll();
+        }
+
+        private void TriggerRenegotiateAll()
+        {
+            AddNotice("Requesting all players renegotiate tunnel connections...".L10N("Client:Main:RenegotiateAllSent"));
+            channel.SendCTCPMessage(TunnelNegotiationCommands.RenegotiateAll, QueuedMessageType.SYSTEM_MESSAGE, 10);
+            _negotiator.RestartAllNegotiations();
+        }
+
         private void CheckAllNegotiationsComplete()
         {
             if (_tunnelMode != TunnelMode.V3Dynamic)
@@ -1880,6 +1923,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 btnChangeTunnel.Disable();
             }
+
+            if (newUseDynamic)
+                btnNegotiationStatus?.Enable();
+            else
+                btnNegotiationStatus?.Disable();
 
             if (newUseDynamic)
             {

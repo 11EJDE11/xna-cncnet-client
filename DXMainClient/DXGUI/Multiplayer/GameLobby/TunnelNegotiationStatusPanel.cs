@@ -30,12 +30,17 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     private const int LIST_BAR_MAX_WIDTH = 150;
     private const int LIST_BAR_MAX_PING = 500;
     private const int LIST_PING_LABEL_WIDTH = 70;
+    private const int RENEGOTIATE_BUTTON_HEIGHT = 25;
+    private const int RENEGOTIATE_BUTTON_MARGIN = 6;
+
+    public event EventHandler? RenegotiateAllRequested;
 
     private XNALabel lblTitle = null!;
     private XNAPanel matrixPanel = null!;
     private XNAPanel listPanel = null!;
     private XNAClientTabControl tabControl = null!;
     private XNAClientButton btnClose = null!;
+    private XNAClientButton btnRenegotiateAll = null!;
     private readonly List<XNALabel> playerLabels = new List<XNALabel>();
     private readonly Dictionary<(string, string), XNALabel> statusCells = new Dictionary<(string, string), XNALabel>();
     private static Texture2D? sharedCellBackground;
@@ -90,17 +95,33 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         matrixPanel.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, Width - PANEL_PADDING * 2, contentHeight);
         matrixPanel.DrawBorders = false;
 
+        btnRenegotiateAll = new XNAClientButton(WindowManager);
+        btnRenegotiateAll.Name = nameof(btnRenegotiateAll);
+        btnRenegotiateAll.Text = "Renegotiate All".L10N("Client:Main:RenegotiateAll");
+        btnRenegotiateAll.ClientRectangle = new Rectangle(PANEL_PADDING, Height - RENEGOTIATE_BUTTON_HEIGHT - RENEGOTIATE_BUTTON_MARGIN, 160, RENEGOTIATE_BUTTON_HEIGHT);
+        btnRenegotiateAll.LeftClick += (s, e) => RenegotiateAllRequested?.Invoke(this, EventArgs.Empty);
+
         AddChild(lblTitle);
         AddChild(btnClose);
         AddChild(tabControl);
         AddChild(listPanel);
         AddChild(matrixPanel);
+        AddChild(btnRenegotiateAll);
 
         base.Initialize();
 
         matrixPanel.Disable();
+        btnRenegotiateAll.Disable();
         CenterOnParent();
         Disable();
+    }
+
+    public void SetIsHost(bool isHost)
+    {
+        if (isHost)
+            btnRenegotiateAll.Enable();
+        else
+            btnRenegotiateAll.Disable();
     }
 
     private void TabControl_SelectedIndexChanged(object? sender, EventArgs e)
@@ -146,9 +167,14 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         int contentHeight = Math.Max(matrixContentHeight, listContentHeight);
 
         Width = Math.Max(500, Math.Max(matrixWidth, listWidth));
-        Height = Math.Max(300, contentY + contentHeight + PANEL_PADDING);
+        Height = Math.Max(300, contentY + contentHeight + PANEL_PADDING + RENEGOTIATE_BUTTON_HEIGHT + RENEGOTIATE_BUTTON_MARGIN * 2);
 
         btnClose.ClientRectangle = new Rectangle(Width - CLOSE_BUTTON_SIZE - 8, 5, CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE);
+        btnRenegotiateAll.ClientRectangle = new Rectangle(
+            PANEL_PADDING,
+            Height - RENEGOTIATE_BUTTON_HEIGHT - RENEGOTIATE_BUTTON_MARGIN,
+            160,
+            RENEGOTIATE_BUTTON_HEIGHT);
 
         listPanel.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, Width - PANEL_PADDING * 2, Height - contentY - PANEL_PADDING);
         matrixPanel.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, Width - PANEL_PADDING * 2, Height - contentY - PANEL_PADDING);
