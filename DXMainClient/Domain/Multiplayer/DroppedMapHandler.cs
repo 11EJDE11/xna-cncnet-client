@@ -27,13 +27,11 @@ namespace DTAClient.Domain.Multiplayer
     /// </summary>
     public class DroppedMapHandler
     {
-        private const string CUSTOM_MAPS_DIRECTORY = "Maps/Custom";
-
         /// <summary>
         /// File extensions that are treated as map files. These are renamed to the
         /// configured <see cref="ClientConfiguration.MapFileExtension"/> on import
-        /// (e.g. YR's ".yrm"/".mpr" become ".map"). The configured extension is
-        /// always included.
+        /// (e.g. YR's ".yrm" or RA2's ".mpr" become ".map"). The configured extension
+        /// is always included.
         /// </summary>
         private static readonly string[] KnownMapFileExtensions = { "map", "yrm", "mpr"};
 
@@ -125,11 +123,11 @@ namespace DTAClient.Domain.Multiplayer
             }
         }
 
-        private void ImportZip(string zipPath, HashSet<string> importedThisDrop, ImportResult result)
+        private void ImportZip(string archivePath, HashSet<string> importedThisDrop, ImportResult result)
         {
             try
             {
-                using ZipArchive archive = ZipFile.OpenRead(zipPath);
+                using ZipArchive archive = ZipFile.OpenRead(archivePath);
 
                 var files = new List<DroppedFile>();
 
@@ -156,7 +154,7 @@ namespace DTAClient.Domain.Multiplayer
             }
             catch (Exception ex)
             {
-                Logger.Log($"DroppedMapHandler: Failed to import zip {zipPath}: {ex.Message}");
+                Logger.Log($"DroppedMapHandler: Failed to import archive {archivePath}: {ex.Message}");
                 result.Failed++;
             }
         }
@@ -169,14 +167,14 @@ namespace DTAClient.Domain.Multiplayer
         {
             foreach (IGrouping<string, DroppedFile> group in files.GroupBy(f => f.BaseName, StringComparer.OrdinalIgnoreCase))
             {
-                DroppedFile map = group.FirstOrDefault(f => f.IsMap);
+                DroppedFile map = group.FirstOrDefault(f => f.IsPrimaryMapFile);
 
                 // Without a primary map file the supplemental files have nothing to
                 // attach to, so there is nothing meaningful to import.
                 if (map == null)
                     continue;
 
-                ImportGroup(map, group.Where(f => !f.IsMap), importedThisDrop, result);
+                ImportGroup(map, group.Where(f => !f.IsPrimaryMapFile), importedThisDrop, result);
             }
         }
 
@@ -192,15 +190,15 @@ namespace DTAClient.Domain.Multiplayer
             // Extract the map to a temporary file with a non-map extension first, so
             // the MapFileWatcher does not react to it before we know it is a new map
             // and before its supplemental files are in place.
-            string tempPath = SafePath.CombineFilePath(customMapsDirectory, $"{Guid.NewGuid():N}.tmp");
+            string temporaryPath = SafePath.CombineFilePath(customMapsDirectory, $"{Guid.NewGuid():N}.tmp");
 
             try
             {
-                map.ExtractTo(tempPath);
+                map.ExtractTo(temporaryPath);
 
                 // Skip if the client already knows a map with this content
                 // or if we imported it earlier in this drop.
-                string hash = Utilities.CalculateSHA1ForFile(tempPath);
+                string hash = Utilities.CalculateSHA1ForFile(temporaryPath);
                 if (mapLoader.FindMapByHash(hash) != null || importedThisDrop.Contains(hash))
                 {
                     result.Skipped++;
@@ -221,8 +219,8 @@ namespace DTAClient.Domain.Multiplayer
 
                 string mapDestination =
                     SafePath.CombineFilePath(customMapsDirectory, $"{baseName}.{ClientConfiguration.Instance.MapFileExtension}");
-                File.Move(tempPath, mapDestination);
-                tempPath = null;
+                File.Move(temporaryPath, mapDestination);
+                temporaryPath = null;
 
                 importedThisDrop.Add(hash);
                 result.Added++;
@@ -234,10 +232,10 @@ namespace DTAClient.Domain.Multiplayer
             }
             finally
             {
-                if (tempPath != null)
+                if (temporaryPath != null)
                 {
-                    try { File.Delete(tempPath); }
-                    catch (Exception ex) { Logger.Log($"DroppedMapHandler: Failed to clean up temp file {tempPath}: {ex.Message}"); }
+                    try { File.Delete(temporaryPath); }
+                    catch (Exception ex) { Logger.Log($"DroppedMapHandler: Failed to clean up temp file {temporaryPath}: {ex.Message}"); }
                 }
             }
         }
@@ -252,7 +250,7 @@ namespace DTAClient.Domain.Multiplayer
 
         private static string EnsureCustomMapsDirectory()
         {
-            string customMapsDirectory = SafePath.CombineDirectoryPath(ProgramConstants.GamePath, CUSTOM_MAPS_DIRECTORY);
+            string customMapsDirectory = SafePath.CombineDirectoryPath(ProgramConstants.GamePath, MapLoader.CUSTOM_MAPS_DIRECTORY);
             DirectoryInfo directoryInfo = SafePath.GetDirectory(customMapsDirectory);
             if (!directoryInfo.Exists)
                 directoryInfo.Create();
@@ -314,7 +312,7 @@ namespace DTAClient.Domain.Multiplayer
             {
                 BaseName = baseName;
                 Extension = extension;
-                IsMap = isMap;
+                IsPrimaryMapFile = isMap;
                 this.extractTo = extractTo;
             }
 
@@ -323,7 +321,7 @@ namespace DTAClient.Domain.Multiplayer
             /// <summary>The original file extension, without a leading dot.</summary>
             public string Extension { get; }
 
-            public bool IsMap { get; }
+            public bool IsPrimaryMapFile { get; }
 
             private readonly Action<string> extractTo;
 
