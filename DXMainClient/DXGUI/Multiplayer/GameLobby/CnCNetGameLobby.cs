@@ -1458,6 +1458,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (sender != hostName)
                 return;
 
+            var savedPings = Players.ToDictionary(p => p.Name, p => p.Ping);
+
             Players.Clear();
             AIPlayers.Clear();
 
@@ -1543,6 +1545,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                     if (pInfo.Name == ProgramConstants.PLAYERNAME)
                         btnLaunchGame.Text = pInfo.Ready ? BTN_LAUNCH_NOT_READY : BTN_LAUNCH_READY;
+
+                    if (savedPings.TryGetValue(pInfo.Name, out PingValue savedPing))
+                        pInfo.Ping = savedPing;
 
                     Players.Add(pInfo);
                     i += HUMAN_PLAYER_OPTIONS_LENGTH;
@@ -2299,9 +2304,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
 
             PlayerInfo pInfo = Players.Find(p => p.Name.Equals(sender));
-            if (pInfo != null)
+            if (pInfo != null && ping >= 0)
             {
-                pInfo.Ping = ping >= 0 ? PingValue.FromMs(ping) : PingValue.Unknown;
+                pInfo.Ping = PingValue.FromMs(ping);
                 UpdatePlayerPingIndicator(pInfo);
             }
         }
@@ -2478,12 +2483,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             tunnelHandler.CurrentTunnel = tunnel;
             AddNotice(string.Format("The game host has changed the tunnel server to: {0}".L10N("Client:Main:HostChangeTunnel"), tunnel.Name));
-
-            foreach (PlayerInfo pInfo in Players)
-            {
-                pInfo.Ping = PingValue.Unknown;
-                UpdatePlayerPingIndicator(pInfo);
-            }
 
             CopyPlayerDataToUI();
             UpdatePing();
