@@ -54,9 +54,8 @@ public readonly record struct PingValue
     public int GetValueOrDefault(int defaultValue = -1) => IsValid() ? _value : defaultValue;
 
     /// <summary>
-    /// Returns a string representation of this ping value.
-    /// Format: "50" for valid pings, or localized "Unknown" for invalid pings.
-    /// Note: Does not include the "ms" unit - callers should append the localized unit.
+    /// Returns a localized string representation of this ping value.
+    /// Format: "50 ms" for valid pings, or localized "Unknown" for invalid pings.
     /// </summary>
     public override string ToString() => IsValid()
         ? _value.ToString() + " " + "ms".L10N("Client:Main:MillisecondsShort")
