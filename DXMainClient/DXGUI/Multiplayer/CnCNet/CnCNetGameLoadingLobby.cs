@@ -622,37 +622,10 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (parts.Length != Players.Count * 3)
                 return;
 
-            for (int i = 0; i < parts.Length; i += 3)
+            for (int i = 0; i < Players.Count; i++)
             {
-                if (!uint.TryParse(parts[i], out uint id))
+                if (!_negotiator.ApplyV3StartEntry(parts, i * 3, i))
                     return;
-
-                string pName = parts[i + 1];
-                string[] ipAndPort = parts[i + 2].Split(':');
-
-                if (ipAndPort.Length != 2 || !int.TryParse(ipAndPort[1], out int tunnelPort))
-                    return;
-
-                PlayerInfo pInfo = Players.Find(p => p.Name == pName);
-                if (pInfo == null)
-                    return;
-
-                int playerPosition = i / 3;
-                int gamePort = 48000 - playerPosition;
-                pInfo.Port = gamePort;
-
-                V3PlayerInfo v3PlayerInfo = _negotiator.FindPlayer(pName);
-                if (v3PlayerInfo != null)
-                {
-                    if (_tunnelMode != TunnelMode.V3Dynamic)
-                    {
-                        CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == ipAndPort[0] && t.Port == tunnelPort);
-                        v3PlayerInfo.Tunnel = tunnel;
-                    }
-                    v3PlayerInfo.PlayerIndex = playerPosition;
-                    v3PlayerInfo.PlayerGameId = (ushort)gamePort;
-                    v3PlayerInfo.Id = id;
-                }
             }
 
             StartV3Game();
@@ -679,8 +652,10 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return;
 
             string[] split = tunnelAddressAndPort.Split(':');
+            if (split.Length < 2 || !int.TryParse(split[1], out int tunnelPort))
+                return;
+
             string tunnelAddress = split[0];
-            int tunnelPort = int.Parse(split[1]);
 
             CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
             if (tunnel == null)
@@ -721,7 +696,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void HandleTunnelFailedMessage(string sender, string tunnelName)
         {
-            AddNotice($"{sender} can no longer connect to tunnel: {tunnelName}.", Color.Orange);
+            AddNotice($"{sender} can no longer connect to tunnel: {tunnelName}. The host needs to change the tunnel or the game won't start.", Color.Orange);
         }
 
         #endregion
@@ -736,6 +711,12 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             if (_tunnelMode == TunnelMode.V2Legacy || tunnelHandler.CurrentTunnel?.Version == 2)
             {
+                if (tunnelHandler.CurrentTunnel == null)
+                {
+                    ShowTunnelSelectionWindow(("No tunnel server is selected. Please pick one:").L10N("Client:Main:ConnectTunnelError1"));
+                    return;
+                }
+
                 AddNotice("Contacting tunnel server...".L10N("Client:Main:ConnectingTunnel"));
                 List<int> playerPorts = tunnelHandler.CurrentTunnel.GetPlayerPortInfo(SGPlayers.Count);
 
@@ -776,7 +757,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         protected override void WriteSpawnIniAdditions(IniFile spawnIni)
         {
-            if (_tunnelMode == TunnelMode.V2Legacy)
+            if (_tunnelMode == TunnelMode.V2Legacy && tunnelHandler.CurrentTunnel != null)
             {
                 spawnIni.SetStringValue("Tunnel", "Ip", tunnelHandler.CurrentTunnel.Address);
                 spawnIni.SetIntValue("Tunnel", "Port", tunnelHandler.CurrentTunnel.Port);
@@ -939,26 +920,18 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (mode == _tunnelMode)
                 return;
 
-            if (mode != TunnelMode.V3Dynamic && _tunnelMode == TunnelMode.V3Dynamic)
-            {
-                _negotiator.StopAllNegotiations();
-                _negotiator.ClearNegotiationData();
-            }
-
+            var oldMode = _tunnelMode;
             _tunnelMode = mode;
 
-            string modeDescription = mode.GetDescription();
+            _negotiator.ApplyModeTransition(oldMode, mode);
 
+            string modeDescription = mode.GetDescription();
             AddNotice(isHostInitiated
                 ? string.Format("Tunnel mode changed to {0}.".L10N("Client:Main:TunnelModeChanged"), modeDescription)
                 : string.Format("The game host has changed tunnel mode to {0}.".L10N("Client:Main:TunnelModeChangedByHost"), modeDescription));
 
             if (mode == TunnelMode.V3Dynamic)
-            {
                 tunnelHandler.CurrentTunnel = null;
-                _negotiator.ResetAllNegotiators();
-                _negotiator.StartPendingNegotiations();
-            }
 
             UpdateLoadGameButtonStatus();
         }

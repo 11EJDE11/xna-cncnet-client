@@ -1602,8 +1602,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             bool anyNegotiationStarted = false;
             bool allComplete = true;
             int totalNegotiations = 0;
-            int completedNegotiations = 0;
-            int failedNegotiations = 0;
 
             for (int i = 0; i < Players.Count; i++)
             {
@@ -1616,11 +1614,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     if (status != NegotiationStatus.NotStarted)
                         anyNegotiationStarted = true;
 
-                    if (status == NegotiationStatus.Succeeded)
-                        completedNegotiations++;
-                    else if (status == NegotiationStatus.Failed)
-                        failedNegotiations++;
-                    else if (status == NegotiationStatus.InProgress || status == NegotiationStatus.NotStarted)
+                    if (status == NegotiationStatus.InProgress || status == NegotiationStatus.NotStarted
+                        || status == NegotiationStatus.Failed)
                         allComplete = false;
                 }
             }
@@ -1899,14 +1894,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
 
             bool newUseDynamic = mode == TunnelMode.V3Dynamic;
-
-            if (!newUseDynamic && _tunnelMode == TunnelMode.V3Dynamic)
-                _negotiator.StopAllNegotiations();
-
+            var oldMode = _tunnelMode;
             _tunnelMode = mode;
 
-            string modeDescription = mode.GetDescription();
+            _negotiator.ApplyModeTransition(oldMode, mode);
 
+            string modeDescription = mode.GetDescription();
             AddNotice(isHostInitiated
                 ? string.Format("Tunnel mode changed to {0}.".L10N("Client:Main:TunnelModeChanged"), modeDescription)
                 : string.Format("The game host has changed tunnel mode to {0}.".L10N("Client:Main:TunnelModeChangedByHost"), modeDescription));
@@ -1929,6 +1922,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             else
                 btnNegotiationStatus?.Disable();
 
+            _allNegotiationsCompleteMessageShown = false;
+
             if (newUseDynamic)
             {
                 foreach (PlayerInfo pInfo in Players)
@@ -1937,15 +1932,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     UpdatePlayerPingIndicator(pInfo);
                 }
                 CopyPlayerDataToUI();
-
-                _allNegotiationsCompleteMessageShown = false;
-                _negotiator.ResetAllNegotiators();
-                _negotiator.StartPendingNegotiations();
             }
             else
             {
-                _negotiator.ClearNegotiationData();
-                _allNegotiationsCompleteMessageShown = false;
                 _negotiationStatusPanel.Disable();
             }
         }
@@ -2115,42 +2104,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             var recentPlayers = new List<string>();
 
-            for (int i = 1; i < parts.Length; i += 3)
+            for (int i = 0; i < Players.Count; i++)
             {
-                if (!uint.TryParse(parts[i], out uint id))
+                int offset = 1 + i * 3;
+                if (!_negotiator.ApplyV3StartEntry(parts, offset, i))
                     return;
-
-                string pName = parts[i + 1];
-                string[] ipAndPort = parts[i + 2].Split(':');
-
-                if (ipAndPort.Length != 2 || !int.TryParse(ipAndPort[1], out int tunnelPort))
-                    return;
-
-                PlayerInfo pInfo = Players.Find(p => p.Name == pName);
-                if (pInfo == null)
-                    return;
-
-                // Derive the in-game id (port) from the player's position in the host's start
-                // message rather than the local player index, so every client agrees on the id
-                // even if their Players list ordering ever diverges. Must match the host's
-                // ordering in GenerateV3PlayerStartString.
-                int playerPosition = (i - 1) / 3;
-                int gamePort = 48000 - playerPosition;
-                pInfo.Port = gamePort;
-                recentPlayers.Add(pName);
-
-                V3PlayerInfo v3PlayerInfo = _negotiator.FindPlayer(pName);
-                if (v3PlayerInfo != null)
-                {
-                    if (_tunnelMode != TunnelMode.V3Dynamic) // host set tunnel
-                    {
-                        CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == ipAndPort[0] && t.Port == tunnelPort);
-                        v3PlayerInfo.Tunnel = tunnel;
-                    }
-                    v3PlayerInfo.PlayerIndex = playerPosition;
-                    v3PlayerInfo.PlayerGameId = (ushort)gamePort;
-                    v3PlayerInfo.Id = id;
-                }
+                recentPlayers.Add(parts[offset + 1]);
             }
 
             cncnetUserData.AddRecentPlayers(recentPlayers, channel.UIName);
@@ -2205,7 +2164,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 iniFile.SetStringValue("Tunnel", "Ip", IPAddress.Loopback.ToString());
                 iniFile.SetIntValue("Tunnel", "Port", localPlayer.Port);
             }
-            else if (tunnelHandler.CurrentTunnel?.Version == 2)
+            else if (tunnelHandler.CurrentTunnel != null)
             {
                 iniFile.SetStringValue("Tunnel", "Ip", tunnelHandler.CurrentTunnel.Address);
                 iniFile.SetIntValue("Tunnel", "Port", tunnelHandler.CurrentTunnel.Port);
@@ -2461,8 +2420,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
 
             string[] split = tunnelAddressAndPort.Split(':');
+            if (split.Length < 2 || !int.TryParse(split[1], out int tunnelPort))
+                return;
+
             string tunnelAddress = split[0];
-            int tunnelPort = int.Parse(split[1]);
 
             CnCNetTunnel tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
             if (tunnel == null)
@@ -2918,7 +2879,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (_tunnelMode == TunnelMode.V3Dynamic)
                 sb.Append("[DYN]");
             else
-                sb.Append(tunnelHandler.CurrentTunnel.Address + ":" + tunnelHandler.CurrentTunnel.Port);
+                sb.Append(tunnelHandler.CurrentTunnel != null
+                    ? tunnelHandler.CurrentTunnel.Address + ":" + tunnelHandler.CurrentTunnel.Port
+                    : "0.0.0.0:0");
             sb.Append(";");
             sb.Append(0); // LoadedGameId
             sb.Append(";");

@@ -391,6 +391,25 @@ public class V3TunnelNegotiationManager
     }
 
     /// <summary>
+    /// Handles negotiation-side state transitions when the lobby's tunnel mode changes.
+    /// Call this after updating the lobby's tunnel mode field so that
+    /// <see cref="StartPendingNegotiations"/> sees the new mode via <see cref="IV3NegotiationHost.TunnelMode"/>.
+    /// </summary>
+    public void ApplyModeTransition(TunnelMode oldMode, TunnelMode newMode)
+    {
+        if (oldMode == TunnelMode.V3Dynamic && newMode != TunnelMode.V3Dynamic)
+        {
+            StopAllNegotiations();
+            ClearNegotiationData();
+        }
+        else if (newMode == TunnelMode.V3Dynamic && oldMode != TunnelMode.V3Dynamic)
+        {
+            ResetAllNegotiators();
+            StartPendingNegotiations();
+        }
+    }
+
+    /// <summary>
     /// Tears down and restarts negotiations for the given players.
     /// </summary>
     public void RestartNegotiations(IEnumerable<V3PlayerInfo> affectedPlayers)
@@ -485,6 +504,44 @@ public class V3TunnelNegotiationManager
         StopAllNegotiations();
         _negotiationData.ClearAll();
         _v3PlayerInfos.Clear();
+    }
+
+    /// <summary>
+    /// Parses one STARTV3 player entry (3 semicolon-delimited fields: id;name;ip:port) from
+    /// <paramref name="parts"/> starting at <paramref name="offset"/>, derives the game port
+    /// from <paramref name="playerPosition"/>, and updates both the <see cref="PlayerInfo"/>
+    /// and <see cref="V3PlayerInfo"/> for that player.
+    /// </summary>
+    /// <returns>False if any field is malformed or the player name is not found.</returns>
+    public bool ApplyV3StartEntry(string[] parts, int offset, int playerPosition)
+    {
+        if (!uint.TryParse(parts[offset], out uint id))
+            return false;
+
+        string pName = parts[offset + 1];
+        string[] ipAndPort = parts[offset + 2].Split(':');
+
+        if (ipAndPort.Length != 2 || !int.TryParse(ipAndPort[1], out int tunnelPort))
+            return false;
+
+        PlayerInfo? pInfo = host.Players.Find(p => p.Name == pName);
+        if (pInfo == null)
+            return false;
+
+        int gamePort = 48000 - playerPosition;
+        pInfo.Port = gamePort;
+
+        var v3PlayerInfo = FindPlayer(pName);
+        if (v3PlayerInfo != null)
+        {
+            if (host.TunnelMode != TunnelMode.V3Dynamic)
+                v3PlayerInfo.Tunnel = tunnelHandler.Tunnels.Find(t => t.Address == ipAndPort[0] && t.Port == tunnelPort);
+            v3PlayerInfo.PlayerIndex = playerPosition;
+            v3PlayerInfo.PlayerGameId = (ushort)gamePort;
+            v3PlayerInfo.Id = id;
+        }
+
+        return true;
     }
 
     /// <summary>
