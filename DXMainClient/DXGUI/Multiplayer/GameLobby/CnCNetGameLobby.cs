@@ -1566,7 +1566,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void HandleRenegotiateAll(string sender)
         {
-            if (IsHost)
+            if (sender != hostName || IsHost)
                 return;
 
             AddNotice(string.Format("{0} has requested all players renegotiate tunnel connections.".L10N("Client:Main:RenegotiateAllReceived"), sender));
