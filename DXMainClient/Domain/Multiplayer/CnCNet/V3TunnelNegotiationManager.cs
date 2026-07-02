@@ -291,10 +291,10 @@ public class V3TunnelNegotiationManager
 
     private void HandlePlayerNegotiationComplete(object? sender, EventArgs e)
     {
-        var negotiator = (V3PlayerNegotiator)sender;
-        var player = negotiator.RemotePlayer;
-        if (player == null)
+        if (sender is not V3PlayerNegotiator negotiator)
             return;
+
+        var player = negotiator.RemotePlayer;
 
         if (!player.HasNegotiated)
         {
@@ -772,11 +772,7 @@ public class V3TunnelNegotiationManager
         host.OnNegotiationStateChanged();
     }
 
-    private static bool IsMaterialPingChange(int oldMs, int newMs)
-        => Math.Abs(newMs - oldMs) > 25 || PingTier(oldMs) != PingTier(newMs);
-
-    // Mirrors the display tiers (lobby ping icons / status panel colors).
-    private static int PingTier(int ms) => ms <= 100 ? 0 : ms <= 250 ? 1 : ms <= 350 ? 2 : 3;
+    private static bool IsMaterialPingChange(int oldMs, int newMs) => PingQualityRules.IsMaterialChange(oldMs, newMs);
 
     /// <summary>
     /// Rebuilds the tunnel handler's lobby keepalive targets from the currently negotiated

@@ -365,23 +365,22 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         _ => ("?", Color.Gray)
     };
 
-    // Thresholds match the lobby's ping icon tiers (see MultiplayerGameLobby.GetTextureForPing)
-    // so the panel and the player list never disagree on what a "good" ping looks like.
-    private static Color GetPingColor(int ms)
+    private static Color GetPingColor(int ms) => PingQualityRules.GetTier(ms) switch
     {
-        if (ms <= 100) return Color.LightGreen;
-        if (ms <= 250) return Color.Yellow;
-        if (ms <= 350) return Color.Orange;
-        return Color.Red;
-    }
+        PingQualityTier.Good => Color.LightGreen,
+        PingQualityTier.Fair => Color.Yellow,
+        PingQualityTier.Poor => Color.Orange,
+        PingQualityTier.Bad => Color.Red,
+        _ => Color.Gray
+    };
 
-    private static Texture2D GetPingTexture(int ms)
+    private static Texture2D GetPingTexture(int ms) => PingQualityRules.GetTier(ms) switch
     {
-        if (ms <= 100) return texGreen!;
-        if (ms <= 250) return texYellow!;
-        if (ms <= 350) return texOrange!;
-        return texRed!;
-    }
+        PingQualityTier.Good => texGreen!,
+        PingQualityTier.Fair => texYellow!,
+        PingQualityTier.Poor => texOrange!,
+        _ => texRed!
+    };
 
     private static void EnsureBarTextures()
     {

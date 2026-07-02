@@ -1771,14 +1771,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void CheckHighPingPairs()
         {
-            const int HIGH_PING_THRESHOLD = 350; //ms
             var highPingPairs = new List<(string, string, int)>();
 
             var playerNames = Players.Select(p => p.Name).ToList();
             foreach (var (player1, player2) in _negotiator.NegotiationData.GetPlayerPairs(playerNames))
             {
                 var ping = _negotiator.NegotiationData.GetPing(player1, player2);
-                if (ping.HasValue && ping.Value.Milliseconds > HIGH_PING_THRESHOLD)
+                if (ping.HasValue && PingQualityRules.IsHighForWarning(ping.Value))
                     highPingPairs.Add((player1, player2, ping.Value.Milliseconds));
             }
 
@@ -1801,11 +1800,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         private void SuggestKickForLagReduction(List<string> playerNames)
         {
-            // Don't bother unless the current worst connection is genuinely laggy, and only
-            // suggest when removing the player buys a substantial improvement.
-            const int KICK_SUGGESTION_MIN_WORST_PING = 300; //ms
-            const int KICK_SUGGESTION_MIN_IMPROVEMENT = 150; //ms
-
             if (!IsHost || playerNames.Count < 3)
                 return;
 
@@ -1824,7 +1818,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
 
             int worstOverall = pairPings.Max(p => p.ping);
-            if (worstOverall < KICK_SUGGESTION_MIN_WORST_PING)
+            if (worstOverall < PingQualityRules.KickSuggestionMinWorstMs)
                 return;
 
             string bestCandidate = null;
@@ -1844,7 +1838,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
-            if (bestCandidate == null || worstOverall - bestWorstWithout < KICK_SUGGESTION_MIN_IMPROVEMENT)
+            if (bestCandidate == null || worstOverall - bestWorstWithout < PingQualityRules.KickSuggestionMinImprovementMs)
                 return;
 
             if (bestCandidate == ProgramConstants.PLAYERNAME)

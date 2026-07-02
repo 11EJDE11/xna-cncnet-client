@@ -1138,15 +1138,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private Texture2D GetTextureForPing(PingValue ping)
         {
-            switch (ping.Milliseconds)
+            switch (PingQualityRules.GetTier(ping))
             {
-                case int p when (p > 350):
+                case PingQualityTier.Bad:
                     return PingTextures[4];
-                case int p when (p > 250):
+                case PingQualityTier.Poor:
                     return PingTextures[3];
-                case int p when (p > 100):
+                case PingQualityTier.Fair:
                     return PingTextures[2];
-                case int p when (p >= 0):
+                case PingQualityTier.Good:
                     return PingTextures[1];
                 default:
                     return PingTextures[0];
