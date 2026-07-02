@@ -96,6 +96,13 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public PingValue Ping { get; set; } = PingValue.Unknown;
 
         /// <summary>
+        /// How many ping attempts in a row have failed (unknown result or excessive latency).
+        /// Maintained by TunnelHandler so a single dropped ICMP echo doesn't declare the
+        /// tunnel failed and trigger renegotiations.
+        /// </summary>
+        internal int ConsecutivePingFailures { get; set; }
+
+        /// <summary>
         /// Whether this is a direct peer-to-peer path rather than a relay tunnel server.
         /// Relay tunnels are always false; <see cref="P2PTunnel"/> overrides this to true.
         /// Used to exclude synthetic P2P entries from relay-only operations (registration,

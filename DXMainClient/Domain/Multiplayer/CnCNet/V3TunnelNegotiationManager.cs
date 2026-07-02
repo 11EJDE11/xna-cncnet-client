@@ -10,6 +10,7 @@ using ClientCore;
 
 using Microsoft.Xna.Framework;
 using Rampastring.Tools;
+using Rampastring.XNAUI;
 
 #nullable enable
 
@@ -25,13 +26,15 @@ public class V3TunnelNegotiationManager
 {
     private readonly IV3NegotiationHost host;
     private readonly TunnelHandler tunnelHandler;
+    private readonly WindowManager windowManager;
     private readonly List<V3PlayerInfo> _v3PlayerInfos = new();
     private readonly NegotiationDataManager _negotiationData = new();
 
-    public V3TunnelNegotiationManager(IV3NegotiationHost host, TunnelHandler tunnelHandler)
+    public V3TunnelNegotiationManager(IV3NegotiationHost host, TunnelHandler tunnelHandler, WindowManager windowManager)
     {
         this.host = host;
         this.tunnelHandler = tunnelHandler;
+        this.windowManager = windowManager;
     }
 
     public IReadOnlyList<V3PlayerInfo> PlayerInfos => _v3PlayerInfos;
@@ -70,8 +73,12 @@ public class V3TunnelNegotiationManager
         {
             DetachNegotiator(v3p);
             v3p.StopNegotiation();
+            CleanupP2PForPlayer(v3p, keepChosenTunnel: false);
             _v3PlayerInfos.Remove(v3p);
         }
+
+        if (playersToRemove.Count > 0)
+            RefreshKeepAliveTargets();
 
         for (int i = 0; i < host.Players.Count; i++)
         {
@@ -190,7 +197,19 @@ public class V3TunnelNegotiationManager
         host.OnNegotiationStateChanged();
     }
 
+    /// <summary>
+    /// Negotiator events fire on thread-pool tasks, but everything downstream touches UI
+    /// (chat notices, ping indicators, the status panel — whose resize recreates a render
+    /// target and crashes the render thread if done concurrently). Marshal to the game
+    /// thread first, matching how CnCNetManager marshals all IRC events.
+    /// </summary>
     private void OnPlayerNegotiationResult(object? sender, TunnelChosenEventArgs e)
+        => windowManager.AddCallback(new Action<object?, TunnelChosenEventArgs>(HandlePlayerNegotiationResult), sender, e);
+
+    private void OnPlayerNegotiationComplete(object? sender, EventArgs e)
+        => windowManager.AddCallback(new Action<object?, EventArgs>(HandlePlayerNegotiationComplete), sender, e);
+
+    private void HandlePlayerNegotiationResult(object? sender, TunnelChosenEventArgs e)
     {
         var v3PlayerInfo = _v3PlayerInfos.FirstOrDefault(p => p.Id == e.PlayerId);
         if (v3PlayerInfo == null)
@@ -206,6 +225,9 @@ public class V3TunnelNegotiationManager
             // Success — this fires for the relay choice (round 1) and again if the P2P
             // upgrade round picks a direct path (round 2).
             v3PlayerInfo.Tunnel = e.ChosenTunnel;
+
+            if (e.IsRelayFallback)
+                host.AddNotice($"Direct connection with {e.PlayerName} could not be established; using relay server {e.ChosenTunnel.Name}.", Color.Orange);
 
             // Only re-broadcast when the pair's ping/status actually changed, so a P2P
             // upgrade is propagated to everyone while a round-2 that simply re-confirms
@@ -244,7 +266,7 @@ public class V3TunnelNegotiationManager
         }
     }
 
-    private void OnPlayerNegotiationComplete(object? sender, EventArgs e)
+    private void HandlePlayerNegotiationComplete(object? sender, EventArgs e)
     {
         var negotiator = (V3PlayerNegotiator)sender;
         var player = negotiator.RemotePlayer;
@@ -263,6 +285,12 @@ public class V3TunnelNegotiationManager
 
         if (ReferenceEquals(player.Negotiator, negotiator))
             player.StopNegotiation();
+
+        // Drop the unused P2P candidate routes from this negotiation, but keep the
+        // chosen path (if direct) alive for the game bridge.
+        CleanupP2PForPlayer(player, keepChosenTunnel: true);
+
+        RefreshKeepAliveTargets();
 
         host.OnNegotiationStateChanged();
     }
@@ -343,7 +371,9 @@ public class V3TunnelNegotiationManager
             if (peer.Name == localName)
                 continue;
 
-            var peerStatus = _negotiationData.GetNegotiationStatus(localName, peer.Name);
+            // Report our own directional view; GetNegotiationStatus merges both directions
+            // and would echo the peer's report back at them, deadlocking confirmation.
+            var peerStatus = _negotiationData.GetReportedStatus(localName, peer.Name);
             if (peerStatus == NegotiationStatus.NotStarted)
                 continue;
 
@@ -407,6 +437,8 @@ public class V3TunnelNegotiationManager
             ResetAllNegotiators();
             StartPendingNegotiations();
         }
+
+        RefreshKeepAliveTargets();
     }
 
     /// <summary>
@@ -419,6 +451,7 @@ public class V3TunnelNegotiationManager
         foreach (var v3Player in affectedPlayers.ToList())
         {
             v3Player.StopNegotiation();
+            CleanupP2PForPlayer(v3Player, keepChosenTunnel: false);
             v3Player.ResetNegotiator();
             _negotiationData.ClearPlayer(v3Player.Name);
 
@@ -426,6 +459,7 @@ public class V3TunnelNegotiationManager
                 StartTunnelNegotiationForPlayer(v3Player);
         }
 
+        RefreshKeepAliveTargets();
         host.OnNegotiationStateChanged();
     }
 
@@ -462,16 +496,18 @@ public class V3TunnelNegotiationManager
         var v3Player = FindPlayer(playerName);
         if (v3Player != null)
         {
-            _v3PlayerInfos.Remove(v3Player);
-
             if (host.TunnelMode == TunnelMode.V3Dynamic)
             {
                 DetachNegotiator(v3Player);
                 v3Player.StopNegotiation();
             }
+
+            CleanupP2PForPlayer(v3Player, keepChosenTunnel: false);
+            _v3PlayerInfos.Remove(v3Player);
         }
 
         _negotiationData.ClearPlayer(playerName);
+        RefreshKeepAliveTargets();
     }
 
     /// <summary>
@@ -483,6 +519,7 @@ public class V3TunnelNegotiationManager
         {
             DetachNegotiator(v3Player);
             v3Player.StopNegotiation();
+            CleanupP2PForPlayer(v3Player, keepChosenTunnel: false);
         }
     }
 
@@ -504,6 +541,12 @@ public class V3TunnelNegotiationManager
         StopAllNegotiations();
         _negotiationData.ClearAll();
         _v3PlayerInfos.Clear();
+
+        tunnelHandler.ClearKeepAliveTargets();
+
+        // Re-query STUN in the next lobby: without keepalives running, the NAT mapping
+        // behind the cached external endpoint may expire and get remapped.
+        tunnelHandler.ClearP2PEndpointCache();
     }
 
     /// <summary>
@@ -606,6 +649,50 @@ public class V3TunnelNegotiationManager
 
         tunnelHandler.StartGameBridge(localV3Player.Id, localV3Player.PlayerGameId, _v3PlayerInfos);
         return true;
+    }
+
+    /// <summary>
+    /// Rebuilds the tunnel handler's lobby keepalive targets from the currently negotiated
+    /// tunnels, so NAT mappings and tunnel registrations stay alive between negotiation and
+    /// game start. Cleared when not in dynamic mode or when nothing is negotiated.
+    /// </summary>
+    private void RefreshKeepAliveTargets()
+    {
+        var localV3Player = FindPlayer(ProgramConstants.PLAYERNAME);
+        if (localV3Player == null || host.TunnelMode != TunnelMode.V3Dynamic)
+        {
+            tunnelHandler.ClearKeepAliveTargets();
+            return;
+        }
+
+        var targets = _v3PlayerInfos
+            .Where(p => p.Name != ProgramConstants.PLAYERNAME && p.Tunnel != null)
+            .Select(p => (p.Id, p.Tunnel!))
+            .ToList();
+
+        if (targets.Count == 0)
+            tunnelHandler.ClearKeepAliveTargets();
+        else
+            tunnelHandler.SetKeepAliveTargets(localV3Player.Id, targets);
+    }
+
+    /// <summary>
+    /// Removes a pair's P2P routing entries. When <paramref name="keepChosenTunnel"/> is set
+    /// and the player's negotiated tunnel is a direct path, that endpoint survives so the
+    /// game bridge can keep using it; everything else (candidate and auto-learned endpoints
+    /// from the finished negotiation) is dropped so stale entries don't accumulate.
+    /// </summary>
+    private void CleanupP2PForPlayer(V3PlayerInfo player, bool keepChosenTunnel)
+    {
+        var localV3Player = FindPlayer(ProgramConstants.PLAYERNAME);
+        if (localV3Player == null || player.Name == ProgramConstants.PLAYERNAME)
+            return;
+
+        IPEndPoint? keepEndpoint = keepChosenTunnel && player.Tunnel is P2PTunnel p2pTunnel
+            ? p2pTunnel.PeerEndpoint
+            : null;
+
+        tunnelHandler.CleanupP2PPair(localV3Player.Id, player.Id, keepEndpoint);
     }
 
     private void AttachNegotiator(V3PlayerInfo player)

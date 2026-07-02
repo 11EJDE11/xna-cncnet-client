@@ -62,7 +62,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             this.pmWindow = pmWindow;
             this.random = random;
             this._tunnelMode = (TunnelMode)UserINISettings.Instance.TunnelMode.Value;
-            _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler);
+            _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler, windowManager);
 
             gameHostInactiveChecker = ClientConfiguration.Instance.InactiveHostKickEnabled? new GameHostInactiveChecker(WindowManager) : null;
 
@@ -1182,7 +1182,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 sb.Append(";");
                 sb.Append(Players[pId].Name);
                 sb.Append(";");
-                sb.Append("0.0.0.0:");
+                // Carry the tunnel address so clients can verify/correct their tunnel at start —
+                // a client that joined around a tunnel change may still have the old one selected.
+                sb.Append(tunnelHandler.CurrentTunnel.Address + ":");
                 sb.Append(playerPorts[pId]);
             }
             channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.SYSTEM_MESSAGE, 10);
@@ -2071,6 +2073,30 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 if (!success)
                     return;
 
+                // The host's tunnel address is authoritative: if our CurrentTunnel is out of
+                // sync (e.g. we joined around a tunnel change and missed the CHTNL message),
+                // playing on the wrong tunnel would silently break the match for us.
+                if (pName == ProgramConstants.PLAYERNAME && ipAndPort[0] != "0.0.0.0" &&
+                    !string.Equals(tunnelHandler.CurrentTunnel?.Address, ipAndPort[0], StringComparison.OrdinalIgnoreCase))
+                {
+                    var matchedTunnel = tunnelHandler.Tunnels.FirstOrDefault(t => t.Version == 2 &&
+                        string.Equals(t.Address, ipAndPort[0], StringComparison.OrdinalIgnoreCase));
+
+                    if (matchedTunnel != null)
+                    {
+                        Logger.Log($"NonHostLaunchGameV2: Correcting tunnel to host-specified {matchedTunnel.Name} ({ipAndPort[0]}).");
+                        tunnelHandler.CurrentTunnel = matchedTunnel;
+                    }
+                    else
+                    {
+                        AddNotice(("Failed to match the tunnel address provided by the host to any " +
+                            "available tunnel server. The game cannot be started.").L10N("Client:Main:TunnelErrorMessage"),
+                            ERROR_MESSAGE_COLOR);
+                        Logger.Log("NonHostLaunchGameV2: Failed to match tunnel address: " + ipAndPort[0]);
+                        return;
+                    }
+                }
+
                 PlayerInfo pInfo = Players.Find(p => p.Name == pName);
 
                 if (pInfo == null)
@@ -2114,6 +2140,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 int offset = 1 + i * 3;
                 if (!_negotiator.ApplyV3StartEntry(parts, offset, i))
                     return;
+
                 recentPlayers.Add(parts[offset + 1]);
             }
 

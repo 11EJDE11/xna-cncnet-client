@@ -26,6 +26,7 @@ public class V3GameTunnelBridge
     private readonly UdpClient _localGameClient; // game will connect to this
     private volatile IPEndPoint? _gameEndpoint;
     private volatile bool _isRunning = false;
+    private bool _loggedTransientReceiveError;
     public bool IsRunning => _isRunning;
 
     public V3GameTunnelBridge(
@@ -39,6 +40,7 @@ public class V3GameTunnelBridge
         _tunnelHandler = tunnelHandler;
         _localGameClient = new UdpClient(new IPEndPoint(IPAddress.Loopback, _localPort));
         _localGameClient.Client.ReceiveTimeout = 500;
+        V3TunnelCommunicator.DisableIcmpPortUnreachableExceptions(_localGameClient.Client);
         _otherPlayers = allPlayers.Where(p => p.Id != _localId).ToList();
 
         Logger.Log($"V3GameTunnelBridge: Local ID={_localId}, Local Port={_localPort}");
@@ -179,15 +181,28 @@ public class V3GameTunnelBridge
                 {
                     continue;
                 }
+                catch (SocketException ex) when (ex.SocketErrorCode == SocketError.Interrupted ||
+                                                 ex.SocketErrorCode == SocketError.OperationAborted)
+                {
+                    Logger.Log("V3GameTunnelBridge: Local server socket closed, exiting");
+                    break;
+                }
+                catch (SocketException ex)
+                {
+                    // Notably ConnectionReset on Windows (ICMP port-unreachable from a send to the
+                    // game's endpoint). The bridge must outlive transient socket errors — exiting
+                    // here would silently disconnect the player for the rest of the match.
+                    if (!_loggedTransientReceiveError)
+                    {
+                        _loggedTransientReceiveError = true;
+                        Logger.Log($"V3GameTunnelBridge: Transient receive error, continuing: {ex.SocketErrorCode} - {ex.Message}");
+                    }
+                }
             }
         }
         catch (ObjectDisposedException)
         {
             Logger.Log("V3GameTunnelBridge: Local server shutdown");
-        }
-        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.Interrupted)
-        {
-            Logger.Log("V3GameTunnelBridge: Local server receive interrupted");
         }
         catch (Exception ex)
         {

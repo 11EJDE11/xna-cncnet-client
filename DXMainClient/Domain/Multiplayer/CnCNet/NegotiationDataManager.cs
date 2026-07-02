@@ -27,11 +27,14 @@ public class NegotiationDataManager
     /// <summary>
     /// Updates the negotiation status reported by one player about another.
     /// </summary>
-    public void UpdateStatus(string reportingPlayer, string targetPlayer, NegotiationStatus status)
+    /// <returns>The previously reported status in this direction, or null if none existed.</returns>
+    public NegotiationStatus? UpdateStatus(string reportingPlayer, string targetPlayer, NegotiationStatus status)
     {
         var reporterStatuses = _negotiationStatuses.GetOrAdd(reportingPlayer,
             _ => new ConcurrentDictionary<string, NegotiationStatus>());
+        NegotiationStatus? previous = reporterStatuses.TryGetValue(targetPlayer, out var prev) ? prev : null;
         reporterStatuses[targetPlayer] = status;
+        return previous;
     }
 
     /// <summary>
@@ -45,23 +48,57 @@ public class NegotiationDataManager
     }
 
     /// <summary>
-    /// Gets the negotiation status between two players by checking both directions.
-    /// Returns the first status found, checking player1->player2 then player2->player1.
+    /// Gets the status one player has reported about their negotiation with another,
+    /// without consulting the reverse direction. Used when broadcasting the local
+    /// player's own view over the wire.
+    /// </summary>
+    public NegotiationStatus GetReportedStatus(string reportingPlayer, string targetPlayer)
+        => _negotiationStatuses.TryGetValue(reportingPlayer, out var statuses) &&
+           statuses.TryGetValue(targetPlayer, out var status)
+            ? status
+            : NegotiationStatus.NotStarted;
+
+    /// <summary>
+    /// Gets the negotiation status between two players by combining both directions.
+    /// A pair is only as healthy as its worst report: a Failed or InProgress report from
+    /// either side must not be masked by the other side's (possibly stale) Succeeded, and
+    /// the pair only counts as Succeeded once both sides have confirmed it.
     /// </summary>
     public NegotiationStatus GetNegotiationStatus(string player1, string player2)
     {
         if (player1 == player2)
             throw new ArgumentException("Cannot get negotiation status between a player and themselves", nameof(player2));
 
-        // Either player could be the reporter
-        if (_negotiationStatuses.TryGetValue(player1, out var player1Statuses) &&
-            player1Statuses.TryGetValue(player2, out var status))
+        NegotiationStatus? status1 = GetDirectionalStatus(player1, player2);
+        NegotiationStatus? status2 = GetDirectionalStatus(player2, player1);
+
+        if (status1 == NegotiationStatus.Failed || status2 == NegotiationStatus.Failed)
+            return NegotiationStatus.Failed;
+
+        if (status1 == NegotiationStatus.InProgress || status2 == NegotiationStatus.InProgress)
+            return NegotiationStatus.InProgress;
+
+        if (status1 == NegotiationStatus.Succeeded && status2 == NegotiationStatus.Succeeded)
+            return NegotiationStatus.Succeeded;
+
+        // One side reports success but the other side's confirmation hasn't arrived yet.
+        if (status1 == NegotiationStatus.Succeeded || status2 == NegotiationStatus.Succeeded)
+            return NegotiationStatus.InProgress;
+
+        return NegotiationStatus.NotStarted;
+    }
+
+    /// <summary>
+    /// Returns the stored reporter→target status, treating an explicit NotStarted like no report.
+    /// </summary>
+    private NegotiationStatus? GetDirectionalStatus(string reportingPlayer, string targetPlayer)
+    {
+        if (_negotiationStatuses.TryGetValue(reportingPlayer, out var statuses) &&
+            statuses.TryGetValue(targetPlayer, out var status) &&
+            status != NegotiationStatus.NotStarted)
             return status;
 
-        return _negotiationStatuses.TryGetValue(player2, out var player2Statuses) &&
-            player2Statuses.TryGetValue(player1, out status)
-            ? status
-            : NegotiationStatus.NotStarted;
+        return null;
     }
 
     /// <summary>

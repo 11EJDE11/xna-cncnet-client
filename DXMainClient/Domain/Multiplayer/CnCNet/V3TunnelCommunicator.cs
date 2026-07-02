@@ -76,7 +76,9 @@ public class V3TunnelCommunicator
     private readonly ConcurrentDictionary<(uint localId, uint remoteId), PacketHandler> _handlers = new();
     private readonly ConcurrentDictionary<IPEndPoint, TaskCompletionSource<byte[]>> _pendingStunQueries = new();
     private readonly ConcurrentDictionary<(uint localId, uint remoteId), string> _p2pPeerNames = new();
-    private readonly ConcurrentDictionary<(uint localId, uint remoteId), ConcurrentBag<IPEndPoint>> _autoLearnedEndpoints = new();
+    // Every P2P endpoint (advertised and auto-learned) registered for a pair, so
+    // CleanupP2PPair can remove a pair's routing entries at the right lifecycle points.
+    private readonly ConcurrentDictionary<(uint localId, uint remoteId), ConcurrentDictionary<IPEndPoint, byte>> _p2pEndpointsByPair = new();
     private readonly object _initLock = new();
 
     public bool IsInitialized => _udpClient != null;
@@ -134,7 +136,7 @@ public class V3TunnelCommunicator
                 tcs.TrySetCanceled();
             _pendingStunQueries.Clear();
             _p2pPeerNames.Clear();
-            _autoLearnedEndpoints.Clear();
+            _p2pEndpointsByPair.Clear();
             Logger.Log("V3TunnelCommunicator: Shut down");
         }
 
@@ -179,8 +181,10 @@ public class V3TunnelCommunicator
     }
 
     /// <summary>
-    /// Removes the handler for the specified local/remote ID pair and cleans up any
-    /// auto-learned P2P endpoints that were registered for this pair.
+    /// Removes the handler for the specified local/remote ID pair. P2P routing entries are
+    /// deliberately left alone: negotiator disposal happens right after every negotiation
+    /// completes, and the game bridge still needs the chosen path's routing afterwards.
+    /// Use <see cref="CleanupP2PPair"/> when the pair's P2P state should actually go away.
     /// </summary>
     /// <param name="localId">The local player V3PlayerInfo ID.</param>
     /// <param name="remoteId">The remote player V3PlayerInfo ID.</param>
@@ -190,17 +194,46 @@ public class V3TunnelCommunicator
             Logger.Log($"V3TunnelCommunicator: Unregistered handler for {localId} <-> {remoteId}");
         else
             Logger.Log($"V3TunnelCommunicator: Handler not found for {localId} <-> {remoteId} while attempting unregistration");
+    }
 
-        _p2pPeerNames.TryRemove((localId, remoteId), out _);
+    /// <summary>
+    /// Removes a pair's P2P endpoints from the routing tables so stale entries don't
+    /// accumulate across renegotiations and departed players. <paramref name="keepEndpoint"/>
+    /// preserves the chosen path (and the pair's peer-name entry) so a P2P tunnel that won
+    /// negotiation keeps working for the game bridge.
+    /// </summary>
+    /// <param name="localId">The local player V3PlayerInfo ID.</param>
+    /// <param name="remoteId">The remote player V3PlayerInfo ID.</param>
+    /// <param name="keepEndpoint">A P2P endpoint whose routing entries must survive, or null to remove everything.</param>
+    public void CleanupP2PPair(uint localId, uint remoteId, IPEndPoint? keepEndpoint = null)
+    {
+        var key = (localId, remoteId);
+        int removed = 0;
 
-        if (_autoLearnedEndpoints.TryRemove((localId, remoteId), out var learnedEps))
+        if (_p2pEndpointsByPair.TryRemove(key, out var endpoints))
         {
-            foreach (var ep in learnedEps)
+            foreach (var ep in endpoints.Keys)
             {
-                if (_endpointToTunnel.TryRemove(ep, out var learnedTunnel))
-                    _tunnelToEndpoint.TryRemove(learnedTunnel, out _);
+                if (keepEndpoint != null && ep.Equals(keepEndpoint))
+                    continue;
+
+                if (_endpointToTunnel.TryRemove(ep, out var tunnel))
+                {
+                    _tunnelToEndpoint.TryRemove(tunnel, out _);
+                    removed++;
+                }
             }
+
+            if (keepEndpoint != null)
+                _p2pEndpointsByPair.GetOrAdd(key, _ => new ConcurrentDictionary<IPEndPoint, byte>())[keepEndpoint] = 0;
         }
+
+        if (keepEndpoint == null)
+            _p2pPeerNames.TryRemove(key, out _);
+
+        if (removed > 0)
+            Logger.Log($"V3TunnelCommunicator: Cleaned up {removed} P2P endpoint(s) for {localId} <-> {remoteId}" +
+                (keepEndpoint != null ? $", keeping {keepEndpoint}" : string.Empty));
     }
 
     /// <summary>
@@ -252,10 +285,11 @@ public class V3TunnelCommunicator
     /// </summary>
     /// <param name="localId">Local V3PlayerInfo ID used for registration.</param>
     /// <param name="tunnels">
-    /// Optional list of tunnels to send to.  
+    /// Optional list of tunnels to send to.
     /// If omitted, all known tunnels will be targeted.
     /// </param>
-    public void SendRegistrationToTunnels(uint localId, List<CnCNetTunnel>? tunnels = null)
+    /// <param name="quiet">Skip per-tunnel success logging (periodic keepalive refreshes).</param>
+    public void SendRegistrationToTunnels(uint localId, List<CnCNetTunnel>? tunnels = null, bool quiet = false)
     {
         if (!IsInitialized)
             return;
@@ -272,7 +306,8 @@ public class V3TunnelCommunicator
             try
             {
                 _udpClient!.Send(packet, packet.Length, endpoint);
-                Logger.Log($"V3TunnelCommunicator: Registration sent to {tunnel.Name}");
+                if (!quiet)
+                    Logger.Log($"V3TunnelCommunicator: Registration sent to {tunnel.Name}");
             }
             catch (Exception ex)
             {
@@ -333,16 +368,7 @@ public class V3TunnelCommunicator
         }
 
         _p2pPeerNames[(localId, remoteId)] = tunnel.PeerName;
-    }
-
-    /// <summary>
-    /// Removes a P2P peer's endpoint from the routing tables. Called when the
-    /// negotiator that created the tunnel is disposed so stale entries don't accumulate.
-    /// </summary>
-    public void RemoveP2PTunnel(P2PTunnel tunnel)
-    {
-        if (_tunnelToEndpoint.TryRemove(tunnel, out var endpoint))
-            _endpointToTunnel.TryRemove(endpoint, out _);
+        _p2pEndpointsByPair.GetOrAdd((localId, remoteId), _ => new ConcurrentDictionary<IPEndPoint, byte>())[tunnel.PeerEndpoint] = 0;
     }
 
     /// <summary>
@@ -382,10 +408,34 @@ public class V3TunnelCommunicator
         }
     }
 
+    /// <summary>
+    /// Stops Windows from surfacing ICMP "port unreachable" responses to previous sends as
+    /// <see cref="SocketError.ConnectionReset"/> exceptions on subsequent receives
+    /// (SIO_UDP_CONNRESET). Without this, a send to a closed port (e.g. the game closing its
+    /// socket, or a dead P2P peer) poisons the receive loop with spurious exceptions.
+    /// No-op on other platforms, which don't have this behavior.
+    /// </summary>
+    internal static void DisableIcmpPortUnreachableExceptions(Socket socket)
+    {
+        if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+            return;
+
+        try
+        {
+            const int SIO_UDP_CONNRESET = unchecked((int)0x9800000C);
+            socket.IOControl(SIO_UDP_CONNRESET, new byte[4], null);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"V3TunnelCommunicator: Could not disable UDP connection reset reporting: {ex.Message}");
+        }
+    }
+
     private void InitializeConnection(List<CnCNetTunnel> tunnels)
     {
         _udpClient = new UdpClient(0);
         _udpClient.Client.ReceiveTimeout = 500;
+        DisableIcmpPortUnreachableExceptions(_udpClient.Client);
 
         _endpointToTunnel.Clear();
         _tunnelToEndpoint.Clear();
@@ -506,7 +556,7 @@ public class V3TunnelCommunicator
         var learnedTunnel = _endpointToTunnel.GetOrAdd(remoteEndpoint, ep =>
         {
             var t = new P2PTunnel(ep, peerName);
-            _autoLearnedEndpoints.GetOrAdd(handlerKey, _ => new ConcurrentBag<IPEndPoint>()).Add(ep);
+            _p2pEndpointsByPair.GetOrAdd(handlerKey, _ => new ConcurrentDictionary<IPEndPoint, byte>())[ep] = 0;
             Logger.Log($"V3TunnelCommunicator: Auto-learned P2P path {t.Name}");
             return t;
         });

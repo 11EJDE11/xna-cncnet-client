@@ -55,7 +55,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             this.mapLoader = mapLoader;
             this.cncnetUserData = cncnetUserData;
 
-            _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler);
+            _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler, windowManager);
 
             ctcpCommandHandlers = new CommandHandlerBase[]
             {

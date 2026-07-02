@@ -77,6 +77,94 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private uint skipCount = 0;
         private const int TUNNEL_FAILED_PING_AMOUNT = 2000;
 
+        /// <summary>
+        /// How many bad ping results in a row a tunnel needs before <see cref="TunnelFailed"/>
+        /// fires. ICMP echoes get dropped or deprioritized sporadically; a single miss must not
+        /// trigger renegotiations for everyone using the tunnel.
+        /// </summary>
+        private const int TUNNEL_FAILED_CONSECUTIVE_PINGS = 2;
+
+        /// <summary>
+        /// How often to send keepalives on negotiated V3 paths while sitting in a lobby.
+        /// Keeps the tunnel server registration and — crucially — the P2P NAT mappings from
+        /// expiring during long waits between negotiation and game start; typical NAT UDP
+        /// timeouts are 30-180 seconds.
+        /// </summary>
+        private const double KEEPALIVE_INTERVAL_SECONDS = 15.0;
+
+        private uint keepAliveLocalId;
+        // Snapshot list, replaced atomically by the negotiation manager (possibly from a
+        // negotiation task) and read on the game loop thread.
+        private volatile List<(uint remoteId, CnCNetTunnel tunnel)> keepAliveTargets;
+        private TimeSpan? lastKeepAliveTimestamp;
+
+        /// <summary>
+        /// Sets the negotiated paths to keep alive while in a lobby. Pass the local player's
+        /// V3 ID and each remote player's ID with the tunnel negotiated for that pair.
+        /// </summary>
+        public void SetKeepAliveTargets(uint localId, List<(uint remoteId, CnCNetTunnel tunnel)> targets)
+        {
+            keepAliveLocalId = localId;
+            keepAliveTargets = targets;
+        }
+
+        /// <summary>Stops lobby keepalives. Call on lobby teardown or when leaving dynamic mode.</summary>
+        public void ClearKeepAliveTargets() => keepAliveTargets = null;
+
+        private void SendKeepAlives()
+        {
+            var targets = keepAliveTargets;
+            if (targets == null || targets.Count == 0)
+                return;
+
+            // In-game traffic keeps everything alive on its own.
+            if (GameTunnelBridge != null && GameTunnelBridge.IsRunning)
+                return;
+
+            // Relay tunnels: refresh our registration (also refreshes our own NAT mapping,
+            // which keeps the session's STUN-discovered external endpoint valid).
+            var relayTunnels = targets
+                .Select(t => t.tunnel)
+                .Where(t => t != null && !t.IsDirect)
+                .Distinct()
+                .ToList();
+
+            if (relayTunnels.Count > 0)
+                _tunnelCommunicator.SendRegistrationToTunnels(keepAliveLocalId, relayTunnels, quiet: true);
+
+            // Direct paths: a Connected packet per peer keeps both NATs' mappings open.
+            // Receivers without an active negotiator simply drop it.
+            foreach (var (remoteId, tunnel) in targets)
+            {
+                if (tunnel != null && tunnel.IsDirect)
+                    _tunnelCommunicator.SendPacket(tunnel, keepAliveLocalId, remoteId, TunnelPacketType.Connected);
+            }
+        }
+
+        /// <summary>
+        /// Tracks a tunnel's consecutive ping failures and fires <see cref="TunnelFailed"/>
+        /// once the threshold is crossed (exactly once per losing streak). Call after every
+        /// ping result update.
+        /// </summary>
+        private void EvaluateTunnelHealth(CnCNetTunnel tunnel)
+        {
+            bool pingBad = tunnel.Ping.IsUnknown() || tunnel.Ping.Milliseconds > TUNNEL_FAILED_PING_AMOUNT;
+
+            if (!pingBad)
+            {
+                tunnel.ConsecutivePingFailures = 0;
+                return;
+            }
+
+            tunnel.ConsecutivePingFailures++;
+
+            if (tunnel.ConsecutivePingFailures == TUNNEL_FAILED_CONSECUTIVE_PINGS &&
+                (CurrentTunnel == null || tunnel == CurrentTunnel))
+            {
+                DoTunnelFailed(tunnel);
+            }
+        }
+
         private void DoTunnelPinged(string address, int port)
         {
             if (TunnelPinged != null)
@@ -220,7 +308,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 for (int i = 0; i < tunnelsWithSameAddress.Count; i++)
                 {
                     var tunnel = tunnelsWithSameAddress[i];
-                    PingValue previousPing = tunnel.Ping;
 
                     if (i == 0)
                     {
@@ -232,11 +319,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                         tunnel.Ping = pingResult;
                     }
 
-                    if (previousPing.IsValid() && (tunnel.Ping.IsUnknown() || tunnel.Ping.Milliseconds > TUNNEL_FAILED_PING_AMOUNT))
-                    {
-                        if (CurrentTunnel == null || tunnel == CurrentTunnel)
-                            DoTunnelFailed(tunnel);
-                    }
+                    EvaluateTunnelHealth(tunnel);
 
                     DoTunnelPinged(tunnel.Address, tunnel.Port);
                 }
@@ -250,12 +333,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 var tunnel = CurrentTunnel;
                 if (tunnel == null) return;
 
-                PingValue previousPing = tunnel.Ping;
                 tunnel.UpdatePing();
                 PingValue pingResult = tunnel.Ping;
 
-                if (previousPing.IsValid() && (pingResult.IsUnknown() || pingResult.Milliseconds > TUNNEL_FAILED_PING_AMOUNT))
-                    DoTunnelFailed(tunnel);
+                EvaluateTunnelHealth(tunnel);
 
                 DoCurrentTunnelPinged();
 
@@ -267,14 +348,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                     var otherTunnelsWithSameAddress = Tunnels.Where(t => t.Address == tunnel.Address && t != tunnel).ToList();
                     foreach (var otherTunnel in otherTunnelsWithSameAddress)
                     {
-                        PingValue otherPreviousPing = otherTunnel.Ping;
                         otherTunnel.Ping = pingResult;
 
-                        if (CurrentTunnel == null && otherPreviousPing.IsValid() &&
-                            (pingResult.IsUnknown() || pingResult.Milliseconds > TUNNEL_FAILED_PING_AMOUNT))
-                        {
-                            DoTunnelFailed(otherTunnel);
-                        }
+                        EvaluateTunnelHealth(otherTunnel);
 
                         DoTunnelPinged(otherTunnel.Address, otherTunnel.Port);
                     }
@@ -433,6 +509,16 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 skipCount++;
             }
 
+            TimeSpan elapsedSinceLastKeepAlive = lastKeepAliveTimestamp.HasValue
+                ? currentTimestamp - lastKeepAliveTimestamp.Value
+                : TimeSpan.MaxValue;
+
+            if (elapsedSinceLastKeepAlive.TotalSeconds > KEEPALIVE_INTERVAL_SECONDS)
+            {
+                lastKeepAliveTimestamp = currentTimestamp;
+                SendKeepAlives();
+            }
+
             base.Update(gameTime);
         }
 
@@ -482,9 +568,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public void AddP2PTunnel(P2PTunnel tunnel, uint localId, uint remoteId) => _tunnelCommunicator.AddP2PTunnel(tunnel, localId, remoteId);
 
         /// <summary>
-        /// Removes a P2P peer's endpoint from the communicator's routing tables.
+        /// Removes a player pair's P2P endpoints from the communicator's routing tables,
+        /// optionally preserving the chosen path's endpoint.
         /// </summary>
-        public void RemoveP2PTunnel(P2PTunnel tunnel) => _tunnelCommunicator.RemoveP2PTunnel(tunnel);
+        public void CleanupP2PPair(uint localId, uint remoteId, IPEndPoint keepEndpoint = null) => _tunnelCommunicator.CleanupP2PPair(localId, remoteId, keepEndpoint);
 
         /// <summary>
         /// Clears the cached STUN result so the next P2P negotiation re-queries.
