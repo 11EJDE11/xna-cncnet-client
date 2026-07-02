@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -55,6 +55,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             connectionManager.ConnectionLost += ConnectionManager_ConnectionLost;
 
             _tunnelCommunicator = new V3TunnelCommunicator();
+            KeepAliveMonitor = new V3KeepAliveMonitor(_tunnelCommunicator, wm);
             _p2pEndpointDiscovery = new P2PEndpointDiscovery(_tunnelCommunicator);
         }
 
@@ -85,61 +86,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private const int TUNNEL_FAILED_CONSECUTIVE_PINGS = 2;
 
         /// <summary>
-        /// How often to send keepalives on negotiated V3 paths while sitting in a lobby.
-        /// Keeps the tunnel server registration and — crucially — the P2P NAT mappings from
-        /// expiring during long waits between negotiation and game start; typical NAT UDP
-        /// timeouts are 30-180 seconds.
+        /// The keepalive subsystem for negotiated V3 paths: NAT/registration refresh, live
+        /// pair pings, liveness detection and the launch-time connectivity probe. Owned and
+        /// ticked by this handler; consumers subscribe to and configure it directly.
         /// </summary>
-        private const double KEEPALIVE_INTERVAL_SECONDS = 15.0;
+        public V3KeepAliveMonitor KeepAliveMonitor { get; }
 
-        private uint keepAliveLocalId;
-        // Snapshot list, replaced atomically by the negotiation manager (possibly from a
-        // negotiation task) and read on the game loop thread.
-        private volatile List<(uint remoteId, CnCNetTunnel tunnel)> keepAliveTargets;
-        private TimeSpan? lastKeepAliveTimestamp;
-
-        /// <summary>
-        /// Sets the negotiated paths to keep alive while in a lobby. Pass the local player's
-        /// V3 ID and each remote player's ID with the tunnel negotiated for that pair.
-        /// </summary>
-        public void SetKeepAliveTargets(uint localId, List<(uint remoteId, CnCNetTunnel tunnel)> targets)
-        {
-            keepAliveLocalId = localId;
-            keepAliveTargets = targets;
-        }
-
-        /// <summary>Stops lobby keepalives. Call on lobby teardown or when leaving dynamic mode.</summary>
-        public void ClearKeepAliveTargets() => keepAliveTargets = null;
-
-        private void SendKeepAlives()
-        {
-            var targets = keepAliveTargets;
-            if (targets == null || targets.Count == 0)
-                return;
-
-            // In-game traffic keeps everything alive on its own.
-            if (GameTunnelBridge != null && GameTunnelBridge.IsRunning)
-                return;
-
-            // Relay tunnels: refresh our registration (also refreshes our own NAT mapping,
-            // which keeps the session's STUN-discovered external endpoint valid).
-            var relayTunnels = targets
-                .Select(t => t.tunnel)
-                .Where(t => t != null && !t.IsDirect)
-                .Distinct()
-                .ToList();
-
-            if (relayTunnels.Count > 0)
-                _tunnelCommunicator.SendRegistrationToTunnels(keepAliveLocalId, relayTunnels, quiet: true);
-
-            // Direct paths: a Connected packet per peer keeps both NATs' mappings open.
-            // Receivers without an active negotiator simply drop it.
-            foreach (var (remoteId, tunnel) in targets)
-            {
-                if (tunnel != null && tunnel.IsDirect)
-                    _tunnelCommunicator.SendPacket(tunnel, keepAliveLocalId, remoteId, TunnelPacketType.Connected);
-            }
-        }
 
         /// <summary>
         /// Tracks a tunnel's consecutive ping failures and fires <see cref="TunnelFailed"/>
@@ -509,15 +461,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 skipCount++;
             }
 
-            TimeSpan elapsedSinceLastKeepAlive = lastKeepAliveTimestamp.HasValue
-                ? currentTimestamp - lastKeepAliveTimestamp.Value
-                : TimeSpan.MaxValue;
-
-            if (elapsedSinceLastKeepAlive.TotalSeconds > KEEPALIVE_INTERVAL_SECONDS)
-            {
-                lastKeepAliveTimestamp = currentTimestamp;
-                SendKeepAlives();
-            }
+            KeepAliveMonitor.Update(GameTunnelBridge != null && GameTunnelBridge.IsRunning);
 
             base.Update(gameTime);
         }

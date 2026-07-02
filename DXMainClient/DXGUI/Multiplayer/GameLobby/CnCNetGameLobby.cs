@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using ClientCore.Extensions;
 using System.Net;
@@ -1137,6 +1138,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         protected override void HostLaunchGame()
         {
+            if (launchConnectivityCheckInProgress)
+            {
+                AddNotice("Still verifying player connections...".L10N("Client:Main:VerifyingConnectionsWait"), Color.Yellow);
+                return;
+            }
+
             if (_tunnelMode == TunnelMode.V3Dynamic && !_negotiator.AreAllNegotiationsSuccessful())
             {
                 var (incomplete, failed) = _negotiator.NegotiationData.GetNegotiationStatusCounts(Players.Select(p => p.Name).ToList());
@@ -1188,7 +1195,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                     SendStartV2ToPlayers(playerPorts);
                 }
-                else if (_tunnelMode == TunnelMode.V3Dynamic || tunnelHandler.CurrentTunnel?.Version == 3)
+                else if (_tunnelMode == TunnelMode.V3Dynamic)
+                {
+                    // Double-check everyone is still reachable before STARTV3 goes out over
+                    // IRC — IRC can take minutes to notice a dead connection, and a start
+                    // command sent to a player who never receives it strands the rest at the
+                    // loading screen. Launch continues from FinishLaunchConnectivityCheck.
+                    BeginLaunchConnectivityCheck();
+                    return;
+                }
+                else if (tunnelHandler.CurrentTunnel?.Version == 3)
                 {
                     SendStartV3ToPlayers();
                 }
@@ -1196,6 +1212,66 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             cncnetUserData.AddRecentPlayers(Players.Select(p => p.Name), channel.UIName);
 
+            StartGame();
+        }
+
+        private bool launchConnectivityCheckInProgress;
+
+        /// <summary>
+        /// Pings every remote player over their negotiated tunnel and waits (briefly, off
+        /// the game thread) for fresh pongs. Normal launches gain only one round trip.
+        /// </summary>
+        private void BeginLaunchConnectivityCheck()
+        {
+            launchConnectivityCheckInProgress = true;
+            AddNotice("Verifying player connections...".L10N("Client:Main:VerifyingConnections"));
+
+            Task.Run(async () =>
+            {
+                List<uint> unresponsiveIds;
+
+                try
+                {
+                    unresponsiveIds = await tunnelHandler.KeepAliveMonitor.ProbeTargetsAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Launch connectivity check failed: {ex.Message}");
+                    unresponsiveIds = new List<uint>();
+                }
+
+                WindowManager.AddCallback(new Action<List<uint>>(FinishLaunchConnectivityCheck), unresponsiveIds);
+            });
+        }
+
+        private void FinishLaunchConnectivityCheck(List<uint> unresponsiveIds)
+        {
+            launchConnectivityCheckInProgress = false;
+
+            if (!IsHost || _tunnelMode != TunnelMode.V3Dynamic || Players.Count <= 1)
+                return;
+
+            if (unresponsiveIds.Count > 0)
+            {
+                foreach (uint id in unresponsiveIds)
+                {
+                    string name = _negotiator.PlayerInfos.FirstOrDefault(p => p.Id == id)?.Name ?? id.ToString("x8");
+                    AddNotice(string.Format("No response from {0} — they may have disconnected.".L10N("Client:Main:LaunchCheckNoResponse"), name), Color.Red);
+                }
+
+                AddNotice("Launch aborted.".L10N("Client:Main:LaunchCheckAborted"), Color.Red);
+                return;
+            }
+
+            // The lobby can change while the check runs (join/leave, renegotiation).
+            if (!_negotiator.AreAllNegotiationsSuccessful())
+            {
+                AddNotice("Player connections changed during the check; launch cancelled.".L10N("Client:Main:LaunchCheckStateChanged"), Color.Yellow);
+                return;
+            }
+
+            SendStartV3ToPlayers();
+            cncnetUserData.AddRecentPlayers(Players.Select(p => p.Name), channel.UIName);
             StartGame();
         }
 
@@ -1281,6 +1357,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         void IV3NegotiationHost.OnNegotiationsRestarted() => _allNegotiationsCompleteMessageShown = false;
+
+        void IV3NegotiationHost.OnPairPingUpdated(PlayerInfo player, int ping)
+        {
+            player.Ping = ping >= 0 ? PingValue.FromMs(ping) : PingValue.Unknown;
+            UpdatePlayerPingIndicator(player);
+        }
 
         protected override void RequestPlayerOptions(int side, int color, int start, int team)
         {
@@ -2644,8 +2726,24 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// <param name="tunnel">The new tunnel server to use.</param>
         private void HandleTunnelServerChange(CnCNetTunnel tunnel)
         {
+            bool tunnelChanged = tunnelHandler.CurrentTunnel == null ||
+                tunnelHandler.CurrentTunnel.Address != tunnel.Address ||
+                tunnelHandler.CurrentTunnel.Port != tunnel.Port;
+
             tunnelHandler.CurrentTunnel = tunnel;
             AddNotice(string.Format("The game host has changed the tunnel server to: {0}".L10N("Client:Main:HostChangeTunnel"), tunnel.Name));
+
+            // Old pings were measured against the previous tunnel — show unknown until fresh
+            // TNLPNG values arrive rather than presenting stale values as current. Gated on an
+            // actual tunnel change so repeated/no-op change messages can't flicker the display.
+            if (tunnelChanged && _tunnelMode != TunnelMode.V3Dynamic)
+            {
+                foreach (PlayerInfo pInfo in Players)
+                {
+                    pInfo.Ping = PingValue.Unknown;
+                    UpdatePlayerPingIndicator(pInfo);
+                }
+            }
 
             CopyPlayerDataToUI();
             UpdatePing();

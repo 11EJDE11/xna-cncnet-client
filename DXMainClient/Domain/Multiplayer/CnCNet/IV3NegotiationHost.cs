@@ -54,4 +54,10 @@ public interface IV3NegotiationHost
     /// state (e.g. a "negotiations complete" notice guard).
     /// </summary>
     void OnNegotiationsRestarted();
+
+    /// <summary>
+    /// Raised when a keepalive round trip refreshes the measured ping for a negotiated
+    /// pair involving the local player, so the lobby can keep its ping display live.
+    /// </summary>
+    void OnPairPingUpdated(PlayerInfo player, int ping);
 }

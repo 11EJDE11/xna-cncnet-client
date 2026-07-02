@@ -41,7 +41,14 @@ public enum TunnelPacketType : byte
     Register = 0x07,
     GameData = 0x08,
     P2PInfo = 0x09,    // payload: 4 bytes IPv4 + 2 bytes port (big-endian) — "I have P2P"
-    P2PDecline = 0x0A  // payload: empty — "I don't use P2P"
+    P2PDecline = 0x0A, // payload: empty — "I don't use P2P"
+
+    // Lobby keepalive round trip. The ping payload is 8 bytes of the sender's Stopwatch
+    // timestamp; the pong echoes it back so the sender computes RTT statelessly. These are
+    // deliberately distinct from PingRequest/PingResponse: reusing negotiation pings would
+    // set PingRequestReceived on the receiver and weaken the stale-TunnelChoice guard.
+    KeepAlivePing = 0x0B,
+    KeepAlivePong = 0x0C
 }
 
 /// <summary>
@@ -470,6 +477,12 @@ public class V3TunnelCommunicator
     /// <param name="data">Raw packet data.</param>
     /// <param name="receivedTime">Timestamp when the packet was received.</param>
     /// <param name="tunnel">The tunnel that the packet arrived from.</param>
+    /// <summary>
+    /// Invoked on the receive thread when a keepalive pong arrives, with the sender's
+    /// V3 ID and the measured round-trip time in milliseconds.
+    /// </summary>
+    public Action<uint, int>? KeepAlivePongReceived { get; set; }
+
     private void ProcessReceivedPacket(ReadOnlyMemory<byte> data, long receivedTime, CnCNetTunnel tunnel)
     {
         try
@@ -477,6 +490,32 @@ public class V3TunnelCommunicator
             var parsed = ParsePacket(data);
             if (parsed.Payload.Length == 0 && !parsed.NegotiationType.HasValue)
                 return;
+
+            // Keepalives are handled at this layer, unconditionally: no per-pair handler is
+            // needed, so pings get answered in the lobby, during renegotiation and in-game
+            // alike, and they never touch negotiator state.
+            if (parsed.NegotiationType == TunnelPacketType.KeepAlivePing)
+            {
+                SendPacket(tunnel, parsed.ReceiverId, parsed.SenderId,
+                    TunnelPacketType.KeepAlivePong, parsed.Payload.ToArray());
+                return;
+            }
+
+            if (parsed.NegotiationType == TunnelPacketType.KeepAlivePong)
+            {
+                if (parsed.Payload.Length >= 8)
+                {
+                    long sentTicks = BinaryPrimitives.ReadInt64LittleEndian(parsed.Payload.Span);
+                    double rttMs = (receivedTime - sentTicks) * 1000.0 / Stopwatch.Frequency;
+
+                    // The timestamp is our own Stopwatch value echoed back, so anything
+                    // negative or absurd means a corrupt/forged payload — drop it.
+                    if (rttMs >= 0 && rttMs <= 120000)
+                        KeepAlivePongReceived?.Invoke(parsed.SenderId, (int)Math.Round(rttMs));
+                }
+
+                return;
+            }
 
             PacketHandler? handler = null;
 
@@ -552,6 +591,11 @@ public class V3TunnelCommunicator
         var handlerKey = (parsed.ReceiverId, parsed.SenderId);
         if (!_p2pPeerNames.TryGetValue(handlerKey, out var peerName))
             return false;
+
+        // ReceiveFrom reuses its EndPoint instance for consecutive packets from the same
+        // source, so snapshot the endpoint before storing it as a long-lived routing key —
+        // a live instance must never end up as a dictionary key.
+        remoteEndpoint = new IPEndPoint(remoteEndpoint.Address, remoteEndpoint.Port);
 
         var learnedTunnel = _endpointToTunnel.GetOrAdd(remoteEndpoint, ep =>
         {

@@ -35,6 +35,12 @@ public class V3TunnelNegotiationManager
         this.host = host;
         this.tunnelHandler = tunnelHandler;
         this.windowManager = windowManager;
+
+        // Fired on the game thread. Both the game lobby's and the loading lobby's managers
+        // subscribe to these; the manager of whichever lobby is not currently in use has an
+        // empty player list, so its lookups fail and the events fall through harmlessly.
+        tunnelHandler.KeepAliveMonitor.PongReceived += OnKeepAlivePongReceived;
+        tunnelHandler.KeepAliveMonitor.TimedOut += OnKeepAliveTimedOut;
     }
 
     public IReadOnlyList<V3PlayerInfo> PlayerInfos => _v3PlayerInfos;
@@ -572,7 +578,7 @@ public class V3TunnelNegotiationManager
         _negotiationData.ClearAll();
         _v3PlayerInfos.Clear();
 
-        tunnelHandler.ClearKeepAliveTargets();
+        tunnelHandler.KeepAliveMonitor.ClearTargets();
 
         // Re-query STUN in the next lobby: without keepalives running, the NAT mapping
         // behind the cached external endpoint may expire and get remapped.
@@ -682,6 +688,97 @@ public class V3TunnelNegotiationManager
     }
 
     /// <summary>
+    /// Handles a keepalive round trip completing for a pair involving the local player:
+    /// refreshes the live ping, and — if the pair had been declared lost — restores it.
+    /// Runs on the game thread.
+    /// </summary>
+    private void OnKeepAlivePongReceived(uint remoteId, int rttMs)
+    {
+        if (host.TunnelMode != TunnelMode.V3Dynamic)
+            return;
+
+        var player = _v3PlayerInfos.FirstOrDefault(p => p.Id == remoteId);
+        if (player == null || player.Name == ProgramConstants.PLAYERNAME || player.IsNegotiating)
+            return;
+
+        var pInfo = host.Players.Find(p => p.Name == player.Name);
+        if (pInfo == null)
+            return;
+
+        string localName = ProgramConstants.PLAYERNAME;
+        var reportedStatus = _negotiationData.GetReportedStatus(localName, player.Name);
+
+        if (reportedStatus == NegotiationStatus.Failed)
+        {
+            // The peer answers again (e.g. cable replugged) — the negotiated path works,
+            // so bring the pair back rather than requiring a full renegotiation.
+            host.AddNotice($"Connection with {player.Name} restored.", Color.LightGreen);
+            _negotiationData.UpdateStatus(localName, player.Name, NegotiationStatus.Succeeded);
+            _negotiationData.UpdatePing(localName, player.Name, rttMs);
+            BroadcastNegotiationInfo();
+            host.OnLocalNegotiationStatus(pInfo, NegotiationStatus.Succeeded, rttMs);
+            host.OnNegotiationStateChanged();
+            return;
+        }
+
+        if (reportedStatus != NegotiationStatus.Succeeded)
+            return;
+
+        var previousPing = _negotiationData.GetPing(localName, player.Name);
+        _negotiationData.UpdatePing(localName, player.Name, rttMs);
+        host.OnPairPingUpdated(pInfo, rttMs);
+
+        // Quiet broadcast: only push the refreshed ping over IRC when it changed
+        // materially — otherwise every pong would trigger wire traffic.
+        if (previousPing == null || !previousPing.Value.IsValid() ||
+            IsMaterialPingChange(previousPing.Value.Milliseconds, rttMs))
+        {
+            BroadcastNegotiationInfo();
+        }
+
+        // The local UI (status panel, launch button) is cheap to refresh and early-outs
+        // when the panel is closed, so keep it live on every pong rather than only on
+        // material changes.
+        host.OnNegotiationStateChanged();
+    }
+
+    /// <summary>
+    /// Handles a peer missing several keepalive pings in a row: announce it and mark the
+    /// pair failed, which blocks the host's launch through the existing gate and informs
+    /// everyone else through the existing report broadcast. Runs on the game thread.
+    /// </summary>
+    private void OnKeepAliveTimedOut(uint remoteId)
+    {
+        if (host.TunnelMode != TunnelMode.V3Dynamic)
+            return;
+
+        var player = _v3PlayerInfos.FirstOrDefault(p => p.Id == remoteId);
+        if (player == null || player.Name == ProgramConstants.PLAYERNAME || player.IsNegotiating)
+            return;
+
+        string localName = ProgramConstants.PLAYERNAME;
+        if (_negotiationData.GetReportedStatus(localName, player.Name) != NegotiationStatus.Succeeded)
+            return;
+
+        host.AddNotice($"Lost connection with {player.Name} — they are not responding to connection checks.", Color.Red);
+
+        _negotiationData.UpdateStatus(localName, player.Name, NegotiationStatus.Failed);
+        BroadcastNegotiationInfo();
+
+        var pInfo = host.Players.Find(p => p.Name == player.Name);
+        if (pInfo != null)
+            host.OnLocalNegotiationStatus(pInfo, NegotiationStatus.Failed, -1);
+
+        host.OnNegotiationStateChanged();
+    }
+
+    private static bool IsMaterialPingChange(int oldMs, int newMs)
+        => Math.Abs(newMs - oldMs) > 25 || PingTier(oldMs) != PingTier(newMs);
+
+    // Mirrors the display tiers (lobby ping icons / status panel colors).
+    private static int PingTier(int ms) => ms <= 100 ? 0 : ms <= 250 ? 1 : ms <= 350 ? 2 : 3;
+
+    /// <summary>
     /// Rebuilds the tunnel handler's lobby keepalive targets from the currently negotiated
     /// tunnels, so NAT mappings and tunnel registrations stay alive between negotiation and
     /// game start. Cleared when not in dynamic mode or when nothing is negotiated.
@@ -691,7 +788,7 @@ public class V3TunnelNegotiationManager
         var localV3Player = FindPlayer(ProgramConstants.PLAYERNAME);
         if (localV3Player == null || host.TunnelMode != TunnelMode.V3Dynamic)
         {
-            tunnelHandler.ClearKeepAliveTargets();
+            tunnelHandler.KeepAliveMonitor.ClearTargets();
             return;
         }
 
@@ -701,9 +798,9 @@ public class V3TunnelNegotiationManager
             .ToList();
 
         if (targets.Count == 0)
-            tunnelHandler.ClearKeepAliveTargets();
+            tunnelHandler.KeepAliveMonitor.ClearTargets();
         else
-            tunnelHandler.SetKeepAliveTargets(localV3Player.Id, targets);
+            tunnelHandler.KeepAliveMonitor.SetTargets(localV3Player.Id, targets);
     }
 
     /// <summary>

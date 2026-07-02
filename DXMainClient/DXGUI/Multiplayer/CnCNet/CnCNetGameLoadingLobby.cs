@@ -14,8 +14,10 @@ using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace DTAClient.DXGUI.Multiplayer.CnCNet
 {
@@ -733,7 +735,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             {
                 if (tunnelHandler.CurrentTunnel == null)
                 {
-                    ShowTunnelSelectionWindow(("No tunnel server is selected. Please pick one:").L10N("Client:Main:ConnectTunnelError1"));
+                    ShowTunnelSelectionWindow(("No tunnel server is selected. Please pick one:").L10N("Client:Main:NoTunnelSelected"));
                     return;
                 }
 
@@ -765,14 +767,88 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 started = true;
                 LoadGame();
             }
+            else if (_tunnelMode == TunnelMode.V3Dynamic && Players.Count > 1)
+            {
+                // Double-check everyone is still reachable before STARTV3 goes out over IRC —
+                // IRC can take minutes to notice a dead connection, and a start command sent
+                // to a player who never receives it strands the rest at the loading screen.
+                if (launchConnectivityCheckInProgress)
+                {
+                    AddNotice("Still verifying player connections...".L10N("Client:Main:VerifyingConnectionsWait"), Color.Yellow);
+                    return;
+                }
+
+                BeginLaunchConnectivityCheck();
+            }
             else
             {
-                // V3 static or dynamic
+                // V3 static (or dynamic with no other players)
                 SendStartV3ToPlayers();
                 AddNotice("Starting game...".L10N("Client:Main:StartingGame"));
                 started = true;
                 StartV3Game();
             }
+        }
+
+        private bool launchConnectivityCheckInProgress;
+
+        /// <summary>
+        /// Pings every remote player over their negotiated tunnel and waits (briefly, off
+        /// the game thread) for fresh pongs. Normal launches gain only one round trip.
+        /// </summary>
+        private void BeginLaunchConnectivityCheck()
+        {
+            launchConnectivityCheckInProgress = true;
+            AddNotice("Verifying player connections...".L10N("Client:Main:VerifyingConnections"));
+
+            Task.Run(async () =>
+            {
+                List<uint> unresponsiveIds;
+
+                try
+                {
+                    unresponsiveIds = await tunnelHandler.KeepAliveMonitor.ProbeTargetsAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Launch connectivity check failed: {ex.Message}");
+                    unresponsiveIds = new List<uint>();
+                }
+
+                WindowManager.AddCallback(new Action<List<uint>>(FinishLaunchConnectivityCheck), unresponsiveIds);
+            });
+        }
+
+        private void FinishLaunchConnectivityCheck(List<uint> unresponsiveIds)
+        {
+            launchConnectivityCheckInProgress = false;
+
+            if (!IsHost || _tunnelMode != TunnelMode.V3Dynamic || Players.Count <= 1)
+                return;
+
+            if (unresponsiveIds.Count > 0)
+            {
+                foreach (uint id in unresponsiveIds)
+                {
+                    string name = _negotiator.PlayerInfos.FirstOrDefault(p => p.Id == id)?.Name ?? id.ToString("x8");
+                    AddNotice(string.Format("No response from {0} — they may have disconnected.".L10N("Client:Main:LaunchCheckNoResponse"), name), Color.Red);
+                }
+
+                AddNotice("Launch aborted.".L10N("Client:Main:LaunchCheckAborted"), Color.Red);
+                return;
+            }
+
+            // The lobby can change while the check runs (join/leave, renegotiation).
+            if (!_negotiator.AreAllNegotiationsSuccessful())
+            {
+                AddNotice("Player connections changed during the check; launch cancelled.".L10N("Client:Main:LaunchCheckStateChanged"), Color.Yellow);
+                return;
+            }
+
+            SendStartV3ToPlayers();
+            AddNotice("Starting game...".L10N("Client:Main:StartingGame"));
+            started = true;
+            StartV3Game();
         }
 
         protected override void WriteSpawnIniAdditions(IniFile spawnIni)
@@ -921,6 +997,11 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         void IV3NegotiationHost.OnNegotiationsRestarted()
         {
+        }
+
+        void IV3NegotiationHost.OnPairPingUpdated(PlayerInfo player, int ping)
+        {
+            // The loading lobby has no per-player ping display to refresh.
         }
 
         private void SendStartV3ToPlayers()
