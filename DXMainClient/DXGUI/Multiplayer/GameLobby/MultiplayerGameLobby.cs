@@ -1119,6 +1119,23 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             ddPlayerName.ToolTip.Text = tooltipText ?? ("Ping:".L10N("Client:Main:PlayerInfoPing") + " " + pInfo.Ping.ToString());
         }
 
+        private Texture2D blankPingTexture;
+
+        /// <summary>
+        /// Replaces a player's ping icon with a transparent placeholder of the same size,
+        /// keeping the player's name aligned with rows that do show a ping icon.
+        /// Used for the local player in V3 dynamic mode, where there is no connection
+        /// to yourself to show a ping for.
+        /// </summary>
+        protected void HidePlayerPingIndicator(PlayerInfo pInfo)
+        {
+            blankPingTexture ??= AssetLoader.CreateTexture(Color.Transparent, PingTextures[0].Width, PingTextures[0].Height);
+
+            XNAClientDropDown ddPlayerName = ddPlayerNames[pInfo.Index];
+            ddPlayerName.Items[0].Texture = blankPingTexture;
+            ddPlayerName.ToolTip.Text = string.Empty;
+        }
+
         private Texture2D GetTextureForPing(PingValue ping)
         {
             switch (ping.Milliseconds)

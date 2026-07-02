@@ -512,6 +512,24 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             NegotiationStatus? negotiationStatus = null,
             string? tooltipText = null)
         {
+            // In dynamic mode there is no connection to yourself, so the local player
+            // gets a blank (but equally sized) indicator instead of a ping icon.
+            if (_tunnelMode == TunnelMode.V3Dynamic && pInfo.Name == ProgramConstants.PLAYERNAME)
+            {
+                HidePlayerPingIndicator(pInfo);
+                return;
+            }
+
+            if (_tunnelMode == TunnelMode.V3Dynamic)
+            {
+                // Derive the icon from the pair's merged status instead of the event that
+                // triggered this update. Events can arrive out of order (e.g. the peer's stale
+                // Succeeded report landing mid-renegotiation) and full UI refreshes like
+                // CopyPlayerDataToUI pass no status at all — both would flicker the icon
+                // between the negotiating icon and a ping icon while a negotiation runs.
+                negotiationStatus = _negotiator.NegotiationData.GetNegotiationStatus(ProgramConstants.PLAYERNAME, pInfo.Name);
+            }
+
             if (tooltipText != null)
             {
                 base.UpdatePlayerPingIndicator(pInfo, negotiationStatus, tooltipText);
@@ -1144,7 +1162,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     var incompleteNegotiations = _negotiator.NegotiationData.GetIncompleteNegotiations(Players.Select(p => p.Name).ToList());
                     AddNotice("Waiting for negotiations between:", Color.Yellow);
                     foreach (var (p1, p2, status) in incompleteNegotiations)
-                        AddNotice($"  {p1} <-> {p2} ({status})", Color.Yellow);
+                        AddNotice($"  {p1} <-> {p2} ({status.GetDescription()})", Color.Yellow);
                     return;
                 }
             }
@@ -1687,6 +1705,75 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 AddNotice("Warning: The following player pairs have high ping:", Color.Yellow);
                 foreach (var (p1, p2, ping) in highPingPairs)
                     AddNotice($"  {p1} <-> {p2}: {ping}ms", Color.Yellow);
+            }
+
+            SuggestKickForLagReduction(playerNames);
+        }
+
+        /// <summary>
+        /// The game's input lag is driven by the worst pair ping in the lobby (the spawner
+        /// derives the latency level from the worst connection). If removing a single player
+        /// would significantly lower that worst ping, tell the host — they're the one who
+        /// can act on it. Only shown once per negotiation round (called from the
+        /// all-negotiations-complete path) and only for a meaningful saving.
+        /// </summary>
+        private void SuggestKickForLagReduction(List<string> playerNames)
+        {
+            // Don't bother unless the current worst connection is genuinely laggy, and only
+            // suggest when removing the player buys a substantial improvement.
+            const int KICK_SUGGESTION_MIN_WORST_PING = 300; //ms
+            const int KICK_SUGGESTION_MIN_IMPROVEMENT = 150; //ms
+
+            if (!IsHost || playerNames.Count < 3)
+                return;
+
+            // A complete ping matrix is required — with unknown pairs the math would lie.
+            var pairPings = new List<(string p1, string p2, int ping)>();
+            foreach (var (p1, p2) in _negotiator.NegotiationData.GetPlayerPairs(playerNames))
+            {
+                var ping = _negotiator.NegotiationData.GetPing(p1, p2);
+                if (!ping.HasValue || !ping.Value.IsValid())
+                    return;
+
+                pairPings.Add((p1, p2, ping.Value.Milliseconds));
+            }
+
+            if (pairPings.Count == 0)
+                return;
+
+            int worstOverall = pairPings.Max(p => p.ping);
+            if (worstOverall < KICK_SUGGESTION_MIN_WORST_PING)
+                return;
+
+            string bestCandidate = null;
+            int bestWorstWithout = worstOverall;
+
+            foreach (string player in playerNames)
+            {
+                var remainingPairs = pairPings.Where(p => p.p1 != player && p.p2 != player).ToList();
+                if (remainingPairs.Count == 0)
+                    continue;
+
+                int worstWithout = remainingPairs.Max(p => p.ping);
+                if (worstWithout < bestWorstWithout)
+                {
+                    bestWorstWithout = worstWithout;
+                    bestCandidate = player;
+                }
+            }
+
+            if (bestCandidate == null || worstOverall - bestWorstWithout < KICK_SUGGESTION_MIN_IMPROVEMENT)
+                return;
+
+            if (bestCandidate == ProgramConstants.PLAYERNAME)
+            {
+                AddNotice(string.Format("Note: your connection is the bottleneck — the worst ping in this game is {0} ms, and without you it would be {1} ms.".L10N("Client:Main:KickSuggestionSelf"),
+                    worstOverall, bestWorstWithout), Color.Yellow);
+            }
+            else
+            {
+                AddNotice(string.Format("Note: {0} has high ping with the other players. Kicking them would improve the worst connection from {1} ms to {2} ms.".L10N("Client:Main:KickSuggestion"),
+                    bestCandidate, worstOverall, bestWorstWithout), Color.Yellow);
             }
         }
 

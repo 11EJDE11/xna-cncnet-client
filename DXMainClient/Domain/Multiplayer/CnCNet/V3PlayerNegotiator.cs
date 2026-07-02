@@ -100,6 +100,7 @@ public class V3PlayerNegotiator : IDisposable
     // relay fallback (or vice versa). The non-decider always acks through the tunnel the choice
     // arrived on, so a matching ack implies the peer saw this specific choice.
     private volatile CnCNetTunnel? _pendingChoiceTunnel;
+    private bool _loggedIgnoredFailureNotification;
 
     public V3PlayerInfo RemotePlayer => _remotePlayer;
 
@@ -274,7 +275,11 @@ public class V3PlayerNegotiator : IDisposable
             var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
             if (bestResult != null && bestResult.AverageRtt.HasValue)
             {
-                int negotiatedPing = (int)Math.Round(bestResult.AverageRtt.Value / 2.0);
+                // Report the full round-trip time between the two players. This is the value
+                // shown as the pair's ping, and the ping-tier thresholds (icons, status panel)
+                // are calibrated for RTTs — halving it (as an approximation of a V2-style
+                // per-leg tunnel ping) made pair pings look better than they are.
+                int negotiatedPing = (int)Math.Round(bestResult.AverageRtt.Value);
                 double packetLoss = bestResult.PacketLoss;
                 _remotePlayer.NegotiatedPacketLoss = packetLoss;
                 bool acknowledged = await SendTunnelChoiceAsync(bestTunnel, negotiatedPing, packetLoss);
@@ -601,7 +606,14 @@ public class V3PlayerNegotiator : IDisposable
                 // go unacknowledged and the round fails through the retry path anyway.)
                 if (!_isDecider || _pendingChoiceTunnel == null)
                 {
-                    Logger.Log($"V3PlayerNegotiator: Ignoring failure notification from {_remotePlayer.Name} (no outstanding tunnel choice; likely stale)");
+                    // Logged once per negotiator: the sender broadcasts this packet to every
+                    // tunnel in the list, so a single stale timeout produces dozens of copies.
+                    if (!_loggedIgnoredFailureNotification)
+                    {
+                        _loggedIgnoredFailureNotification = true;
+                        Logger.Log($"V3PlayerNegotiator: Ignoring failure notification from {_remotePlayer.Name} (no outstanding tunnel choice; likely stale)");
+                    }
+
                     break;
                 }
 
@@ -837,7 +849,7 @@ public class V3PlayerNegotiator : IDisposable
 
             var relayResult = _remotePlayer.GetTunnelResult(relayTunnel);
             double? relayRtt = relayResult?.AverageRtt;
-            int relayPing = relayRtt.HasValue ? (int)Math.Round(relayRtt.Value / 2.0) : 0;
+            int relayPing = relayRtt.HasValue ? (int)Math.Round(relayRtt.Value) : 0;
             double relayLoss = relayResult?.PacketLoss ?? 0;
             _remotePlayer.NegotiatedPacketLoss = relayLoss;
 

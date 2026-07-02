@@ -25,11 +25,18 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     private const int TITLE_HEIGHT = 25;
     private const int CLOSE_BUTTON_SIZE = 20;
     private const int TAB_HEIGHT = 26;
-    private const int LIST_ROW_HEIGHT = 24;
-    private const int LIST_NAME_WIDTH = 225;
+    private const int LIST_PLAYER_COLUMN_WIDTH = 130;
+    private const int LIST_BAR_COLUMN_WIDTH = 160;
+    private const int LIST_PING_TEXT_COLUMN_WIDTH = 70;
     private const int LIST_BAR_MAX_WIDTH = 150;
     private const int LIST_BAR_MAX_PING = 500;
-    private const int LIST_PING_LABEL_WIDTH = 70;
+    private const int LIST_BAR_HEIGHT = 14;
+
+    // The pair list scrolls beyond this many rows instead of growing the panel:
+    // pair count grows quadratically (8 players = 28 pairs), which quickly
+    // outgrows the screen as fixed rows.
+    private const int LIST_MAX_VISIBLE_ROWS = 12;
+    private const int LIST_MIN_VISIBLE_ROWS = 3;
     private const int RENEGOTIATE_BUTTON_HEIGHT = 25;
     private const int RENEGOTIATE_BUTTON_MARGIN = 6;
 
@@ -37,10 +44,11 @@ public class TunnelNegotiationStatusPanel : XNAPanel
 
     private XNALabel lblTitle = null!;
     private XNAPanel matrixPanel = null!;
-    private XNAPanel listPanel = null!;
+    private XNAMultiColumnListBox lbPairs = null!;
     private XNAClientTabControl tabControl = null!;
     private XNAClientButton btnClose = null!;
     private XNAClientButton btnRenegotiateAll = null!;
+    private int listHeaderHeight;
     private readonly List<XNALabel> playerLabels = new List<XNALabel>();
     private readonly Dictionary<(string, string), XNALabel> statusCells = new Dictionary<(string, string), XNALabel>();
     private static Texture2D? sharedCellBackground;
@@ -65,8 +73,9 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         lblTitle = new XNALabel(WindowManager);
         lblTitle.Name = nameof(lblTitle);
         lblTitle.Text = "Tunnel Negotiation Status".L10N("Client:Main:NegStatusTitle");
-        lblTitle.ClientRectangle = new Rectangle(PANEL_PADDING, 8, 0, 0);
         lblTitle.FontIndex = 1;
+        lblTitle.TextAnchor = LabelTextAnchorInfo.CENTER;
+        lblTitle.AnchorPoint = new Vector2(Width / 2f, TITLE_HEIGHT / 2f + 2);
 
         btnClose = new XNAClientButton(WindowManager);
         btnClose.Name = nameof(btnClose);
@@ -85,10 +94,35 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         int contentY = TITLE_HEIGHT + TAB_HEIGHT + PANEL_PADDING;
         int contentHeight = Height - contentY - PANEL_PADDING;
 
-        listPanel = new XNAPanel(WindowManager);
-        listPanel.Name = nameof(listPanel);
-        listPanel.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, Width - PANEL_PADDING * 2, contentHeight);
-        listPanel.DrawBorders = false;
+        lbPairs = new XNAMultiColumnListBox(WindowManager);
+        lbPairs.Name = nameof(lbPairs);
+        lbPairs.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, ListTotalWidth, contentHeight);
+        lbPairs.PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
+        lbPairs.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
+        lbPairs.AllowRightClickUnselect = false;
+
+        lbPairs.AddColumn("Player 1".L10N("Client:Main:NegStatusPlayer1Header"), LIST_PLAYER_COLUMN_WIDTH);
+        lbPairs.AddColumn("Player 2".L10N("Client:Main:NegStatusPlayer2Header"), LIST_PLAYER_COLUMN_WIDTH);
+
+        // Ping bar column: custom list box that renders a colored bar per row.
+        var barHeaderLabel = new XNALabel(WindowManager);
+        barHeaderLabel.FontIndex = lbPairs.HeaderFontIndex;
+        barHeaderLabel.X = 3;
+        barHeaderLabel.Y = 2;
+        barHeaderLabel.Text = "Ping".L10N("Client:Main:PingHeader");
+
+        var barHeader = new XNAPanel(WindowManager);
+        barHeader.Width = LIST_BAR_COLUMN_WIDTH;
+        barHeader.Height = barHeaderLabel.Height + 3;
+        barHeader.AddChild(barHeaderLabel);
+
+        var barListBox = new PingBarListBox(WindowManager);
+        barListBox.LineHeight = lbPairs.LineHeight;
+        lbPairs.AddColumn(barHeader, barListBox);
+
+        lbPairs.AddColumn(string.Empty, LIST_PING_TEXT_COLUMN_WIDTH);
+
+        listHeaderHeight = barHeader.Height;
 
         matrixPanel = new XNAPanel(WindowManager);
         matrixPanel.Name = nameof(matrixPanel);
@@ -104,7 +138,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         AddChild(lblTitle);
         AddChild(btnClose);
         AddChild(tabControl);
-        AddChild(listPanel);
+        AddChild(lbPairs);
         AddChild(matrixPanel);
         AddChild(btnRenegotiateAll);
 
@@ -115,6 +149,9 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         CenterOnParent();
         Disable();
     }
+
+    private static int ListTotalWidth =>
+        LIST_PLAYER_COLUMN_WIDTH * 2 + LIST_BAR_COLUMN_WIDTH + LIST_PING_TEXT_COLUMN_WIDTH;
 
     public void SetIsHost(bool isHost)
     {
@@ -128,12 +165,12 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     {
         if (tabControl.SelectedTab == 0)
         {
-            listPanel.Enable();
+            lbPairs.Enable();
             matrixPanel.Disable();
         }
         else
         {
-            listPanel.Disable();
+            lbPairs.Disable();
             matrixPanel.Enable();
         }
     }
@@ -147,21 +184,24 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     {
         while (matrixPanel.Children.Count > 0)
             matrixPanel.RemoveChild(matrixPanel.Children[0]);
-        while (listPanel.Children.Count > 0)
-            listPanel.RemoveChild(listPanel.Children[0]);
 
         playerLabels.Clear();
         statusCells.Clear();
+
+        int previousTopIndex = lbPairs.ItemCount > 0 ? lbPairs.TopIndex : 0;
+        lbPairs.ClearItems();
 
         if (players.Count < 2)
             return;
 
         int pairCount = players.Count * (players.Count - 1) / 2;
         int matrixWidth = PLAYER_NAME_WIDTH_LHS + (players.Count * CELL_WIDTH) + (PANEL_PADDING * 2);
-        int listWidth = LIST_NAME_WIDTH + LIST_BAR_MAX_WIDTH + LIST_PING_LABEL_WIDTH + 20 + (PANEL_PADDING * 2);
+        int listWidth = ListTotalWidth + (PANEL_PADDING * 2);
 
         int matrixContentHeight = HEADER_HEIGHT + (players.Count * CELL_HEIGHT);
-        int listContentHeight = pairCount * LIST_ROW_HEIGHT;
+
+        int visibleRows = Math.Clamp(pairCount, LIST_MIN_VISIBLE_ROWS, LIST_MAX_VISIBLE_ROWS);
+        int listContentHeight = listHeaderHeight + (visibleRows * lbPairs.LineHeight) + 4;
 
         int contentY = TITLE_HEIGHT + TAB_HEIGHT + PANEL_PADDING;
         int contentHeight = Math.Max(matrixContentHeight, listContentHeight);
@@ -169,6 +209,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         Width = Math.Max(500, Math.Max(matrixWidth, listWidth));
         Height = Math.Max(300, contentY + contentHeight + PANEL_PADDING + RENEGOTIATE_BUTTON_HEIGHT + RENEGOTIATE_BUTTON_MARGIN * 2);
 
+        lblTitle.AnchorPoint = new Vector2(Width / 2f, TITLE_HEIGHT / 2f + 2);
         btnClose.ClientRectangle = new Rectangle(Width - CLOSE_BUTTON_SIZE - 8, 5, CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE);
         btnRenegotiateAll.ClientRectangle = new Rectangle(
             PANEL_PADDING,
@@ -176,13 +217,13 @@ public class TunnelNegotiationStatusPanel : XNAPanel
             160,
             RENEGOTIATE_BUTTON_HEIGHT);
 
-        listPanel.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, Width - PANEL_PADDING * 2, Height - contentY - PANEL_PADDING);
+        lbPairs.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, ListTotalWidth, listContentHeight);
         matrixPanel.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, Width - PANEL_PADDING * 2, Height - contentY - PANEL_PADDING);
 
         CenterOnParent();
 
         BuildMatrixView(players, negotiationData, inferInProgress);
-        BuildListView(players, negotiationData, inferInProgress);
+        BuildListView(players, negotiationData, previousTopIndex, inferInProgress);
     }
 
     private void BuildMatrixView(List<string> players, NegotiationDataManager negotiationData, bool inferInProgress = false)
@@ -252,7 +293,8 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         }
     }
 
-    private void BuildListView(List<string> players, NegotiationDataManager negotiationData, bool inferInProgress = false)
+    private void BuildListView(List<string> players, NegotiationDataManager negotiationData,
+        int previousTopIndex, bool inferInProgress = false)
     {
         var pairs = new List<(string p1, string p2, NegotiationStatus status, PingValue? ping)>();
 
@@ -265,6 +307,8 @@ public class TunnelNegotiationStatusPanel : XNAPanel
             pairs.Add((p1, p2, status, ping));
         }
 
+        // Worst first, so problems are visible at a glance without scrolling:
+        // failed pairs on top, then negotiated pairs from highest to lowest ping.
         pairs.Sort((a, b) =>
         {
             int rankA = GetSortRank(a.status, a.ping);
@@ -272,73 +316,42 @@ public class TunnelNegotiationStatusPanel : XNAPanel
             if (rankA != rankB)
                 return rankA.CompareTo(rankB);
             if (a.ping.HasValue && b.ping.HasValue)
-                return a.ping.Value.Milliseconds.CompareTo(b.ping.Value.Milliseconds);
+                return b.ping.Value.Milliseconds.CompareTo(a.ping.Value.Milliseconds);
             return 0;
         });
 
-        sharedBarBackground ??= AssetLoader.CreateTexture(new Color(30, 30, 30, 120), 1, 1);
-        texGreen ??= AssetLoader.CreateTexture(new Color(0, 180, 0, 200), 1, 1);
-        texYellow ??= AssetLoader.CreateTexture(new Color(200, 180, 0, 200), 1, 1);
-        texOrange ??= AssetLoader.CreateTexture(new Color(200, 100, 0, 200), 1, 1);
-        texRed ??= AssetLoader.CreateTexture(new Color(200, 0, 0, 200), 1, 1);
+        EnsureBarTextures();
 
-        for (int i = 0; i < pairs.Count; i++)
+        foreach (var (p1, p2, status, ping) in pairs)
         {
-            var (p1, p2, status, ping) = pairs[i];
-            int rowY = i * LIST_ROW_HEIGHT;
-            int barY = rowY + (LIST_ROW_HEIGHT - 14) / 2;
-            int barCenterY = barY + 7;
-
-            var nameLabel = new XNALabel(WindowManager)
-            {
-                Text = $"{p1} <> {p2}",
-                TextColor = Color.LightBlue,
-                TextAnchor = LabelTextAnchorInfo.RIGHT | LabelTextAnchorInfo.VERTICAL_CENTER,
-                AnchorPoint = new Vector2(0, barCenterY)
-            };
-            listPanel.AddChild(nameLabel);
-
-            var barBg = new XNAPanel(WindowManager)
-            {
-                ClientRectangle = new Rectangle(LIST_NAME_WIDTH + 5, barY, LIST_BAR_MAX_WIDTH, 14),
-                BackgroundTexture = sharedBarBackground,
-                DrawBorders = false
-            };
-            listPanel.AddChild(barBg);
-
-            if (status == NegotiationStatus.Succeeded && ping.HasValue && ping.Value.IsValid())
-            {
-                int ms = ping.Value.Milliseconds;
-                int fillWidth = Math.Max(2, Math.Min(LIST_BAR_MAX_WIDTH, ms * LIST_BAR_MAX_WIDTH / LIST_BAR_MAX_PING));
-
-                var barFill = new XNAPanel(WindowManager)
-                {
-                    ClientRectangle = new Rectangle(0, 0, fillWidth, 14),
-                    BackgroundTexture = GetPingTexture(ms),
-                    DrawBorders = false
-                };
-                barBg.AddChild(barFill);
-            }
-
             var (pingText, pingColor) = GetListRowLabel(status, ping);
-            var pingLabel = new XNALabel(WindowManager)
+
+            // The bar column's Tag carries the ping to render; null means no bar.
+            object? barPing = status == NegotiationStatus.Succeeded && ping.HasValue && ping.Value.IsValid()
+                ? ping.Value.Milliseconds
+                : null;
+
+            lbPairs.AddItem(new[]
             {
-                Text = pingText,
-                TextColor = pingColor,
-                TextAnchor = LabelTextAnchorInfo.RIGHT | LabelTextAnchorInfo.VERTICAL_CENTER,
-                AnchorPoint = new Vector2(LIST_NAME_WIDTH + LIST_BAR_MAX_WIDTH + 10, barCenterY)
-            };
-            listPanel.AddChild(pingLabel);
+                new XNAListBoxItem(p1, Color.LightBlue) { Selectable = false },
+                new XNAListBoxItem(p2, Color.LightBlue) { Selectable = false },
+                new XNAListBoxItem(string.Empty) { Selectable = false, Tag = barPing },
+                new XNAListBoxItem(pingText, pingColor) { Selectable = false }
+            });
         }
+
+        // Keep the user's scroll position across the frequent rebuilds.
+        if (previousTopIndex > 0 && lbPairs.ItemCount > 0)
+            lbPairs.SetTopIndex(Math.Min(previousTopIndex, lbPairs.ItemCount - 1));
     }
 
     private static int GetSortRank(NegotiationStatus status, PingValue? ping) => status switch
     {
-        NegotiationStatus.Succeeded when ping.HasValue && ping.Value.IsValid() => 0,
-        NegotiationStatus.Succeeded => 1,
-        NegotiationStatus.InProgress => 2,
-        NegotiationStatus.NotStarted => 3,
-        NegotiationStatus.Failed => 4,
+        NegotiationStatus.Failed => 0,
+        NegotiationStatus.Succeeded when ping.HasValue && ping.Value.IsValid() => 1,
+        NegotiationStatus.Succeeded => 2,
+        NegotiationStatus.InProgress => 3,
+        NegotiationStatus.NotStarted => 4,
         _ => 5
     };
 
@@ -352,20 +365,31 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         _ => ("?", Color.Gray)
     };
 
+    // Thresholds match the lobby's ping icon tiers (see MultiplayerGameLobby.GetTextureForPing)
+    // so the panel and the player list never disagree on what a "good" ping looks like.
     private static Color GetPingColor(int ms)
     {
-        if (ms < 50) return Color.LightGreen;
-        if (ms < 100) return Color.Yellow;
-        if (ms < 200) return Color.Orange;
+        if (ms <= 100) return Color.LightGreen;
+        if (ms <= 250) return Color.Yellow;
+        if (ms <= 350) return Color.Orange;
         return Color.Red;
     }
 
     private static Texture2D GetPingTexture(int ms)
     {
-        if (ms < 50) return texGreen!;
-        if (ms < 100) return texYellow!;
-        if (ms < 200) return texOrange!;
+        if (ms <= 100) return texGreen!;
+        if (ms <= 250) return texYellow!;
+        if (ms <= 350) return texOrange!;
         return texRed!;
+    }
+
+    private static void EnsureBarTextures()
+    {
+        sharedBarBackground ??= AssetLoader.CreateTexture(new Color(30, 30, 30, 120), 1, 1);
+        texGreen ??= AssetLoader.CreateTexture(new Color(0, 180, 0, 200), 1, 1);
+        texYellow ??= AssetLoader.CreateTexture(new Color(200, 180, 0, 200), 1, 1);
+        texOrange ??= AssetLoader.CreateTexture(new Color(200, 100, 0, 200), 1, 1);
+        texRed ??= AssetLoader.CreateTexture(new Color(200, 0, 0, 200), 1, 1);
     }
 
     private void UpdateCell(XNALabel cell, NegotiationStatus status, PingValue? ping)
@@ -400,6 +424,54 @@ public class TunnelNegotiationStatusPanel : XNAPanel
                 cell.Text = "?";
                 cell.TextColor = Color.Gray;
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Column list box that renders each pair's ping as a horizontal bar whose fill width
+    /// is proportional to the ping and whose color follows the shared ping tiers.
+    /// Each item's Tag holds the ping in milliseconds (int), or null for no bar.
+    /// Follows the same custom-column pattern as TunnelListBox's flag column.
+    /// </summary>
+    private class PingBarListBox : XNAListBox
+    {
+        public PingBarListBox(WindowManager windowManager) : base(windowManager)
+        {
+        }
+
+        public override void Draw(GameTime gameTime)
+        {
+            DrawPanel();
+
+            EnsureBarTextures();
+
+            int barHeight = Math.Min(LIST_BAR_HEIGHT, LineHeight - 2);
+            int height = 2 - (ViewTop % LineHeight);
+
+            for (int i = TopIndex; i < Items.Count; i++)
+            {
+                if (height > Height)
+                    break;
+
+                if (Items[i].Tag is int ms)
+                {
+                    int barY = height + ((LineHeight - barHeight) / 2);
+
+                    DrawTexture(sharedBarBackground!,
+                        new Rectangle(2, barY, LIST_BAR_MAX_WIDTH, barHeight), Color.White);
+
+                    int fillWidth = Math.Max(2, Math.Min(LIST_BAR_MAX_WIDTH, ms * LIST_BAR_MAX_WIDTH / LIST_BAR_MAX_PING));
+                    DrawTexture(GetPingTexture(ms),
+                        new Rectangle(2, barY, fillWidth, barHeight), Color.White);
+                }
+
+                height += LineHeight;
+            }
+
+            if (DrawBorders)
+                DrawPanelBorders();
+
+            DrawChildren(gameTime);
         }
     }
 }
