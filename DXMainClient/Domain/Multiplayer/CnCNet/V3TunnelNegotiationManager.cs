@@ -41,6 +41,13 @@ public class V3TunnelNegotiationManager
 
     public NegotiationDataManager NegotiationData => _negotiationData;
 
+    /// <summary>
+    /// True while any local negotiation with a remote player is still running. Used to
+    /// prevent overlapping renegotiation rounds, whose stale packets and reports would
+    /// land on the fresh round and flip pairs to Failed.
+    /// </summary>
+    public bool HasActiveNegotiations => _v3PlayerInfos.Any(p => p.IsNegotiating);
+
     public V3PlayerInfo? FindPlayer(string name) => _v3PlayerInfos.FirstOrDefault(p => p.Name == name);
 
     /// <summary>
@@ -188,6 +195,8 @@ public class V3TunnelNegotiationManager
 
     private void MarkNegotiationFailed(string playerName, PlayerInfo? pInfo)
     {
+        host.AddNotice($"Could not start tunnel negotiation with {playerName}.", Color.Red);
+
         _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, playerName, NegotiationStatus.Failed);
         BroadcastNegotiationInfo();
 
@@ -254,7 +263,15 @@ public class V3TunnelNegotiationManager
         }
         else
         {
-            // Failure
+            // Failure — announce once per pair transition (the peer's own Failed report may
+            // have already produced a notice for this pair).
+            var pairStatusBefore = _negotiationData.GetNegotiationStatus(ProgramConstants.PLAYERNAME, e.PlayerName);
+            if (pairStatusBefore != NegotiationStatus.Failed)
+            {
+                string reason = string.IsNullOrEmpty(e.FailureReason) ? string.Empty : $" ({e.FailureReason})";
+                host.AddNotice($"Tunnel negotiation with {e.PlayerName} failed{reason}.", Color.Red);
+            }
+
             _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, e.PlayerName, NegotiationStatus.Failed);
 
             if (playerInfo != null)
@@ -328,7 +345,20 @@ public class V3TunnelNegotiationManager
 
     private void HandleNegotiationEntry(string sender, string targetPlayer, NegotiationStatus status, int ping)
     {
+        // Announce a pair flipping to Failed exactly once. The check uses the merged pair
+        // status (not just this direction), so the second report about an already-failed
+        // pair stays quiet — and it covers every pair, because a failure between two other
+        // players matters to the host/everyone just as much as one involving the local player.
+        var pairStatusBefore = _negotiationData.GetNegotiationStatus(sender, targetPlayer);
         _negotiationData.UpdateStatus(sender, targetPlayer, status);
+
+        if (status == NegotiationStatus.Failed && pairStatusBefore != NegotiationStatus.Failed)
+        {
+            if (targetPlayer == ProgramConstants.PLAYERNAME)
+                host.AddNotice($"{sender} reported a failed tunnel negotiation with you.", Color.Red);
+            else
+                host.AddNotice($"Tunnel negotiation between {sender} and {targetPlayer} failed.", Color.Red);
+        }
 
         if (ping >= 0)
         {

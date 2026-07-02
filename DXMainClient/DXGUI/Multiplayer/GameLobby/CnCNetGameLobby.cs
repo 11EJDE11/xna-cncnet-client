@@ -1127,6 +1127,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 {
                     AddNotice("Cannot start game: Some tunnel negotiations have failed.", Color.Red);
                     ShowFailedNegotiations();
+
+                    // Put the recovery tool in front of the host: the negotiation status panel
+                    // lists the failed pairs and carries the Renegotiate All button.
+                    if (!_negotiationStatusPanel.Enabled)
+                    {
+                        _negotiationStatusPanel.Enable();
+                        UpdateNegotiationUI();
+                    }
+
                     return;
                 }
 
@@ -1205,7 +1214,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 AddNotice("Failed negotiations between:", Color.Red);
                 foreach (var (p1, p2) in failedPairs)
                     AddNotice($" {p1} <-> {p2}", Color.Red);
-                AddNotice("Consider changing tunnel mode or having affected players rejoin.", Color.Yellow);
+                AddNotice("Use the Renegotiate All button (or type /renegotiate) to retry. If failures persist, consider changing tunnel mode or having the affected players rejoin.", Color.Yellow);
             }
         }
 
@@ -1593,6 +1602,22 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void TriggerRenegotiateAll()
         {
+            // One renegotiation round at a time: firing another while one is running tears
+            // down in-flight negotiations whose stale packets then corrupt the fresh round.
+            // Local negotiations aren't enough — the host's own pairs can finish while a pair
+            // between two other players is still negotiating (their reports say InProgress),
+            // and a RENEGALL landing mid-round on them is just as destructive.
+            var playerNames = Players.Select(p => p.Name).ToList();
+            bool remoteNegotiationRunning = _negotiator.NegotiationData
+                .GetIncompleteNegotiations(playerNames)
+                .Any(pair => pair.status == NegotiationStatus.InProgress);
+
+            if (_negotiator.HasActiveNegotiations || remoteNegotiationRunning)
+            {
+                AddNotice("Tunnel negotiations are already in progress. Wait for them to finish before renegotiating.".L10N("Client:Main:RenegotiateAlreadyRunning"), Color.Yellow);
+                return;
+            }
+
             AddNotice("Requesting all players renegotiate tunnel connections...".L10N("Client:Main:RenegotiateAllSent"));
             channel.SendCTCPMessage(TunnelNegotiationCommands.RenegotiateAll, QueuedMessageType.SYSTEM_MESSAGE, 10);
             _negotiator.RestartAllNegotiations();
@@ -2127,11 +2152,19 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             string[] parts = message.Split(';');
 
             if (parts.Length != (Players.Count * 3) + 1)
+            {
+                Logger.Log($"NonHostLaunchGameV3: Invalid start message: expected {(Players.Count * 3) + 1} parts for {Players.Count} players, got {parts.Length}.");
+                NotifyStartFailed();
                 return;
+            }
 
             UniqueGameID = Conversions.IntFromString(parts[0], -1);
             if (UniqueGameID < 0)
+            {
+                Logger.Log("NonHostLaunchGameV3: Invalid game ID in start message.");
+                NotifyStartFailed();
                 return;
+            }
 
             var recentPlayers = new List<string>();
 
@@ -2139,13 +2172,29 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 int offset = 1 + i * 3;
                 if (!_negotiator.ApplyV3StartEntry(parts, offset, i))
+                {
+                    Logger.Log($"NonHostLaunchGameV3: Could not apply start entry for player at position {i}.");
+                    NotifyStartFailed();
                     return;
+                }
 
                 recentPlayers.Add(parts[offset + 1]);
             }
 
             cncnetUserData.AddRecentPlayers(recentPlayers, channel.UIName);
             StartGame();
+        }
+
+        /// <summary>
+        /// Tells the player their client could not act on the host's game start message —
+        /// everyone else launches, so silence here would leave them stranded in the lobby
+        /// with no explanation.
+        /// </summary>
+        private void NotifyStartFailed()
+        {
+            AddNotice(("Failed to process the game start message from the host. The game was started " +
+                "without you; the host's player list may be out of sync with yours. Try rejoining the game.").L10N("Client:Main:StartMessageInvalid"),
+                ERROR_MESSAGE_COLOR);
         }
 
         protected override void StartGame()

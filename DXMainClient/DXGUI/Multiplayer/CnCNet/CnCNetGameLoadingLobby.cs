@@ -620,15 +620,35 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             string[] parts = data.Split(';');
 
             if (parts.Length != Players.Count * 3)
+            {
+                Logger.Log($"HandleStartGameV3Command: Invalid start message: expected {Players.Count * 3} parts for {Players.Count} players, got {parts.Length}.");
+                NotifyStartFailed();
                 return;
+            }
 
             for (int i = 0; i < Players.Count; i++)
             {
                 if (!_negotiator.ApplyV3StartEntry(parts, i * 3, i))
+                {
+                    Logger.Log($"HandleStartGameV3Command: Could not apply start entry for player at position {i}.");
+                    NotifyStartFailed();
                     return;
+                }
             }
 
             StartV3Game();
+        }
+
+        /// <summary>
+        /// Tells the player their client could not act on the host's game start message —
+        /// everyone else launches, so silence here would leave them stranded in the lobby
+        /// with no explanation.
+        /// </summary>
+        private void NotifyStartFailed()
+        {
+            AddNotice(("Failed to process the game start message from the host. The game was started " +
+                "without you; the host's player list may be out of sync with yours. Try rejoining the game.").L10N("Client:Main:StartMessageInvalid"),
+                Color.Red);
         }
 
         private void HandlePlayerReadyRequest(string sender, int readyStatus)
