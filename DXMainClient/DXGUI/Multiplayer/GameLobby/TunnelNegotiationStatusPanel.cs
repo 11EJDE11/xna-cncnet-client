@@ -391,39 +391,9 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         texRed ??= AssetLoader.CreateTexture(new Color(200, 0, 0, 200), 1, 1);
     }
 
-    private void UpdateCell(XNALabel cell, NegotiationStatus status, PingValue? ping)
+    private static void UpdateCell(XNALabel cell, NegotiationStatus status, PingValue? ping)
     {
-        switch (status)
-        {
-            case NegotiationStatus.NotStarted:
-                cell.Text = "-";
-                cell.TextColor = Color.Gray;
-                break;
-            case NegotiationStatus.InProgress:
-                cell.Text = "...";
-                cell.TextColor = Color.Yellow;
-                break;
-            case NegotiationStatus.Succeeded:
-                if (ping.HasValue)
-                {
-                    cell.Text = ping.Value.ToString();
-                    cell.TextColor = GetPingColor(ping.Value.Milliseconds);
-                }
-                else
-                {
-                    cell.Text = "OK".L10N("Client:Main:NegStatusOK");
-                    cell.TextColor = Color.LightGreen;
-                }
-                break;
-            case NegotiationStatus.Failed:
-                cell.Text = "FAIL".L10N("Client:Main:NegStatusFail");
-                cell.TextColor = Color.Red;
-                break;
-            default:
-                cell.Text = "?";
-                cell.TextColor = Color.Gray;
-                break;
-        }
+        (cell.Text, cell.TextColor) = GetListRowLabel(status, ping);
     }
 
     /// <summary>

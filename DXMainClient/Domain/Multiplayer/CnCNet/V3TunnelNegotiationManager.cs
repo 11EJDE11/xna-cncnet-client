@@ -5,8 +5,10 @@ using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 
 using ClientCore;
+using ClientCore.Extensions;
 
 using Microsoft.Xna.Framework;
 using Rampastring.Tools;
@@ -153,7 +155,7 @@ public class V3TunnelNegotiationManager
         var availableTunnels = GetAvailableTunnelsForNegotiation();
         if (availableTunnels.Count == 0)
         {
-            host.AddNotice("Cannot negotiate tunnel: no V3 tunnels are available. Wait for the tunnel list to refresh or switch to a different tunnel mode.", Color.Yellow);
+            host.AddNotice("Cannot negotiate tunnel: no V3 tunnels are available. Wait for the tunnel list to refresh or switch to a different tunnel mode.".L10N("Client:Main:NegotiationNoTunnels"), Color.Yellow);
             BroadcastNegotiationInfo();
             host.OnNegotiationStateChanged();
             return;
@@ -201,7 +203,7 @@ public class V3TunnelNegotiationManager
 
     private void MarkNegotiationFailed(string playerName, PlayerInfo? pInfo)
     {
-        host.AddNotice($"Could not start tunnel negotiation with {playerName}.", Color.Red);
+        host.AddNotice(string.Format("Could not start tunnel negotiation with {0}.".L10N("Client:Main:NegotiationStartFailed"), playerName), Color.Red);
 
         _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, playerName, NegotiationStatus.Failed);
         BroadcastNegotiationInfo();
@@ -242,7 +244,7 @@ public class V3TunnelNegotiationManager
             v3PlayerInfo.Tunnel = e.ChosenTunnel;
 
             if (e.IsRelayFallback)
-                host.AddNotice($"Direct connection with {e.PlayerName} could not be established; using relay server {e.ChosenTunnel.Name}.", Color.Orange);
+                host.AddNotice(string.Format("Direct connection with {0} could not be established; using relay server {1}.".L10N("Client:Main:P2PRelayFallback"), e.PlayerName, e.ChosenTunnel.Name), Color.Orange);
 
             // Only re-broadcast when the pair's ping/status actually changed, so a P2P
             // upgrade is propagated to everyone while a round-2 that simply re-confirms
@@ -275,7 +277,7 @@ public class V3TunnelNegotiationManager
             if (pairStatusBefore != NegotiationStatus.Failed)
             {
                 string reason = string.IsNullOrEmpty(e.FailureReason) ? string.Empty : $" ({e.FailureReason})";
-                host.AddNotice($"Tunnel negotiation with {e.PlayerName} failed{reason}.", Color.Red);
+                host.AddNotice(string.Format("Tunnel negotiation with {0} failed{1}.".L10N("Client:Main:NegotiationFailedWith"), e.PlayerName, reason), Color.Red);
             }
 
             _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, e.PlayerName, NegotiationStatus.Failed);
@@ -361,9 +363,9 @@ public class V3TunnelNegotiationManager
         if (status == NegotiationStatus.Failed && pairStatusBefore != NegotiationStatus.Failed)
         {
             if (targetPlayer == ProgramConstants.PLAYERNAME)
-                host.AddNotice($"{sender} reported a failed tunnel negotiation with you.", Color.Red);
+                host.AddNotice(string.Format("{0} reported a failed tunnel negotiation with you.".L10N("Client:Main:NegotiationFailedWithYou"), sender), Color.Red);
             else
-                host.AddNotice($"Tunnel negotiation between {sender} and {targetPlayer} failed.", Color.Red);
+                host.AddNotice(string.Format("Tunnel negotiation between {0} and {1} failed.".L10N("Client:Main:NegotiationFailedBetween"), sender, targetPlayer), Color.Red);
         }
 
         if (ping >= 0)
@@ -441,6 +443,70 @@ public class V3TunnelNegotiationManager
     }
 
     /// <summary>
+    /// True while a pre-launch connectivity check is running, so the lobby can refuse a
+    /// second launch attempt instead of starting overlapping checks.
+    /// </summary>
+    public bool LaunchConnectivityCheckInProgress { get; private set; }
+
+    /// <summary>
+    /// Pings every remote player over their negotiated tunnel and waits (briefly, off the
+    /// game thread) for fresh pongs. Normal launches gain only one round trip. Invokes
+    /// <paramref name="onVerified"/> on the game thread once every player has responded and
+    /// negotiations are still all successful; otherwise notices the problem and aborts.
+    /// </summary>
+    public void BeginLaunchConnectivityCheck(Action onVerified)
+    {
+        LaunchConnectivityCheckInProgress = true;
+        host.AddNotice("Verifying player connections...".L10N("Client:Main:VerifyingConnections"), Color.White);
+
+        Task.Run(async () =>
+        {
+            List<uint> unresponsiveIds;
+
+            try
+            {
+                unresponsiveIds = await tunnelHandler.KeepAliveMonitor.ProbeTargetsAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Launch connectivity check failed: {ex.Message}");
+                unresponsiveIds = new List<uint>();
+            }
+
+            windowManager.AddCallback(new Action<List<uint>, Action>(FinishLaunchConnectivityCheck), unresponsiveIds, onVerified);
+        });
+    }
+
+    private void FinishLaunchConnectivityCheck(List<uint> unresponsiveIds, Action onVerified)
+    {
+        LaunchConnectivityCheckInProgress = false;
+
+        if (!host.IsHost || host.TunnelMode != TunnelMode.V3Dynamic || host.Players.Count <= 1)
+            return;
+
+        if (unresponsiveIds.Count > 0)
+        {
+            foreach (uint id in unresponsiveIds)
+            {
+                string name = _v3PlayerInfos.FirstOrDefault(p => p.Id == id)?.Name ?? id.ToString("x8");
+                host.AddNotice(string.Format("No response from {0} — they may have disconnected.".L10N("Client:Main:LaunchCheckNoResponse"), name), Color.Red);
+            }
+
+            host.AddNotice("Launch aborted.".L10N("Client:Main:LaunchCheckAborted"), Color.Red);
+            return;
+        }
+
+        // The lobby can change while the check runs (join/leave, renegotiation).
+        if (!AreAllNegotiationsSuccessful())
+        {
+            host.AddNotice("Player connections changed during the check; launch cancelled.".L10N("Client:Main:LaunchCheckStateChanged"), Color.Yellow);
+            return;
+        }
+
+        onVerified();
+    }
+
+    /// <summary>
     /// Returns remote players whose negotiated tunnel matches the given address/port.
     /// </summary>
     public List<V3PlayerInfo> FindRemotePlayersUsingTunnel(string address, int port)
@@ -448,6 +514,42 @@ public class V3TunnelNegotiationManager
             .Where(p => p.Name != ProgramConstants.PLAYERNAME &&
                         p.Tunnel?.Address == address && p.Tunnel?.Port == port)
             .ToList();
+
+    /// <summary>
+    /// Reacts to a tunnel failure in dynamic mode by renegotiating with the players routed
+    /// through it: notifies the lobby, broadcasts TunnelRenegotiate so remote clients restart
+    /// the same pairs, and restarts the affected negotiations.
+    /// Returns false in non-dynamic modes so the caller can run its own fallback.
+    /// </summary>
+    public bool TryHandleTunnelFailure(CnCNetTunnel failedTunnel)
+    {
+        if (host.TunnelMode != TunnelMode.V3Dynamic)
+            return false;
+
+        var affectedPlayers = FindRemotePlayersUsingTunnel(failedTunnel.Address, failedTunnel.Port);
+
+        if (affectedPlayers.Count > 0)
+        {
+            host.AddNotice(string.Format("Tunnel {0} failed. Starting renegotiation with affected players...".L10N("Client:Main:TunnelFailedRenegotiating"), failedTunnel.Name), Color.Orange);
+            host.SendChannelCTCP($"{TunnelNegotiationCommands.TunnelRenegotiate} {failedTunnel.Address}:{failedTunnel.Port}", 10);
+            RestartNegotiations(affectedPlayers);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Points every V3 player at the given tunnel. Only relevant in static mode, where all
+    /// players share the host-selected tunnel; no-op in other modes.
+    /// </summary>
+    public void ApplyStaticTunnel(CnCNetTunnel tunnel)
+    {
+        if (host.TunnelMode != TunnelMode.V3Static)
+            return;
+
+        foreach (var v3Player in _v3PlayerInfos)
+            v3Player.Tunnel = tunnel;
+    }
 
     /// <summary>Tears down and restarts negotiations with every remote player.</summary>
     public void RestartAllNegotiations()
@@ -519,10 +621,15 @@ public class V3TunnelNegotiationManager
 
         if (remoteV3Player.Tunnel?.Address == tunnelAddress && remoteV3Player.Tunnel?.Port == tunnelPort)
         {
-            host.AddNotice($"{sender} needs to renegotiate tunnel. Starting renegotiation...", Color.Orange);
+            host.AddNotice(string.Format("{0} needs to renegotiate tunnel. Starting renegotiation...".L10N("Client:Main:PeerRenegotiating"), sender), Color.Orange);
             RestartNegotiations(new[] { remoteV3Player });
         }
     }
+
+    /// <summary>
+    /// Surfaces a remote player's tunnel-failure report in the lobby chat.
+    /// </summary>
+    public void HandleRemoteTunnelFailed(string sender, string tunnelName) => host.AddNotice(string.Format("{0} can no longer connect to tunnel: {1}. The host needs to change the tunnel or the game won't start.".L10N("Client:Main:PlayerTunnelFailed"), sender, tunnelName), Color.Orange);
 
     /// <summary>
     /// Removes a single player's V3 negotiation state (the lobby still owns its own player list).
@@ -712,7 +819,7 @@ public class V3TunnelNegotiationManager
         {
             // The peer answers again (e.g. cable replugged) — the negotiated path works,
             // so bring the pair back rather than requiring a full renegotiation.
-            host.AddNotice($"Connection with {player.Name} restored.", Color.LightGreen);
+            host.AddNotice(string.Format("Connection with {0} restored.".L10N("Client:Main:ConnectionRestored"), player.Name), Color.LightGreen);
             _negotiationData.UpdateStatus(localName, player.Name, NegotiationStatus.Succeeded);
             _negotiationData.UpdatePing(localName, player.Name, rttMs);
             BroadcastNegotiationInfo();
@@ -760,7 +867,7 @@ public class V3TunnelNegotiationManager
         if (_negotiationData.GetReportedStatus(localName, player.Name) != NegotiationStatus.Succeeded)
             return;
 
-        host.AddNotice($"Lost connection with {player.Name} — they are not responding to connection checks.", Color.Red);
+        host.AddNotice(string.Format("Lost connection with {0} — they are not responding to connection checks.".L10N("Client:Main:ConnectionLostKeepAlive"), player.Name), Color.Red);
 
         _negotiationData.UpdateStatus(localName, player.Name, NegotiationStatus.Failed);
         BroadcastNegotiationInfo();

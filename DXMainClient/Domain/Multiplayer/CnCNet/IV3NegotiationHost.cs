@@ -22,11 +22,19 @@ public interface IV3NegotiationHost
 
     TunnelMode TunnelMode { get; }
 
+    /// <summary>Whether the local player hosts the game.</summary>
+    bool IsHost { get; }
+
     /// <summary>
     /// Sends a full-state negotiation report to the channel as a coalescing GAME_NEGOTIATION_MESSAGE
     /// (replaces any previously queued report, so rapid state changes collapse to one wire message).
     /// </summary>
     void SendNegotiationReport(string message);
+
+    /// <summary>
+    /// Sends a CTCP system message to the game channel with the given queue priority.
+    /// </summary>
+    void SendChannelCTCP(string message, int priority);
 
     /// <summary>Adds a notice to the lobby chat.</summary>
     void AddNotice(string message, Color color);

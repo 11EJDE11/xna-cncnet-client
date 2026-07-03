@@ -1,5 +1,7 @@
 using ClientCore.Extensions;
 
+#nullable enable
+
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 
 public enum TunnelMode
@@ -11,6 +13,14 @@ public enum TunnelMode
 
 internal static class TunnelModeExtensions
 {
+    /// <summary>
+    /// Derives the tunnel mode from the host-selected tunnel: no tunnel means dynamic
+    /// negotiation, otherwise the tunnel's protocol version decides.
+    /// </summary>
+    public static TunnelMode FromTunnel(CnCNetTunnel? tunnel) => tunnel == null
+        ? TunnelMode.V3Dynamic
+        : tunnel.Version == 2 ? TunnelMode.V2Legacy : TunnelMode.V3Static;
+
     /// <summary>
     /// A human-readable description of the tunnel mode, used in lobby notices.
     /// </summary>

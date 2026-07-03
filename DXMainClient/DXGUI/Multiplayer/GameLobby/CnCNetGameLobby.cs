@@ -17,7 +17,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using ClientCore.Extensions;
 using System.Net;
@@ -316,9 +315,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             _negotiator.RegenerateV3PlayerInfos();
 
-            this._tunnelMode = tunnel == null ? TunnelMode.V3Dynamic
-                : tunnel.Version == 2 ? TunnelMode.V2Legacy
-                : TunnelMode.V3Static;
+            this._tunnelMode = TunnelModeExtensions.FromTunnel(tunnel);
 
             if (isHost)
             {
@@ -364,33 +361,19 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (tunnelHandler.GameTunnelBridge != null && tunnelHandler.GameTunnelBridge.IsRunning)
                 return;
 
-            if (_tunnelMode == TunnelMode.V3Dynamic)
+            if (_negotiator.TryHandleTunnelFailure(failedTunnel))
+                return;
+
+            if (IsHost)
             {
-                var affectedPlayers = _negotiator.FindRemotePlayersUsingTunnel(failedTunnel.Address, failedTunnel.Port);
-
-                if (affectedPlayers.Count > 0)
-                {
-                    AddNotice($"Tunnel {failedTunnel.Name} failed. Starting renegotiation with affected players...", Color.Orange);
-
-                    channel.SendCTCPMessage($"{TunnelNegotiationCommands.TunnelRenegotiate} {failedTunnel.Address}:{failedTunnel.Port}",
-                        QueuedMessageType.SYSTEM_MESSAGE, 10);
-
-                    _negotiator.RestartNegotiations(affectedPlayers);
-                }
+                AddNotice(string.Format("Tunnel {0} failed. Selecting a new tunnel...".L10N("Client:Main:TunnelFailedSelectingNew"), failedTunnel.Name), Color.Orange);
+                AutoSelectBestTunnel();
             }
             else
             {
-                if (IsHost)
-                {
-                    AddNotice($"Tunnel {failedTunnel.Name} failed. Selecting a new tunnel...", Color.Orange);
-                    AutoSelectBestTunnel();
-                }
-                else
-                {
-                    AddNotice($"Tunnel {failedTunnel.Name} failed. Waiting for host to select a new tunnel...", Color.Orange);
-                    channel.SendCTCPMessage($"{TunnelNegotiationCommands.TunnelFailed} {failedTunnel.Name}",
-                        QueuedMessageType.SYSTEM_MESSAGE, 10);
-                }
+                AddNotice(string.Format("Tunnel {0} failed. Waiting for host to select a new tunnel...".L10N("Client:Main:TunnelFailedWaitingForHost"), failedTunnel.Name), Color.Orange);
+                channel.SendCTCPMessage($"{TunnelNegotiationCommands.TunnelFailed} {failedTunnel.Name}",
+                    QueuedMessageType.SYSTEM_MESSAGE, 10);
             }
         }
 
@@ -1138,7 +1121,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         protected override void HostLaunchGame()
         {
-            if (launchConnectivityCheckInProgress)
+            if (_negotiator.LaunchConnectivityCheckInProgress)
             {
                 AddNotice("Still verifying player connections...".L10N("Client:Main:VerifyingConnectionsWait"), Color.Yellow);
                 return;
@@ -1150,7 +1133,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                 if (failed > 0)
                 {
-                    AddNotice("Cannot start game: Some tunnel negotiations have failed.", Color.Red);
+                    AddNotice("Cannot start game: Some tunnel negotiations have failed.".L10N("Client:Main:CannotStartNegotiationsFailed"), Color.Red);
                     ShowFailedNegotiations();
 
                     // Put the recovery tool in front of the host: the negotiation status panel
@@ -1167,7 +1150,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 if (incomplete > 0)
                 {
                     var incompleteNegotiations = _negotiator.NegotiationData.GetIncompleteNegotiations(Players.Select(p => p.Name).ToList());
-                    AddNotice("Waiting for negotiations between:", Color.Yellow);
+                    AddNotice("Waiting for negotiations between:".L10N("Client:Main:WaitingForNegotiations"), Color.Yellow);
                     foreach (var (p1, p2, status) in incompleteNegotiations)
                         AddNotice($"  {p1} <-> {p2} ({status.GetDescription()})", Color.Yellow);
                     return;
@@ -1200,8 +1183,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     // Double-check everyone is still reachable before STARTV3 goes out over
                     // IRC — IRC can take minutes to notice a dead connection, and a start
                     // command sent to a player who never receives it strands the rest at the
-                    // loading screen. Launch continues from FinishLaunchConnectivityCheck.
-                    BeginLaunchConnectivityCheck();
+                    // loading screen. Launch continues from FinishV3DynamicLaunch.
+                    _negotiator.BeginLaunchConnectivityCheck(FinishV3DynamicLaunch);
                     return;
                 }
                 else if (tunnelHandler.CurrentTunnel?.Version == 3)
@@ -1215,61 +1198,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             StartGame();
         }
 
-        private bool launchConnectivityCheckInProgress;
-
         /// <summary>
-        /// Pings every remote player over their negotiated tunnel and waits (briefly, off
-        /// the game thread) for fresh pongs. Normal launches gain only one round trip.
+        /// Launch tail for V3 dynamic mode, run once the pre-launch connectivity check verifies
+        /// that every player is still reachable.
         /// </summary>
-        private void BeginLaunchConnectivityCheck()
+        private void FinishV3DynamicLaunch()
         {
-            launchConnectivityCheckInProgress = true;
-            AddNotice("Verifying player connections...".L10N("Client:Main:VerifyingConnections"));
-
-            Task.Run(async () =>
-            {
-                List<uint> unresponsiveIds;
-
-                try
-                {
-                    unresponsiveIds = await tunnelHandler.KeepAliveMonitor.ProbeTargetsAsync().ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"Launch connectivity check failed: {ex.Message}");
-                    unresponsiveIds = new List<uint>();
-                }
-
-                WindowManager.AddCallback(new Action<List<uint>>(FinishLaunchConnectivityCheck), unresponsiveIds);
-            });
-        }
-
-        private void FinishLaunchConnectivityCheck(List<uint> unresponsiveIds)
-        {
-            launchConnectivityCheckInProgress = false;
-
-            if (!IsHost || _tunnelMode != TunnelMode.V3Dynamic || Players.Count <= 1)
-                return;
-
-            if (unresponsiveIds.Count > 0)
-            {
-                foreach (uint id in unresponsiveIds)
-                {
-                    string name = _negotiator.PlayerInfos.FirstOrDefault(p => p.Id == id)?.Name ?? id.ToString("x8");
-                    AddNotice(string.Format("No response from {0} — they may have disconnected.".L10N("Client:Main:LaunchCheckNoResponse"), name), Color.Red);
-                }
-
-                AddNotice("Launch aborted.".L10N("Client:Main:LaunchCheckAborted"), Color.Red);
-                return;
-            }
-
-            // The lobby can change while the check runs (join/leave, renegotiation).
-            if (!_negotiator.AreAllNegotiationsSuccessful())
-            {
-                AddNotice("Player connections changed during the check; launch cancelled.".L10N("Client:Main:LaunchCheckStateChanged"), Color.Yellow);
-                return;
-            }
-
             SendStartV3ToPlayers();
             cncnetUserData.AddRecentPlayers(Players.Select(p => p.Name), channel.UIName);
             StartGame();
@@ -1305,10 +1239,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (failedPairs.Count > 0)
             {
-                AddNotice("Failed negotiations between:", Color.Red);
+                AddNotice("Failed negotiations between:".L10N("Client:Main:FailedNegotiationsBetween"), Color.Red);
                 foreach (var (p1, p2) in failedPairs)
                     AddNotice($" {p1} <-> {p2}", Color.Red);
-                AddNotice("Use the Renegotiate All button (or type /renegotiate) to retry. If failures persist, consider changing tunnel mode or having the affected players rejoin.", Color.Yellow);
+                AddNotice("Use the Renegotiate All button (or type /renegotiate) to retry. If failures persist, consider changing tunnel mode or having the affected players rejoin.".L10N("Client:Main:RenegotiateHint"), Color.Yellow);
             }
         }
 
@@ -1320,8 +1254,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         TunnelMode IV3NegotiationHost.TunnelMode => _tunnelMode;
 
+        bool IV3NegotiationHost.IsHost => IsHost;
+
         void IV3NegotiationHost.SendNegotiationReport(string message)
             => channel.SendCTCPMessage(message, QueuedMessageType.GAME_NEGOTIATION_MESSAGE, 10);
+
+        void IV3NegotiationHost.SendChannelCTCP(string message, int priority)
+            => channel.SendCTCPMessage(message, QueuedMessageType.SYSTEM_MESSAGE, priority);
 
         void IV3NegotiationHost.AddNotice(string message, Color color) => AddNotice(message, color);
 
@@ -1725,48 +1664,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void CheckAllNegotiationsComplete()
         {
-            if (_tunnelMode != TunnelMode.V3Dynamic)
+            if (_tunnelMode != TunnelMode.V3Dynamic || Players.Count <= 1)
                 return;
 
-            if (Players.Count <= 1)
-                return;
-
-            bool anyNegotiationStarted = false;
-            bool allComplete = true;
-            int totalNegotiations = 0;
-
-            for (int i = 0; i < Players.Count; i++)
+            if (_negotiator.AreAllNegotiationsSuccessful() && !_allNegotiationsCompleteMessageShown)
             {
-                for (int j = i + 1; j < Players.Count; j++)
-                {
-                    totalNegotiations++;
-
-                    var status = GetNegotiationStatus(Players[i].Name, Players[j].Name);
-
-                    if (status != NegotiationStatus.NotStarted)
-                        anyNegotiationStarted = true;
-
-                    if (status == NegotiationStatus.InProgress || status == NegotiationStatus.NotStarted
-                        || status == NegotiationStatus.Failed)
-                        allComplete = false;
-                }
-            }
-
-            if (allComplete && anyNegotiationStarted && totalNegotiations > 0)
-            {
-                if (!_allNegotiationsCompleteMessageShown)
-                {
-                    _allNegotiationsCompleteMessageShown = true;
-                    CheckHighPingPairs();
-                }
+                _allNegotiationsCompleteMessageShown = true;
+                CheckHighPingPairs();
             }
 
             UpdateLaunchGameButtonStatus();
-        }
-
-        private NegotiationStatus GetNegotiationStatus(string player1, string player2)
-        {
-            return _negotiator.NegotiationData.GetNegotiationStatus(player1, player2);
         }
 
         private void CheckHighPingPairs()
@@ -1783,7 +1690,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (highPingPairs.Count > 0)
             {
-                AddNotice("Warning: The following player pairs have high ping:", Color.Yellow);
+                AddNotice("Warning: The following player pairs have high ping:".L10N("Client:Main:HighPingPairsWarning"), Color.Yellow);
                 foreach (var (p1, p2, ping) in highPingPairs)
                     AddNotice($"  {p1} <-> {p2}: {ping}ms", Color.Yellow);
             }
@@ -2688,11 +2595,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void HandleTunnelRenegotiateMessage(string sender, string tunnelAddressAndPort) => _negotiator.HandleRemoteTunnelRenegotiate(sender, tunnelAddressAndPort);
 
-        private void HandleTunnelFailedMessage(string sender, string tunnelName)
-        {
-            AddNotice($"{sender} can no longer connect to tunnel: {tunnelName}. The host needs to change the tunnel or the game won't start.", Color.Orange);
-        }
-
+        private void HandleTunnelFailedMessage(string sender, string tunnelName) => _negotiator.HandleRemoteTunnelFailed(sender, tunnelName);
 
         private void AutoSelectBestTunnel()
         {
@@ -2707,7 +2610,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (bestTunnel != null)
             {
-                AddNotice($"Auto-selected tunnel: {bestTunnel.Name} (Ping: {bestTunnel.Ping.Milliseconds}ms)");
+                AddNotice(string.Format("Auto-selected tunnel: {0} (Ping: {1}ms)".L10N("Client:Main:AutoSelectedTunnel"), bestTunnel.Name, bestTunnel.Ping.Milliseconds));
                 channel.SendCTCPMessage($"{TunnelNegotiationCommands.ChangeTunnelServer} {bestTunnel.Address}:{bestTunnel.Port}",
                     QueuedMessageType.SYSTEM_MESSAGE, 10);
                 HandleTunnelServerChange(bestTunnel);
@@ -2742,11 +2645,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             CopyPlayerDataToUI();
             UpdatePing();
 
-            if (_tunnelMode == TunnelMode.V3Static)
-            {
-                foreach (var v3Player in _negotiator.PlayerInfos)
-                    v3Player.Tunnel = tunnel;
-            }
+            _negotiator.ApplyStaticTunnel(tunnel);
         }
 
         protected override bool UpdateLaunchGameButtonStatus()
