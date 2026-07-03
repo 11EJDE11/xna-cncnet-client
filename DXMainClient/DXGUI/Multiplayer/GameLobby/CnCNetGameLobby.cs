@@ -1624,6 +1624,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (sender != hostName || IsHost)
                 return;
 
+            // The running game routes its traffic through the current tunnels; tearing
+            // them down would freeze or break it. RestartNegotiations refuses too — this
+            // early-out just avoids a misleading "renegotiating" chat notice.
+            if (ProgramConstants.IsInGame)
+            {
+                Logger.Log("Ignored a renegotiate-all request because the game is running.");
+                return;
+            }
+
             AddNotice(string.Format("{0} has requested all players renegotiate tunnel connections.".L10N("Client:Main:RenegotiateAllReceived"), sender));
             _negotiator.RestartAllNegotiations();
         }

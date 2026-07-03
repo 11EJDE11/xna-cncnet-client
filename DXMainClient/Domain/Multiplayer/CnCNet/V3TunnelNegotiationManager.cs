@@ -526,6 +526,12 @@ public class V3TunnelNegotiationManager
         if (host.TunnelMode != TunnelMode.V3Dynamic)
             return false;
 
+        // Broadcasting TunnelRenegotiate now would make lobby-side peers restart their
+        // pair with us while we can't reciprocate, stranding the pair. The keepalive
+        // monitor will surface a genuinely dead path after we return to the lobby.
+        if (ProgramConstants.IsInGame)
+            return true;
+
         var affectedPlayers = FindRemotePlayersUsingTunnel(failedTunnel.Address, failedTunnel.Port);
 
         if (affectedPlayers.Count > 0)
@@ -584,9 +590,35 @@ public class V3TunnelNegotiationManager
     /// </summary>
     public void RestartNegotiations(IEnumerable<V3PlayerInfo> affectedPlayers)
     {
-        host.OnNegotiationsRestarted();
+        // The game bridge routes live traffic through the negotiated paths, so no pair
+        // may be torn down while a game is running — neither when the local game is
+        // running nor for peers who are still in one.
+        if (ProgramConstants.IsInGame)
+        {
+            Logger.Log("V3TunnelNegotiationManager: Ignored a negotiation restart because the local game is running.");
+            return;
+        }
+
+        var playersToRestart = new List<V3PlayerInfo>();
+        var skippedPlayers = new List<string>();
 
         foreach (var v3Player in affectedPlayers.ToList())
+        {
+            if (host.Players.Find(p => p.Name == v3Player.Name)?.IsInGame == true)
+                skippedPlayers.Add(v3Player.Name);
+            else
+                playersToRestart.Add(v3Player);
+        }
+
+        if (skippedPlayers.Count > 0)
+            host.AddNotice(string.Format("Players currently in game were not renegotiated: {0}. Their existing connections were kept.".L10N("Client:Main:RenegotiateSkippedInGame"), string.Join(", ", skippedPlayers)), Color.Yellow);
+
+        if (playersToRestart.Count == 0)
+            return;
+
+        host.OnNegotiationsRestarted();
+
+        foreach (var v3Player in playersToRestart)
         {
             v3Player.StopNegotiation();
             CleanupP2PForPlayer(v3Player, keepChosenTunnel: false);
@@ -606,7 +638,7 @@ public class V3TunnelNegotiationManager
     /// </summary>
     public void HandleRemoteTunnelRenegotiate(string sender, string tunnelAddressAndPort)
     {
-        if (host.TunnelMode != TunnelMode.V3Dynamic)
+        if (host.TunnelMode != TunnelMode.V3Dynamic || ProgramConstants.IsInGame)
             return;
 
         string[] split = tunnelAddressAndPort.Split(':');
