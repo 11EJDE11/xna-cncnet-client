@@ -459,6 +459,11 @@ public class V3TunnelNegotiationManager
         LaunchConnectivityCheckInProgress = true;
         host.AddNotice("Verifying player connections...".L10N("Client:Main:VerifyingConnections"), Color.White);
 
+        var remoteIdsSnapshot = _v3PlayerInfos
+            .Where(p => p.Name != ProgramConstants.PLAYERNAME)
+            .Select(p => p.Id)
+            .ToList();
+
         Task.Run(async () =>
         {
             List<uint> unresponsiveIds;
@@ -470,7 +475,7 @@ public class V3TunnelNegotiationManager
             catch (Exception ex)
             {
                 Logger.Log($"Launch connectivity check failed: {ex.Message}");
-                unresponsiveIds = new List<uint>();
+                unresponsiveIds = remoteIdsSnapshot;
             }
 
             windowManager.AddCallback(new Action<List<uint>, Action>(FinishLaunchConnectivityCheck), unresponsiveIds, onVerified);
@@ -753,7 +758,11 @@ public class V3TunnelNegotiationManager
         if (v3PlayerInfo != null)
         {
             if (host.TunnelMode != TunnelMode.V3Dynamic)
+            {
                 v3PlayerInfo.Tunnel = tunnelHandler.Tunnels.Find(t => t.Address == ipAndPort[0] && t.Port == tunnelPort);
+                if (v3PlayerInfo.Tunnel == null)
+                    return false;
+            }
             v3PlayerInfo.PlayerIndex = playerPosition;
             v3PlayerInfo.PlayerGameId = (ushort)gamePort;
             v3PlayerInfo.Id = id;

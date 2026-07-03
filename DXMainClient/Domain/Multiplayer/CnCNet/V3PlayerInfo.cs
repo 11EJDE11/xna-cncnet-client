@@ -28,7 +28,7 @@ public class PingResult
     /// A task completion source that can be awaited
     /// until the ping succeeds or times out.
     /// </summary>
-    public TaskCompletionSource<bool> CompletionSource { get; set; } = new TaskCompletionSource<bool>();
+    public TaskCompletionSource<bool> CompletionSource { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 /// <summary>
@@ -91,12 +91,12 @@ public class TunnelTestResult
     /// <summary>
     /// A completion source that resolves when a "Connected" packet is received.
     /// </summary>
-    public TaskCompletionSource<bool> ConnectedTcs { get; } = new TaskCompletionSource<bool>();
+    public TaskCompletionSource<bool> ConnectedTcs { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>
     /// A completion source that resolves when all ping attempts are completed.
     /// </summary>
-    public TaskCompletionSource<bool> PingsCompletedTcs { get; } = new TaskCompletionSource<bool>();
+    public TaskCompletionSource<bool> PingsCompletedTcs { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public double? AverageRtt
     {

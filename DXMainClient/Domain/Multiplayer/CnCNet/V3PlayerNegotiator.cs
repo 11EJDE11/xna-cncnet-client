@@ -38,7 +38,7 @@ public class V3PlayerNegotiator : IDisposable
     /// </summary>
     private readonly bool _isDecider;
     private readonly bool _p2pEnabled;
-    private readonly TaskCompletionSource<IReadOnlyList<IPEndPoint>?> _p2pPeerEndpointTcs = new();
+    private readonly TaskCompletionSource<IReadOnlyList<IPEndPoint>?> _p2pPeerEndpointTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _negotiationCts = new();
     // Cached because Dispose() disposes _negotiationCts, and fire-and-forget tasks
     // (e.g. PerformPingsAsync) may still be running; reading Token off a disposed
@@ -52,7 +52,7 @@ public class V3PlayerNegotiator : IDisposable
     // volatile: reassigned for the P2P upgrade round on the negotiation task while the
     // communicator receive thread reads it in OnPacketReceived, so both must observe the
     // latest instance.
-    private volatile TaskCompletionSource<bool> _negotiationCompletionSource = new();
+    private volatile TaskCompletionSource<bool> _negotiationCompletionSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     // How long the non-decider will keep sending Connected packets overall.
     private const int NON_DECIDER_TOTAL_TIMEOUT_MS = 20000;
@@ -92,7 +92,7 @@ public class V3PlayerNegotiator : IDisposable
 
     // volatile: reassigned for the P2P upgrade round (see _negotiationCompletionSource) and
     // read by the receive thread when a TunnelAck arrives.
-    private volatile TaskCompletionSource<bool> _tunnelAckReceived = new(); //true when tunnel choice ack'd
+    private volatile TaskCompletionSource<bool> _tunnelAckReceived = new(TaskCreationOptions.RunContinuationsAsynchronously); //true when tunnel choice ack'd
 
     // The tunnel the decider's outstanding TunnelChoice was sent through. An ack only counts
     // if it arrives via the same path: TunnelAck doesn't identify which choice it acknowledges,
@@ -145,8 +145,8 @@ public class V3PlayerNegotiator : IDisposable
         {
             Logger.Log($"V3PlayerNegotiator: Starting negotiation with player {_remotePlayer.Name} (ID: {_remotePlayer.Id}, Decider: {_isDecider})");
 
-            _negotiationCompletionSource = new TaskCompletionSource<bool>();
-            _tunnelAckReceived = new TaskCompletionSource<bool>();
+            _negotiationCompletionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _tunnelAckReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _tunnelHandler.SendRegistrationToTunnels(_localPlayer.Id, TunnelsSnapshot());
 
@@ -243,7 +243,7 @@ public class V3PlayerNegotiator : IDisposable
         int completedTunnels = 0;
         bool selectionMade = false;
         var completionLock = new object();
-        var selectionTcs = new TaskCompletionSource<bool>();
+        var selectionTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         foreach (var tunnel in awaitTunnels)
         {
@@ -430,6 +430,8 @@ public class V3PlayerNegotiator : IDisposable
     private async Task PerformPingsAsync(CnCNetTunnel tunnel, TunnelTestResult result,
         int pingCount = PINGS_PER_TUNNEL, int pingTimeoutMs = PING_TIMEOUT_MS)
     {
+        int timedOutPings = 0;
+
         for (int i = 0; i < pingCount && !_negotiationToken.IsCancellationRequested; i++)
         {
             var ping = result.AddPing(i, Stopwatch.GetTimestamp());
@@ -452,7 +454,7 @@ public class V3PlayerNegotiator : IDisposable
                 var completedTask = await Task.WhenAny(ping.CompletionSource.Task, timeoutTask);
 
                 if (completedTask == timeoutTask)
-                    Logger.Log($"V3PlayerNegotiator: Ping timeout: ID {i} to {_remotePlayer.Name} on {tunnel.Name}");
+                    timedOutPings++;
             }
             catch (OperationCanceledException)
             {
@@ -460,6 +462,9 @@ public class V3PlayerNegotiator : IDisposable
                 break;
             }
         }
+
+        if (timedOutPings > 0 && !_negotiationToken.IsCancellationRequested)
+            Logger.Log($"V3PlayerNegotiator: {timedOutPings}/{pingCount} pings timed out to {_remotePlayer.Name} on {tunnel.Name}");
 
         result.PingsCompletedTcs.TrySetResult(true);
     }
@@ -804,8 +809,8 @@ public class V3PlayerNegotiator : IDisposable
 
         // Reset the per-round signals before any round-two packet can arrive, so a fast
         // TunnelChoice lands on this round's completion source rather than round one's.
-        _negotiationCompletionSource = new TaskCompletionSource<bool>();
-        _tunnelAckReceived = new TaskCompletionSource<bool>();
+        _negotiationCompletionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _tunnelAckReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // Punch from both sides so each NAT opens before pinging. The relay protocol only has
         // the non-decider send Connected, which is enough to reach a public relay server but not
@@ -844,8 +849,8 @@ public class V3PlayerNegotiator : IDisposable
 
             Logger.Log($"V3PlayerNegotiator: P2P upgrade with {_remotePlayer.Name} not agreed; re-offering relay {relayTunnel.Name}");
 
-            _negotiationCompletionSource = new TaskCompletionSource<bool>();
-            _tunnelAckReceived = new TaskCompletionSource<bool>();
+            _negotiationCompletionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _tunnelAckReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             var relayResult = _remotePlayer.GetTunnelResult(relayTunnel);
             double? relayRtt = relayResult?.AverageRtt;
