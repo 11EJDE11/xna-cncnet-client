@@ -1136,22 +1136,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             ddPlayerName.ToolTip.Text = string.Empty;
         }
 
-        private Texture2D GetTextureForPing(PingValue ping)
-        {
-            switch (PingQualityRules.GetTier(ping))
-            {
-                case PingQualityTier.Bad:
-                    return PingTextures[4];
-                case PingQualityTier.Poor:
-                    return PingTextures[3];
-                case PingQualityTier.Fair:
-                    return PingTextures[2];
-                case PingQualityTier.Good:
-                    return PingTextures[1];
-                default:
-                    return PingTextures[0];
-            }
-        }
+        private Texture2D GetTextureForPing(PingValue ping) => PingQualityVisuals.GetTexture(PingTextures, ping);
 
         protected abstract void BroadcastPlayerOptions();
 

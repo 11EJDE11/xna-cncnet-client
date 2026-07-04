@@ -48,10 +48,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     private readonly Dictionary<(string, string), XNALabel> statusCells = new Dictionary<(string, string), XNALabel>();
     private static Texture2D? sharedCellBackground;
     private static Texture2D? sharedBarBackground;
-    private static Texture2D? texGreen;
-    private static Texture2D? texYellow;
-    private static Texture2D? texOrange;
-    private static Texture2D? texRed;
+    private static Texture2D[]? pingBarTextures;
 
     public TunnelNegotiationStatusPanel(WindowManager windowManager) : base(windowManager)
     {
@@ -357,36 +354,25 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     {
         NegotiationStatus.NotStarted => ("-", Color.Gray),
         NegotiationStatus.InProgress => ("...", Color.Yellow),
-        NegotiationStatus.Succeeded when ping.HasValue => (ping.Value.ToString(), GetPingColor(ping.Value.Milliseconds)),
+        NegotiationStatus.Succeeded when ping.HasValue => (ping.Value.ToString(), PingQualityVisuals.GetTextColor(ping.Value)),
         NegotiationStatus.Succeeded => ("OK".L10N("Client:Main:NegStatusOK"), Color.LightGreen),
         NegotiationStatus.Failed => ("FAIL".L10N("Client:Main:NegStatusFail"), Color.Red),
         _ => ("?", Color.Gray)
     };
 
-    private static Color GetPingColor(int ms) => PingQualityRules.GetTier(ms) switch
-    {
-        PingQualityTier.Good => Color.LightGreen,
-        PingQualityTier.Fair => Color.Yellow,
-        PingQualityTier.Poor => Color.Orange,
-        PingQualityTier.Bad => Color.Red,
-        _ => Color.Gray
-    };
-
-    private static Texture2D GetPingTexture(int ms) => PingQualityRules.GetTier(ms) switch
-    {
-        PingQualityTier.Good => texGreen!,
-        PingQualityTier.Fair => texYellow!,
-        PingQualityTier.Poor => texOrange!,
-        _ => texRed!
-    };
-
     private static void EnsureBarTextures()
     {
         sharedBarBackground ??= AssetLoader.CreateTexture(new Color(30, 30, 30, 120), 1, 1);
-        texGreen ??= AssetLoader.CreateTexture(new Color(0, 180, 0, 200), 1, 1);
-        texYellow ??= AssetLoader.CreateTexture(new Color(200, 180, 0, 200), 1, 1);
-        texOrange ??= AssetLoader.CreateTexture(new Color(200, 100, 0, 200), 1, 1);
-        texRed ??= AssetLoader.CreateTexture(new Color(200, 0, 0, 200), 1, 1);
+
+        if (pingBarTextures != null)
+            return;
+
+        pingBarTextures = new Texture2D[PingQualityVisuals.TextureCount];
+        foreach (PingQualityTier tier in Enum.GetValues(typeof(PingQualityTier)))
+        {
+            pingBarTextures[PingQualityVisuals.GetTextureIndex(tier)] =
+                AssetLoader.CreateTexture(PingQualityVisuals.GetBarColor(tier), 1, 1);
+        }
     }
 
     private static void UpdateCell(XNALabel cell, NegotiationStatus status, PingValue? ping)
@@ -428,7 +414,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
                         new Rectangle(2, barY, LIST_BAR_MAX_WIDTH, barHeight), Color.White);
 
                     int fillWidth = Math.Max(2, Math.Min(LIST_BAR_MAX_WIDTH, ms * LIST_BAR_MAX_WIDTH / LIST_BAR_MAX_PING));
-                    DrawTexture(GetPingTexture(ms),
+                    DrawTexture(pingBarTextures![PingQualityVisuals.GetTextureIndex(ms)],
                         new Rectangle(2, barY, fillWidth, barHeight), Color.White);
                 }
 
