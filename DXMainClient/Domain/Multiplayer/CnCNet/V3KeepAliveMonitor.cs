@@ -45,6 +45,7 @@ public class V3KeepAliveMonitor
     // Snapshot list, replaced atomically by the negotiation manager (possibly from a
     // negotiation task) and read on the game loop thread.
     private volatile List<(uint remoteId, CnCNetTunnel tunnel)>? _targets;
+    private int _targetGeneration;
     private long _lastTickTicks;
     private long _lastRegistrationRefreshTicks;
     private readonly ConcurrentDictionary<uint, KeepAliveTracker> _trackers = new();
@@ -113,6 +114,8 @@ public class V3KeepAliveMonitor
     {
         _localId = localId;
         _targets = targets;
+        Interlocked.Increment(ref _targetGeneration);
+        _lastProbeReply = null;
     }
 
     /// <summary>Stops lobby keepalives. Call on lobby teardown or when leaving dynamic mode.</summary>
@@ -120,6 +123,9 @@ public class V3KeepAliveMonitor
     {
         _targets = null;
         _trackers.Clear();
+        Interlocked.Increment(ref _targetGeneration);
+        _lastProbeReply = null;
+        _probeReports = null;
     }
 
     /// <summary>
@@ -420,6 +426,8 @@ public class V3KeepAliveMonitor
         if (Interlocked.CompareExchange(ref _probeRunning, 1, 0) != 0)
             return; // probe already running; the requester's resend picks up the cached result
 
+        int targetGeneration = Volatile.Read(ref _targetGeneration);
+
         Task.Run(async () =>
         {
             try
@@ -437,6 +445,9 @@ public class V3KeepAliveMonitor
                 var payload = new byte[unresponsive.Count * 4];
                 for (int i = 0; i < unresponsive.Count; i++)
                     BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(i * 4), unresponsive[i]);
+
+                if (targetGeneration != Volatile.Read(ref _targetGeneration))
+                    return;
 
                 _lastProbeReply = new ProbeReply(payload, Stopwatch.GetTimestamp());
                 _communicator.SendPacket(tunnel, _localId, senderId, TunnelPacketType.ProbeReport, payload);

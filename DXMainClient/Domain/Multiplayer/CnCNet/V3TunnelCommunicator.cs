@@ -1,4 +1,3 @@
-﻿using ClientCore;
 using Rampastring.Tools;
 using System;
 using System.Buffers.Binary;
@@ -115,9 +114,7 @@ public class V3TunnelCommunicator
             if (IsInitialized)
                 return;
 
-            var v3Tunnels = tunnels.Where(t => t.Version == 3 && !t.IsDirect &&
-                (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended))
-                .ToList();
+            var v3Tunnels = tunnels.Where(IsV3RelayTunnel).ToList();
 
             if (v3Tunnels.Count == 0)
             {
@@ -167,7 +164,7 @@ public class V3TunnelCommunicator
             return;
 
         int added = 0;
-        foreach (var tunnel in tunnels.Where(t => t.Version == 3 && !t.IsDirect))
+        foreach (var tunnel in tunnels.Where(IsV3RelayTunnel))
         {
             var endpoint = new IPEndPoint(IPAddress.Parse(tunnel.Address), tunnel.Port);
 
@@ -181,6 +178,8 @@ public class V3TunnelCommunicator
         if (added > 0)
             Logger.Log($"V3TunnelCommunicator: Added {added} new tunnel endpoint(s) from refresh");
     }
+
+    private static bool IsV3RelayTunnel(CnCNetTunnel tunnel) => tunnel.Version == 3 && !tunnel.IsDirect;
 
     /// <summary>
     /// Registers a handler for packets between the specified local and remote IDs.
@@ -331,7 +330,7 @@ public class V3TunnelCommunicator
     }
 
     /// <summary>
-    /// Sends a packet to the specified receiver through the specified tunnel. 
+    /// Sends a packet to the specified receiver through the specified tunnel.
     /// </summary>
     /// <param name="tunnel">Target tunnel.</param>
     /// <param name="senderId">The sender's V3PlayerInfo ID.</param>

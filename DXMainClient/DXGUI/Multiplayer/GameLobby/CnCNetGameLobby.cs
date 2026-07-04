@@ -309,6 +309,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             this.isCustomPassword = isCustomPassword;
             this.skillLevel = ClientConfiguration.Instance.NormalizeSkillLevel(skillLevel);
             this.gameRoomName = channel.UIName;
+            tunnelErrorMode = false;
             
             hostUploadedMaps.Clear();
             chatCommandDownloadedMaps.Clear();
@@ -626,7 +627,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private void ShowTunnelSelectionWindow(string description)
         {
             tunnelSelectionWindow.Open(description,
-                tunnelHandler.CurrentTunnel?.Address,
+                tunnelHandler.CurrentTunnel,
                 _tunnelMode);
         }
 
@@ -823,6 +824,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             _negotiator.ClearAll();
             _allNegotiationsCompleteMessageShown = false;
+            tunnelErrorMode = false;
 
             _negotiationStatusPanel?.Disable();
 
@@ -2353,8 +2355,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             StopInactiveCheck();
 
-            channel.SendCTCPMessage("STRTD", QueuedMessageType.SYSTEM_MESSAGE, 20);
-
             if (_tunnelMode == TunnelMode.V3Dynamic || tunnelHandler.CurrentTunnel?.Version == 3)
             {
                 PlayerInfo localPlayer = FindLocalPlayer();
@@ -2367,6 +2367,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 if (!_negotiator.StartGameBridge())
                     return;
             }
+
+            channel.SendCTCPMessage("STRTD", QueuedMessageType.SYSTEM_MESSAGE, 20);
 
             base.StartGame();
         }
@@ -2520,9 +2522,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
 
             PlayerInfo pInfo = Players.Find(p => p.Name.Equals(sender));
-            if (pInfo != null && ping >= 0)
+            if (pInfo != null)
             {
-                pInfo.Ping = PingValue.FromMs(ping);
+                pInfo.Ping = ping >= 0 ? PingValue.FromMs(ping) : PingValue.Unknown;
                 UpdatePlayerPingIndicator(pInfo);
             }
         }

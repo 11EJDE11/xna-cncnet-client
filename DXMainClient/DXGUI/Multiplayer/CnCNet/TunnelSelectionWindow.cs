@@ -25,7 +25,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private XNADropDown ddMode;
         private XNAClientButton btnApply;
 
-        private string originalTunnelAddress;
+        private CnCNetTunnel originalTunnel;
         private TunnelMode originalMode;
 
         public override void Initialize()
@@ -115,7 +115,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             else
             {
                 bool modeChanged = mode != originalMode;
-                bool tunnelChanged = !lbTunnelList.IsTunnelSelected(originalTunnelAddress);
+                bool tunnelChanged = originalTunnel == null ||
+                    !lbTunnelList.IsTunnelSelected(originalTunnel.Address, originalTunnel.Port);
                 btnApply.AllowClick = lbTunnelList.IsValidIndexSelected() && (modeChanged || tunnelChanged);
             }
         }
@@ -140,10 +141,10 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         /// <summary>
         /// Opens the window with the given description, pre-selecting the current tunnel and mode.
         /// </summary>
-        public void Open(string description, string tunnelAddress = null, TunnelMode currentMode = TunnelMode.V3Dynamic)
+        public void Open(string description, CnCNetTunnel currentTunnel = null, TunnelMode currentMode = TunnelMode.V3Dynamic)
         {
             lblDescription.Text = description;
-            originalTunnelAddress = tunnelAddress;
+            originalTunnel = currentTunnel;
             originalMode = currentMode;
 
             // Set mode dropdown — fires DdMode_SelectedIndexChanged which updates tunnel list version filter
@@ -152,8 +153,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             bool isDynamic = currentMode == TunnelMode.V3Dynamic;
             lbTunnelList.Enabled = !isDynamic;
 
-            if (!isDynamic && !string.IsNullOrWhiteSpace(tunnelAddress))
-                lbTunnelList.SelectTunnel(tunnelAddress);
+            if (!isDynamic && currentTunnel != null)
+                lbTunnelList.SelectTunnel(currentTunnel.Address, currentTunnel.Port);
             else
                 lbTunnelList.SelectedIndex = -1;
 

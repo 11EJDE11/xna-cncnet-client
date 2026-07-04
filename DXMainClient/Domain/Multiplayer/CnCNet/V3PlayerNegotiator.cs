@@ -61,7 +61,7 @@ public class V3PlayerNegotiator : IDisposable
     // If none are received in time, the tunnel is skipped.
     private static readonly TimeSpan DECIDER_CONNECTED_PHASE_TIMEOUT = TimeSpan.FromSeconds(15);
 
-    // How long the decider will wait for pings to complete. If it takes this long, 
+    // How long the decider will wait for pings to complete. If it takes this long,
     // pick the best one from the results that have come in.
     private static readonly TimeSpan DECIDER_PING_PHASE_TIMEOUT = TimeSpan.FromSeconds(15);
     private const int PINGS_PER_TUNNEL = 5;
@@ -218,7 +218,7 @@ public class V3PlayerNegotiator : IDisposable
         NegotiationResult?.Invoke(this, args);
     }
 
-    // Deciders wait for a Connected packet to be received. When received, they begin 
+    // Deciders wait for a Connected packet to be received. When received, they begin
     // sending Ping Requests. When all tunnels are pinged/timed out, pick the best tunnel
     // and inform the other player.
     // <paramref name="tunnelsToAwait"/> limits which tunnels we wait for results on (defaults to
@@ -228,7 +228,7 @@ public class V3PlayerNegotiator : IDisposable
     private async Task PerformDeciderNegotiationAsync(
         IReadOnlyCollection<CnCNetTunnel>? tunnelsToAwait = null,
         TimeSpan? connectedTimeout = null,
-        bool raiseFailureOnNoAck = true)
+        bool raiseFailure = true)
     {
         var awaitTunnels = tunnelsToAwait ?? _remotePlayer.TunnelResults.Keys.ToList();
         int totalTunnels = awaitTunnels.Count;
@@ -236,7 +236,8 @@ public class V3PlayerNegotiator : IDisposable
         {
             Logger.Log($"V3PlayerNegotiator: No tunnels available for decider negotiation with {_remotePlayer.Name}");
             _negotiationCompletionSource.TrySetResult(false);
-            RaiseNegotiationResult(null, 0, "No tunnels available");
+            if (raiseFailure)
+                RaiseNegotiationResult(null, 0, "No tunnels available");
             return;
         }
 
@@ -290,7 +291,7 @@ public class V3PlayerNegotiator : IDisposable
                     bool alreadySignaled = _negotiationCompletionSource.Task.IsCompleted;
                     _negotiationCompletionSource.TrySetResult(false);
 
-                    if (raiseFailureOnNoAck && !alreadySignaled && !_negotiationToken.IsCancellationRequested)
+                    if (raiseFailure && !alreadySignaled && !_negotiationToken.IsCancellationRequested)
                         RaiseNegotiationResult(null, 0, $"No acknowledgment of tunnel choice after {TUNNEL_CHOICE_MAX_RETRIES} attempts");
 
                     return;
@@ -304,7 +305,8 @@ public class V3PlayerNegotiator : IDisposable
         {
             Logger.Log("V3PlayerNegotiator: No tunnels had any ping responses");
             _negotiationCompletionSource.TrySetResult(false);
-            RaiseNegotiationResult(null, 0, "No viable tunnel found");
+            if (raiseFailure)
+                RaiseNegotiationResult(null, 0, "No viable tunnel found");
         }
     }
 
@@ -826,7 +828,7 @@ public class V3PlayerNegotiator : IDisposable
         }
 
         if (_isDecider)
-            await PerformDeciderNegotiationAsync(p2pTunnels, P2P_UPGRADE_CONNECTED_TIMEOUT, raiseFailureOnNoAck: false);
+            await PerformDeciderNegotiationAsync(p2pTunnels, P2P_UPGRADE_CONNECTED_TIMEOUT, raiseFailure: false);
         else
             await PerformNonDeciderNegotiationAsync(isUpgradeRound: true, totalTimeoutMs: P2P_UPGRADE_NONDECIDER_TIMEOUT_MS);
 
@@ -950,7 +952,7 @@ public class V3PlayerNegotiator : IDisposable
     private List<CnCNetTunnel> BuildP2PTunnels(IReadOnlyList<IPEndPoint> peerEps)
     {
         var tunnels = new List<CnCNetTunnel>();
-        foreach (var ep in peerEps)
+        foreach (var ep in peerEps.GroupBy(e => e.ToString()).Select(g => g.First()))
         {
             var p2pTunnel = new P2PTunnel(ep, _remotePlayer.Name);
             _tunnelHandler.AddP2PTunnel(p2pTunnel, _localPlayer.Id, _remotePlayer.Id);
@@ -1000,4 +1002,3 @@ public class V3PlayerNegotiator : IDisposable
         _negotiationCts.Dispose();
     }
 }
-

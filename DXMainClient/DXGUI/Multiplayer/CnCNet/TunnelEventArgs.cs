@@ -1,16 +1,18 @@
 using DTAClient.Domain.Multiplayer.CnCNet;
 using System;
 
+#nullable enable
+
 namespace DTAClient.DXGUI.Multiplayer.CnCNet;
 
 class TunnelEventArgs : EventArgs
 {
-    public TunnelEventArgs(CnCNetTunnel tunnel, TunnelMode mode)
+    public TunnelEventArgs(CnCNetTunnel? tunnel, TunnelMode mode)
     {
         Tunnel = tunnel;
         Mode = mode;
     }
 
-    public CnCNetTunnel Tunnel { get; }
+    public CnCNetTunnel? Tunnel { get; }
     public TunnelMode Mode { get; }
 }

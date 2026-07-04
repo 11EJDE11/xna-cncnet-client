@@ -71,7 +71,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 {
                     _targetVersion = value;
                     isManuallySelectedTunnel = false;
-                    manuallySelectedTunnelAddress = null;
+                    manuallySelectedTunnelKey = null;
                     if (ItemCount > 0)
                         TunnelHandler_TunnelsRefreshed(this, EventArgs.Empty);
                 }
@@ -87,7 +87,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private int lowestTunnelRating = int.MaxValue;
 
         private bool isManuallySelectedTunnel;
-        private string manuallySelectedTunnelAddress;
+        private string manuallySelectedTunnelKey;
 
         private List<CnCNetTunnel> GetFilteredTunnels()
         {
@@ -95,29 +95,35 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             return tunnelHandler.Tunnels.Where(tunnel => tunnel.Version == targetVersion).ToList();
         }
 
+        private static string GetTunnelKey(CnCNetTunnel tunnel) => GetTunnelKey(tunnel.Address, tunnel.Port);
+
+        private static string GetTunnelKey(string address, int port) => $"{address}:{port}";
+
         /// <summary>
-        /// Selects a tunnel from the list with the given address.
+        /// Selects a tunnel from the list with the given address and port.
         /// </summary>
         /// <param name="address">The address of the tunnel server to select.</param>
-        public void SelectTunnel(string address)
+        /// <param name="port">The port of the tunnel server to select.</param>
+        public void SelectTunnel(string address, int port)
         {
-            int index = GetFilteredTunnels().FindIndex(t => t.Address == address);
+            int index = GetFilteredTunnels().FindIndex(t => t.Address == address && t.Port == port);
             if (index > -1)
             {
                 SelectedIndex = index;
                 isManuallySelectedTunnel = true;
-                manuallySelectedTunnelAddress = address;
+                manuallySelectedTunnelKey = GetTunnelKey(address, port);
             }
         }
 
         /// <summary>
-        /// Gets whether or not a tunnel from the list with the given address is selected.
+        /// Gets whether or not a tunnel from the list with the given address and port is selected.
         /// </summary>
         /// <param name="address">The address of the tunnel server</param>
+        /// <param name="port">The port of the tunnel server</param>
         /// <returns>True if tunnel with given address is selected, otherwise false.</returns>
-        public bool IsTunnelSelected(string address)
+        public bool IsTunnelSelected(string address, int port)
         {
-            return GetFilteredTunnels().FindIndex(t => t.Address == address) == SelectedIndex;
+            return GetFilteredTunnels().FindIndex(t => t.Address == address && t.Port == port) == SelectedIndex;
         }
 
         private void TunnelHandler_TunnelsRefreshed(object sender, EventArgs e)
@@ -167,13 +173,13 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 }
                 else
                 {
-                    int manuallySelectedIndex = filteredTunnels.FindIndex(t => t.Address == manuallySelectedTunnelAddress);
+                    int manuallySelectedIndex = filteredTunnels.FindIndex(t => GetTunnelKey(t) == manuallySelectedTunnelKey);
 
                     if (manuallySelectedIndex == -1)
                     {
                         SelectedIndex = bestTunnelIndex;
                         isManuallySelectedTunnel = false;
-                        manuallySelectedTunnelAddress = null;
+                        manuallySelectedTunnelKey = null;
                     }
                     else
                         SelectedIndex = manuallySelectedIndex;
@@ -243,7 +249,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (SelectedIndex >= 0 && SelectedIndex < filteredTunnels.Count)
             {
                 isManuallySelectedTunnel = true;
-                manuallySelectedTunnelAddress = filteredTunnels[SelectedIndex].Address;
+                manuallySelectedTunnelKey = GetTunnelKey(filteredTunnels[SelectedIndex]);
             }
         }
 

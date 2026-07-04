@@ -423,7 +423,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private void ShowTunnelSelectionWindow(string description)
         {
             tunnelSelectionWindow.Open(description,
-                tunnelHandler.CurrentTunnel?.Address,
+                tunnelHandler.CurrentTunnel,
                 _tunnelMode);
         }
 

@@ -62,7 +62,7 @@ public class V3GameTunnelBridge
         if (_isRunning)
             return;
 
-        Logger.Log("=== V3GameTunnelBridge Starting ==="); 
+        Logger.Log("=== V3GameTunnelBridge Starting ===");
 
         var localEP = (IPEndPoint)_localGameClient.Client.LocalEndPoint!;
         Logger.Log($"Local Server: {localEP}");
@@ -94,6 +94,8 @@ public class V3GameTunnelBridge
         _isRunning = false;
         _localGameClient?.Close();
         _tunnelHandler.UnregisterV3PacketHandler(_localId, 0);
+        if (Thread.CurrentThread != _bridgeThread)
+            _bridgeThread.Join(1000);
 
         Logger.Log("V3GameTunnelBridge: Stopped");
     }
