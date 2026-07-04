@@ -693,7 +693,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         }
 
         /// <summary>
-        /// Changes the tunnel server used for the game. 
+        /// Changes the tunnel server used for the game.
         /// </summary>
         private void HandleTunnelServerChange(CnCNetTunnel tunnel)
         {

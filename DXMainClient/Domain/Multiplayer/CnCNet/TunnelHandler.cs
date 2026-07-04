@@ -92,7 +92,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// </summary>
         public V3KeepAliveMonitor KeepAliveMonitor { get; }
 
-
         /// <summary>
         /// Tracks a tunnel's consecutive ping failures and fires <see cref="TunnelFailed"/>
         /// once the threshold is crossed (exactly once per losing streak). Call after every

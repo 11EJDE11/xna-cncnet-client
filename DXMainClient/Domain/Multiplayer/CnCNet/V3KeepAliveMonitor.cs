@@ -436,7 +436,7 @@ public class V3KeepAliveMonitor
 
                 var payload = new byte[unresponsive.Count * 4];
                 for (int i = 0; i < unresponsive.Count; i++)
-                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(i * 4), unresponsive[i]);
+                    BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(i * 4), unresponsive[i]);
 
                 _lastProbeReply = new ProbeReply(payload, Stopwatch.GetTimestamp());
                 _communicator.SendPacket(tunnel, _localId, senderId, TunnelPacketType.ProbeReport, payload);

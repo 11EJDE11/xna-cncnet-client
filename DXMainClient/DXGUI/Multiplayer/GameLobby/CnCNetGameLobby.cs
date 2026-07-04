@@ -1663,20 +1663,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 .Select(name => name.Trim())
                 .ToHashSet();
 
-            if (participants.Count > 0 && !participants.Contains(ProgramConstants.PLAYERNAME))
+            if (!participants.Contains(ProgramConstants.PLAYERNAME))
             {
                 Logger.Log("Ignored a renegotiate-all request that does not include the local player.");
                 return;
             }
 
             AddNotice(string.Format("{0} has requested all players renegotiate tunnel connections.".L10N("Client:Main:RenegotiateAllReceived"), sender));
-
-            // No list means an older build sent the command; fall back to restarting everyone.
-            if (participants.Count == 0)
-            {
-                _negotiator.RestartAllNegotiations();
-                return;
-            }
 
             var affectedPlayers = _negotiator.PlayerInfos
                 .Where(p => p.Name != ProgramConstants.PLAYERNAME && participants.Contains(p.Name))
@@ -2248,7 +2241,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 // The host's tunnel address is authoritative: if our CurrentTunnel is out of
                 // sync (e.g. we joined around a tunnel change and missed the CHTNL message),
                 // playing on the wrong tunnel would silently break the match for us.
-                if (pName == ProgramConstants.PLAYERNAME && ipAndPort[0] != "0.0.0.0" &&
+                if (pName == ProgramConstants.PLAYERNAME &&
                     !string.Equals(tunnelHandler.CurrentTunnel?.Address, ipAndPort[0], StringComparison.OrdinalIgnoreCase))
                 {
                     var matchedTunnel = tunnelHandler.Tunnels.FirstOrDefault(t => t.Version == 2 &&

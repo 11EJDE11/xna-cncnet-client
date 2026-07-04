@@ -926,7 +926,7 @@ public class V3TunnelNegotiationManager
         // Quiet broadcast: only push the refreshed ping over IRC when it changed
         // materially — otherwise every pong would trigger wire traffic.
         if (previousPing == null || !previousPing.Value.IsValid() ||
-            IsMaterialPingChange(previousPing.Value.Milliseconds, rttMs))
+            PingQualityRules.IsMaterialChange(previousPing.Value.Milliseconds, rttMs))
         {
             BroadcastNegotiationInfo();
         }
@@ -966,8 +966,6 @@ public class V3TunnelNegotiationManager
 
         host.OnNegotiationStateChanged();
     }
-
-    private static bool IsMaterialPingChange(int oldMs, int newMs) => PingQualityRules.IsMaterialChange(oldMs, newMs);
 
     /// <summary>
     /// Rebuilds the tunnel handler's lobby keepalive targets from the currently negotiated
