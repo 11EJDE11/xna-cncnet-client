@@ -88,7 +88,7 @@ public class V3TunnelNegotiationManager
         {
             DetachNegotiator(v3p);
             v3p.StopNegotiation();
-            CleanupP2PForPlayer(v3p, keepChosenTunnel: false);
+            CleanupP2PForPlayer(v3p, keepChosenTunnel: IsLocalGameRouteActive());
             _v3PlayerInfos.Remove(v3p);
         }
 
@@ -564,7 +564,7 @@ public class V3TunnelNegotiationManager
         // Broadcasting TunnelRenegotiate now would make lobby-side peers restart their
         // pair with us while we can't reciprocate, stranding the pair. The keepalive
         // monitor will surface a genuinely dead path after we return to the lobby.
-        if (ProgramConstants.IsInGame)
+        if (IsLocalGameRouteActive())
             return true;
 
         var affectedPlayers = FindRemotePlayersUsingTunnel(failedTunnel.Address, failedTunnel.Port);
@@ -628,7 +628,7 @@ public class V3TunnelNegotiationManager
         // The game bridge routes live traffic through the negotiated paths, so no pair
         // may be torn down while a game is running — neither when the local game is
         // running nor for peers who are still in one.
-        if (ProgramConstants.IsInGame)
+        if (IsLocalGameRouteActive())
         {
             Logger.Log("V3TunnelNegotiationManager: Ignored a negotiation restart because the local game is running.");
             return;
@@ -684,7 +684,7 @@ public class V3TunnelNegotiationManager
     /// </summary>
     public void HandleRemoteTunnelRenegotiate(string sender, string tunnelAddressAndPort)
     {
-        if (host.TunnelMode != TunnelMode.V3Dynamic || ProgramConstants.IsInGame)
+        if (host.TunnelMode != TunnelMode.V3Dynamic || IsLocalGameRouteActive())
             return;
 
         string[] split = tunnelAddressAndPort.Split(':');
@@ -729,7 +729,7 @@ public class V3TunnelNegotiationManager
                 v3Player.StopNegotiation();
             }
 
-            CleanupP2PForPlayer(v3Player, keepChosenTunnel: false);
+            CleanupP2PForPlayer(v3Player, keepChosenTunnel: IsLocalGameRouteActive());
             _v3PlayerInfos.Remove(v3Player);
         }
 
@@ -740,13 +740,13 @@ public class V3TunnelNegotiationManager
     /// <summary>
     /// Stops every active negotiation without clearing the player list or negotiation data.
     /// </summary>
-    public void StopAllNegotiations()
+    public void StopAllNegotiations(bool keepGameRoutes = false)
     {
         foreach (var v3Player in _v3PlayerInfos)
         {
             DetachNegotiator(v3Player);
             v3Player.StopNegotiation();
-            CleanupP2PForPlayer(v3Player, keepChosenTunnel: false);
+            CleanupP2PForPlayer(v3Player, keepChosenTunnel: keepGameRoutes || IsLocalGameRouteActive());
         }
     }
 
@@ -765,7 +765,7 @@ public class V3TunnelNegotiationManager
     /// </summary>
     public void ClearAll()
     {
-        StopAllNegotiations();
+        StopAllNegotiations(keepGameRoutes: IsLocalGameRouteActive());
         _negotiationData.ClearAll();
         _v3PlayerInfos.Clear();
 
@@ -1013,6 +1013,9 @@ public class V3TunnelNegotiationManager
 
         tunnelHandler.CleanupP2PPair(localV3Player.Id, player.Id, keepEndpoint);
     }
+
+    private bool IsLocalGameRouteActive()
+        => tunnelHandler.GameTunnelBridge?.IsRunning == true || ProgramConstants.IsInGame;
 
     private void AttachNegotiator(V3PlayerInfo player)
     {

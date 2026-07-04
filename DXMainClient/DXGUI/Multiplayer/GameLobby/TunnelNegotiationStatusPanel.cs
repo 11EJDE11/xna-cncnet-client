@@ -32,13 +32,8 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     private const int LIST_BAR_MAX_PING = 500;
     private const int LIST_BAR_HEIGHT = 14;
 
-    // The pair list scrolls beyond this many rows instead of growing the panel:
-    // pair count grows quadratically (8 players = 28 pairs), which quickly
-    // outgrows the screen as fixed rows.
-    private const int LIST_MAX_VISIBLE_ROWS = 12;
     private const int LIST_MIN_VISIBLE_ROWS = 3;
     private const int RENEGOTIATE_BUTTON_HEIGHT = 25;
-    private const int RENEGOTIATE_BUTTON_MARGIN = 6;
 
     public event EventHandler? RenegotiateAllRequested;
 
@@ -91,12 +86,9 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         tabControl.AddTab("Matrix".L10N("Client:Main:NegStatusTabMatrix"), 92);
         tabControl.SelectedIndexChanged += TabControl_SelectedIndexChanged;
 
-        int contentY = TITLE_HEIGHT + TAB_HEIGHT + PANEL_PADDING;
-        int contentHeight = Height - contentY - PANEL_PADDING;
-
         lbPairs = new XNAMultiColumnListBox(WindowManager);
         lbPairs.Name = nameof(lbPairs);
-        lbPairs.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, ListTotalWidth, contentHeight);
+        lbPairs.ClientRectangle = new Rectangle(PANEL_PADDING, GetContentY(), ListTotalWidth, 0);
         lbPairs.PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
         lbPairs.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
         lbPairs.AllowRightClickUnselect = false;
@@ -126,13 +118,13 @@ public class TunnelNegotiationStatusPanel : XNAPanel
 
         matrixPanel = new XNAPanel(WindowManager);
         matrixPanel.Name = nameof(matrixPanel);
-        matrixPanel.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, Width - PANEL_PADDING * 2, contentHeight);
+        matrixPanel.ClientRectangle = new Rectangle(PANEL_PADDING, GetContentY(), Width - PANEL_PADDING * 2, 0);
         matrixPanel.DrawBorders = false;
 
         btnRenegotiateAll = new XNAClientButton(WindowManager);
         btnRenegotiateAll.Name = nameof(btnRenegotiateAll);
         btnRenegotiateAll.Text = "Renegotiate All".L10N("Client:Main:RenegotiateAll");
-        btnRenegotiateAll.ClientRectangle = new Rectangle(PANEL_PADDING, Height - RENEGOTIATE_BUTTON_HEIGHT - RENEGOTIATE_BUTTON_MARGIN, 160, RENEGOTIATE_BUTTON_HEIGHT);
+        btnRenegotiateAll.ClientRectangle = new Rectangle(PANEL_PADDING, Height - RENEGOTIATE_BUTTON_HEIGHT - PANEL_PADDING, 160, RENEGOTIATE_BUTTON_HEIGHT);
         btnRenegotiateAll.LeftClick += (s, e) => RenegotiateAllRequested?.Invoke(this, EventArgs.Empty);
 
         AddChild(lblTitle);
@@ -144,6 +136,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
 
         base.Initialize();
 
+        ApplyLayout(0);
         matrixPanel.Disable();
         btnRenegotiateAll.Disable();
         CenterOnParent();
@@ -152,6 +145,8 @@ public class TunnelNegotiationStatusPanel : XNAPanel
 
     private static int ListTotalWidth =>
         LIST_PLAYER_COLUMN_WIDTH * 2 + LIST_BAR_COLUMN_WIDTH + LIST_PING_TEXT_COLUMN_WIDTH;
+
+    private static int GetContentY() => TITLE_HEIGHT + TAB_HEIGHT + PANEL_PADDING;
 
     public void SetIsHost(bool isHost)
     {
@@ -191,39 +186,42 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         int previousTopIndex = lbPairs.ItemCount > 0 ? lbPairs.TopIndex : 0;
         lbPairs.ClearItems();
 
+        ApplyLayout(players.Count);
+        CenterOnParent();
+
         if (players.Count < 2)
             return;
 
-        int pairCount = players.Count * (players.Count - 1) / 2;
-        int matrixWidth = PLAYER_NAME_WIDTH_LHS + (players.Count * CELL_WIDTH) + (PANEL_PADDING * 2);
+        BuildMatrixView(players, negotiationData, inferInProgress);
+        BuildListView(players, negotiationData, previousTopIndex, inferInProgress);
+    }
+
+    private void ApplyLayout(int playerCount)
+    {
+        int visiblePlayerCount = Math.Max(playerCount, 2);
+        int matrixWidth = PLAYER_NAME_WIDTH_LHS + (visiblePlayerCount * CELL_WIDTH) + (PANEL_PADDING * 2);
         int listWidth = ListTotalWidth + (PANEL_PADDING * 2);
 
-        int matrixContentHeight = HEADER_HEIGHT + (players.Count * CELL_HEIGHT);
-
-        int visibleRows = Math.Clamp(pairCount, LIST_MIN_VISIBLE_ROWS, LIST_MAX_VISIBLE_ROWS);
-        int listContentHeight = listHeaderHeight + (visibleRows * lbPairs.LineHeight) + 4;
-
-        int contentY = TITLE_HEIGHT + TAB_HEIGHT + PANEL_PADDING;
-        int contentHeight = Math.Max(matrixContentHeight, listContentHeight);
+        int matrixContentHeight = HEADER_HEIGHT + (visiblePlayerCount * CELL_HEIGHT);
+        int listMinContentHeight = listHeaderHeight + (LIST_MIN_VISIBLE_ROWS * lbPairs.LineHeight) + 4;
 
         Width = Math.Max(500, Math.Max(matrixWidth, listWidth));
-        Height = Math.Max(300, contentY + contentHeight + PANEL_PADDING + RENEGOTIATE_BUTTON_HEIGHT + RENEGOTIATE_BUTTON_MARGIN * 2);
+        Height = Math.Max(300, GetContentY() + Math.Max(matrixContentHeight, listMinContentHeight) + PANEL_PADDING + RENEGOTIATE_BUTTON_HEIGHT + PANEL_PADDING);
 
         lblTitle.AnchorPoint = new Vector2(Width / 2f, TITLE_HEIGHT / 2f + 2);
         btnClose.ClientRectangle = new Rectangle(Width - CLOSE_BUTTON_SIZE - 8, 5, CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE);
         btnRenegotiateAll.ClientRectangle = new Rectangle(
             PANEL_PADDING,
-            Height - RENEGOTIATE_BUTTON_HEIGHT - RENEGOTIATE_BUTTON_MARGIN,
+            Height - RENEGOTIATE_BUTTON_HEIGHT - PANEL_PADDING,
             160,
             RENEGOTIATE_BUTTON_HEIGHT);
 
-        lbPairs.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, ListTotalWidth, listContentHeight);
-        matrixPanel.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, Width - PANEL_PADDING * 2, Height - contentY - PANEL_PADDING);
+        int contentY = GetContentY();
+        int contentBottom = btnRenegotiateAll.Y - PANEL_PADDING;
+        int contentHeight = Math.Max(0, contentBottom - contentY);
 
-        CenterOnParent();
-
-        BuildMatrixView(players, negotiationData, inferInProgress);
-        BuildListView(players, negotiationData, previousTopIndex, inferInProgress);
+        lbPairs.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, ListTotalWidth, contentHeight);
+        matrixPanel.ClientRectangle = new Rectangle(PANEL_PADDING, contentY, Width - PANEL_PADDING * 2, contentHeight);
     }
 
     private void BuildMatrixView(List<string> players, NegotiationDataManager negotiationData, bool inferInProgress = false)

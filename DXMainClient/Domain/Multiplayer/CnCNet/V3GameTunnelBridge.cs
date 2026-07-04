@@ -96,8 +96,18 @@ public class V3GameTunnelBridge
         _tunnelHandler.UnregisterV3PacketHandler(_localId, 0);
         if (Thread.CurrentThread != _bridgeThread)
             _bridgeThread.Join(1000);
+        CleanupP2PRoutes();
 
         Logger.Log("V3GameTunnelBridge: Stopped");
+    }
+
+    private void CleanupP2PRoutes()
+    {
+        foreach (var player in _otherPlayers)
+        {
+            if (player.Tunnel is P2PTunnel)
+                _tunnelHandler.CleanupP2PPair(_localId, player.Id);
+        }
     }
 
     /// <summary>
