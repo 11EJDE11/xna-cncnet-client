@@ -449,9 +449,10 @@ public class V3TunnelNegotiationManager
     public bool LaunchConnectivityCheckInProgress { get; private set; }
 
     /// <summary>
-    /// Pings every remote player over their negotiated tunnel and waits (briefly, off the
-    /// game thread) for fresh pongs. Normal launches gain only one round trip. Invokes
-    /// <paramref name="onVerified"/> on the game thread once every player has responded and
+    /// Runs the distributed pre-launch connectivity check (briefly, off the game thread):
+    /// pings every remote player over their negotiated tunnel, and over the same UDP
+    /// paths — asks each of them to probe their own peers and report back. Invokes
+    /// <paramref name="onVerified"/> on the game thread once every pair has verified and
     /// negotiations are still all successful; otherwise notices the problem and aborts.
     /// </summary>
     public void BeginLaunchConnectivityCheck(Action onVerified)
@@ -466,37 +467,64 @@ public class V3TunnelNegotiationManager
 
         Task.Run(async () =>
         {
-            List<uint> unresponsiveIds;
+            LaunchProbeResult result;
 
             try
             {
-                unresponsiveIds = await tunnelHandler.KeepAliveMonitor.ProbeTargetsAsync().ConfigureAwait(false);
+                result = await tunnelHandler.KeepAliveMonitor.ProbeAllPairsAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Logger.Log($"Launch connectivity check failed: {ex.Message}");
-                unresponsiveIds = remoteIdsSnapshot;
+                result = new LaunchProbeResult { LocalUnresponsive = remoteIdsSnapshot };
             }
 
-            windowManager.AddCallback(new Action<List<uint>, Action>(FinishLaunchConnectivityCheck), unresponsiveIds, onVerified);
+            windowManager.AddCallback(new Action<LaunchProbeResult, Action>(FinishLaunchConnectivityCheck), result, onVerified);
         });
     }
 
-    private void FinishLaunchConnectivityCheck(List<uint> unresponsiveIds, Action onVerified)
+    private void FinishLaunchConnectivityCheck(LaunchProbeResult result, Action onVerified)
     {
         LaunchConnectivityCheckInProgress = false;
 
         if (!host.IsHost || host.TunnelMode != TunnelMode.V3Dynamic || host.Players.Count <= 1)
             return;
 
-        if (unresponsiveIds.Count > 0)
-        {
-            foreach (uint id in unresponsiveIds)
-            {
-                string name = _v3PlayerInfos.FirstOrDefault(p => p.Id == id)?.Name ?? id.ToString("x8");
-                host.AddNotice(string.Format("No response from {0} — they may have disconnected.".L10N("Client:Main:LaunchCheckNoResponse"), name), Color.Red);
-            }
+        bool failed = false;
 
+        foreach (uint id in result.LocalUnresponsive)
+        {
+            host.AddNotice(string.Format("No response from {0} — they may have disconnected.".L10N("Client:Main:LaunchCheckNoResponse"), NameForId(id)), Color.Red);
+            failed = true;
+        }
+
+        foreach (uint id in result.MissingReports)
+        {
+            // Silence from a player who already failed the direct probe (or who left the
+            // lobby while the check ran) adds nothing worth announcing.
+            string? name = _v3PlayerInfos.FirstOrDefault(p => p.Id == id)?.Name;
+            if (name == null || host.Players.All(p => p.Name != name) || result.LocalUnresponsive.Contains(id))
+                continue;
+
+            host.AddNotice(string.Format("No connectivity report from {0} — their connection check did not complete.".L10N("Client:Main:LaunchCheckNoReport"), name), Color.Red);
+            failed = true;
+        }
+
+        foreach (var (reporterId, failedId) in result.RemoteFailures)
+        {
+            // Skip pairs no longer relevant because one side left during the check.
+            string? reporterName = _v3PlayerInfos.FirstOrDefault(p => p.Id == reporterId)?.Name;
+            string? failedName = _v3PlayerInfos.FirstOrDefault(p => p.Id == failedId)?.Name;
+            if (reporterName == null || failedName == null ||
+                host.Players.All(p => p.Name != reporterName) || host.Players.All(p => p.Name != failedName))
+                continue;
+
+            host.AddNotice(string.Format("{0} got no response from {1}.".L10N("Client:Main:LaunchCheckPeerFailure"), reporterName, failedName), Color.Red);
+            failed = true;
+        }
+
+        if (failed)
+        {
             host.AddNotice("Launch aborted.".L10N("Client:Main:LaunchCheckAborted"), Color.Red);
             return;
         }
@@ -510,6 +538,8 @@ public class V3TunnelNegotiationManager
 
         onVerified();
     }
+
+    private string NameForId(uint id) => _v3PlayerInfos.FirstOrDefault(p => p.Id == id)?.Name ?? id.ToString("x8");
 
     /// <summary>
     /// Returns remote players whose negotiated tunnel matches the given address/port.
@@ -623,12 +653,23 @@ public class V3TunnelNegotiationManager
 
         host.OnNegotiationsRestarted();
 
+        // Clear only the pairs being renegotiated: every pair among the restart
+        // participants (the restarted players plus the local player). Wiping whole
+        // players (ClearPlayer) would also drop their pairs with non-participants —
+        // e.g. an in-game player — whose next one-sided report would then leave those
+        // pairs looking stuck in progress.
+        var participantNames = playersToRestart.Select(p => p.Name).ToList();
+        if (!participantNames.Contains(ProgramConstants.PLAYERNAME))
+            participantNames.Add(ProgramConstants.PLAYERNAME);
+
+        foreach (var (player1, player2) in _negotiationData.GetPlayerPairs(participantNames))
+            _negotiationData.ClearPair(player1, player2);
+
         foreach (var v3Player in playersToRestart)
         {
             v3Player.StopNegotiation();
             CleanupP2PForPlayer(v3Player, keepChosenTunnel: false);
             v3Player.ResetNegotiator();
-            _negotiationData.ClearPlayer(v3Player.Name);
 
             if (v3Player.Name != ProgramConstants.PLAYERNAME)
                 StartTunnelNegotiationForPlayer(v3Player);
@@ -666,7 +707,13 @@ public class V3TunnelNegotiationManager
     /// <summary>
     /// Surfaces a remote player's tunnel-failure report in the lobby chat.
     /// </summary>
-    public void HandleRemoteTunnelFailed(string sender, string tunnelName) => host.AddNotice(string.Format("{0} can no longer connect to tunnel: {1}. The host needs to change the tunnel or the game won't start.".L10N("Client:Main:PlayerTunnelFailed"), sender, tunnelName), Color.Orange);
+    public void HandleRemoteTunnelFailed(string sender, string tunnelName)
+    {
+        if (host.IsHost)
+            host.AddNotice(string.Format("{0} can no longer connect to tunnel: {1}. Change the tunnel or the game won't start.".L10N("Client:Main:PlayerTunnelFailedHost"), sender, tunnelName), Color.Orange);
+        else
+            host.AddNotice(string.Format("{0} can no longer connect to tunnel: {1}. The host needs to change the tunnel or the game won't start.".L10N("Client:Main:PlayerTunnelFailed"), sender, tunnelName), Color.Orange);
+    }
 
     /// <summary>
     /// Removes a single player's V3 negotiation state (the lobby still owns its own player list).

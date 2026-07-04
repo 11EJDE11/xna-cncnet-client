@@ -99,7 +99,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(TunnelNegotiationCommands.NegotiationReport, HandleNegotiationReportMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelRenegotiate, HandleTunnelRenegotiateMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelFailed, HandleTunnelFailedMessage),
-                new NoParamCommandHandler(TunnelNegotiationCommands.RenegotiateAll, HandleRenegotiateAll),
+                new StringCommandHandler(TunnelNegotiationCommands.RenegotiateAll, HandleRenegotiateAll),
                 new StringCommandHandler("GSETTINGS", ApplyGameLobbySettings)
             };
 
@@ -638,6 +638,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 channel.SendCTCPMessage($"{TunnelNegotiationCommands.ChangeTunnelServer} {e.Tunnel.Address}:{e.Tunnel.Port}",
                     QueuedMessageType.SYSTEM_MESSAGE, 10);
+                AddNotice(string.Format("Changed the tunnel server to: {0}".L10N("Client:Main:YouChangedTunnel"), e.Tunnel.Name));
                 HandleTunnelServerChange(e.Tunnel);
             }
 
@@ -1273,7 +1274,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         void IV3NegotiationHost.OnLocalNegotiationStatus(PlayerInfo player, NegotiationStatus status, int ping)
         {
             if (status == NegotiationStatus.Succeeded)
-                player.Ping = ping >= 0 ? PingValue.FromMs(ping) : PingValue.Unknown;
+                RefreshV3PlayerPing(player, ping);
 
             UpdatePlayerPingIndicator(player, status);
 
@@ -1285,7 +1286,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             if (ping >= 0)
             {
-                player.Ping = PingValue.FromMs(ping);
+                RefreshV3PlayerPing(player, ping);
                 UpdatePlayerPingIndicator(player, status);
                 CopyPlayerDataToUI();
             }
@@ -1299,8 +1300,20 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         void IV3NegotiationHost.OnPairPingUpdated(PlayerInfo player, int ping)
         {
-            player.Ping = ping >= 0 ? PingValue.FromMs(ping) : PingValue.Unknown;
+            RefreshV3PlayerPing(player, ping);
             UpdatePlayerPingIndicator(player);
+        }
+
+        /// <summary>
+        /// Sets the roster ping from the merged pair ping — the same value the negotiation
+        /// status panel displays — instead of the raw ping of whichever event fired last.
+        /// The two directions of a pair can carry different measurements (local keepalive
+        /// vs. the peer's report).
+        /// </summary>
+        private void RefreshV3PlayerPing(PlayerInfo player, int eventPing)
+        {
+            var pairPing = _negotiator.NegotiationData.GetPing(ProgramConstants.PLAYERNAME, player.Name);
+            player.Ping = pairPing ?? (eventPing >= 0 ? PingValue.FromMs(eventPing) : PingValue.Unknown);
         }
 
         protected override void RequestPlayerOptions(int side, int color, int start, int team)
@@ -1510,6 +1523,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             var savedPings = Players.ToDictionary(p => p.Name, p => p.Ping);
 
+            // "PO" rebuilds the player list from scratch, so carry over locally tracked
+            // state the host's message doesn't include — without this, every options
+            // broadcast forgets who is still in a running game.
+            var savedInGameStatuses = Players.ToDictionary(p => p.Name, p => p.IsInGame);
+
             Players.Clear();
             AIPlayers.Clear();
 
@@ -1599,6 +1617,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     if (savedPings.TryGetValue(pInfo.Name, out PingValue savedPing))
                         pInfo.Ping = savedPing;
 
+                    if (savedInGameStatuses.TryGetValue(pInfo.Name, out bool savedInGame))
+                        pInfo.IsInGame = savedInGame;
+
                     Players.Add(pInfo);
                     i += HUMAN_PLAYER_OPTIONS_LENGTH;
                 }
@@ -1619,7 +1640,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             CheckAllNegotiationsComplete();
         }
 
-        private void HandleRenegotiateAll(string sender)
+        private void HandleRenegotiateAll(string sender, string data)
         {
             if (sender != hostName || IsHost)
                 return;
@@ -1633,8 +1654,34 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
+            // The payload is the host's authoritative participant list: the players the
+            // host sees in the lobby. Restart only pairs among them, so in-game players
+            // are left alone even by clients that don't know they are in game (e.g.
+            // someone who joined mid-game and never saw their STRTD notification).
+            var participants = data
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(name => name.Trim())
+                .ToHashSet();
+
+            if (participants.Count > 0 && !participants.Contains(ProgramConstants.PLAYERNAME))
+            {
+                Logger.Log("Ignored a renegotiate-all request that does not include the local player.");
+                return;
+            }
+
             AddNotice(string.Format("{0} has requested all players renegotiate tunnel connections.".L10N("Client:Main:RenegotiateAllReceived"), sender));
-            _negotiator.RestartAllNegotiations();
+
+            // No list means an older build sent the command; fall back to restarting everyone.
+            if (participants.Count == 0)
+            {
+                _negotiator.RestartAllNegotiations();
+                return;
+            }
+
+            var affectedPlayers = _negotiator.PlayerInfos
+                .Where(p => p.Name != ProgramConstants.PLAYERNAME && participants.Contains(p.Name))
+                .ToList();
+            _negotiator.RestartNegotiations(affectedPlayers);
         }
 
         private void RenegotiateAllCommand(string parameters)
@@ -1645,19 +1692,40 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
+            // Peers only obey RENEGALL from the host, so a non-host restart would run
+            // one-sided and leave its pairs stuck in progress.
+            if (!IsHost)
+            {
+                AddNotice("Only the host can request a renegotiation.".L10N("Client:Main:RenegotiateHostOnly"));
+                return;
+            }
+
             TriggerRenegotiateAll();
         }
 
         private void TriggerRenegotiateAll()
         {
+            // Only players in the lobby take part; in-game players' routes carry live game
+            // traffic and are left alone. The list rides along so every receiver applies
+            // the host's view instead of relying on its own possibly stale in-game flags.
+            var participatingPlayers = Players.Where(p => !p.IsInGame).Select(p => p.Name).ToList();
+
+            if (participatingPlayers.Count <= 1)
+            {
+                AddNotice("Cannot renegotiate: all other players are currently in game.".L10N("Client:Main:RenegotiateAllInGame"), Color.Yellow);
+                return;
+            }
+
             // One renegotiation round at a time: firing another while one is running tears
             // down in-flight negotiations whose stale packets then corrupt the fresh round.
             // Local negotiations aren't enough — the host's own pairs can finish while a pair
             // between two other players is still negotiating (their reports say InProgress),
-            // and a RENEGALL landing mid-round on them is just as destructive.
-            var playerNames = Players.Select(p => p.Name).ToList();
+            // and a RENEGALL landing mid-round on them is just as destructive. Only pairs
+            // among the participants count, though: a pair involving an in-game player can
+            // sit at InProgress (e.g. a one-sided report) without blocking renegotiation of
+            // the lobby-side pairs that would fix exactly that.
             bool remoteNegotiationRunning = _negotiator.NegotiationData
-                .GetIncompleteNegotiations(playerNames)
+                .GetIncompleteNegotiations(participatingPlayers)
                 .Any(pair => pair.status == NegotiationStatus.InProgress);
 
             if (_negotiator.HasActiveNegotiations || remoteNegotiationRunning)
@@ -1667,7 +1735,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
 
             AddNotice("Requesting all players renegotiate tunnel connections...".L10N("Client:Main:RenegotiateAllSent"));
-            channel.SendCTCPMessage(TunnelNegotiationCommands.RenegotiateAll, QueuedMessageType.SYSTEM_MESSAGE, 10);
+            channel.SendCTCPMessage($"{TunnelNegotiationCommands.RenegotiateAll} {string.Join(",", participatingPlayers)}", QueuedMessageType.SYSTEM_MESSAGE, 10);
             _negotiator.RestartAllNegotiations();
         }
 
@@ -2598,6 +2666,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
 
             tunnelErrorMode = false;
+            AddNotice(string.Format("The game host has changed the tunnel server to: {0}".L10N("Client:Main:HostChangeTunnel"), tunnel.Name));
             HandleTunnelServerChange(tunnel);
             UpdateLaunchGameButtonStatus();
         }
@@ -2637,7 +2706,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 tunnelHandler.CurrentTunnel.Port != tunnel.Port;
 
             tunnelHandler.CurrentTunnel = tunnel;
-            AddNotice(string.Format("The game host has changed the tunnel server to: {0}".L10N("Client:Main:HostChangeTunnel"), tunnel.Name));
 
             // Old pings were measured against the previous tunnel — show unknown until fresh
             // TNLPNG values arrive rather than presenting stale values as current. Gated on an

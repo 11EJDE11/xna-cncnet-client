@@ -435,6 +435,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             {
                 channel.SendCTCPMessage($"{TunnelNegotiationCommands.ChangeTunnelServer} {e.Tunnel.Address}:{e.Tunnel.Port}",
                     QueuedMessageType.SYSTEM_MESSAGE, 10);
+                AddNotice(string.Format("Changed the tunnel server to: {0}".L10N("Client:Main:YouChangedTunnel"), e.Tunnel.Name));
                 HandleTunnelServerChange(e.Tunnel);
             }
 
@@ -686,17 +687,17 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return;
             }
 
+            AddNotice(string.Format("The game host has changed the tunnel server to: {0}".L10N("Client:Main:HostChangeTunnel"), tunnel.Name));
             HandleTunnelServerChange(tunnel);
             btnLoadGame.AllowClick = true;
         }
 
         /// <summary>
-        /// Changes the tunnel server used for the game.
+        /// Changes the tunnel server used for the game. 
         /// </summary>
         private void HandleTunnelServerChange(CnCNetTunnel tunnel)
         {
             tunnelHandler.CurrentTunnel = tunnel;
-            AddNotice(string.Format("The game host has changed the tunnel server to: {0}".L10N("Client:Main:HostChangeTunnel"), tunnel.Name));
 
             _negotiator.ApplyStaticTunnel(tunnel);
         }

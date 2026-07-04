@@ -124,6 +124,24 @@ public class NegotiationDataManager
     }
 
     /// <summary>
+    /// Removes the negotiation data between two players only (both directions, status and
+    /// ping), leaving each player's pairs with everyone else intact. Use this when a single
+    /// pair is renegotiated; <see cref="ClearPlayer"/> is for a player leaving entirely.
+    /// </summary>
+    public void ClearPair(string player1, string player2)
+    {
+        if (_negotiationStatuses.TryGetValue(player1, out var statuses1))
+            statuses1.TryRemove(player2, out _);
+        if (_negotiationStatuses.TryGetValue(player2, out var statuses2))
+            statuses2.TryRemove(player1, out _);
+
+        if (_playerPingMatrix.TryGetValue(player1, out var pings1))
+            pings1.TryRemove(player2, out _);
+        if (_playerPingMatrix.TryGetValue(player2, out var pings2))
+            pings2.TryRemove(player1, out _);
+    }
+
+    /// <summary>
     /// Removes all negotiation data for a specific player.
     /// This includes data they reported and data others reported about them.
     /// </summary>

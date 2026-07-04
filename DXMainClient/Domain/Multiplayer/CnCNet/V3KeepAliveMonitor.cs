@@ -54,6 +54,8 @@ public class V3KeepAliveMonitor
         _communicator = communicator;
         _windowManager = windowManager;
         _communicator.KeepAlivePongReceived = Communicator_KeepAlivePongReceived;
+        _communicator.ProbeRequestReceived = Communicator_ProbeRequestReceived;
+        _communicator.ProbeReportReceived = Communicator_ProbeReportReceived;
     }
 
     /// <summary>
@@ -311,4 +313,158 @@ public class V3KeepAliveMonitor
 
         return unresponsive;
     }
+
+    /// <summary>How long a completed probe result is answered from cache, covering the requester's UDP resends.</summary>
+    private const double PROBE_REPLY_CACHE_SECONDS = 5.0;
+
+    private int _probeRunning;
+    private volatile ProbeReply? _lastProbeReply;
+    private volatile ConcurrentDictionary<uint, List<uint>>? _probeReports;
+
+    private sealed class ProbeReply
+    {
+        public readonly byte[] Payload;
+        public readonly long CompletedTicks;
+
+        public ProbeReply(byte[] payload, long completedTicks)
+        {
+            Payload = payload;
+            CompletedTicks = completedTicks;
+        }
+    }
+
+    /// <summary>
+    /// The distributed pre-launch connectivity check (host side): probes the local paths
+    /// and, over the same UDP paths, asks every peer to probe theirs and report back —
+    /// so every pair gets a fresh round trip, not just the host's own connections.
+    /// Requests are resent until each peer's report arrives or the timeout elapses.
+    /// Safe to call from any thread.
+    /// </summary>
+    public async Task<LaunchProbeResult> ProbeAllPairsAsync(int timeoutMs = 6000, int resendIntervalMs = 1000)
+    {
+        var result = new LaunchProbeResult();
+        var targets = _targets;
+        if (targets == null || targets.Count == 0)
+            return result;
+
+        var pending = targets
+            .Where(t => t.tunnel != null)
+            .GroupBy(t => t.remoteId)
+            .Select(g => g.First())
+            .ToList();
+
+        var reports = new ConcurrentDictionary<uint, List<uint>>();
+        _probeReports = reports;
+
+        try
+        {
+            Task<List<uint>> localProbeTask = ProbeTargetsAsync();
+
+            var elapsed = Stopwatch.StartNew();
+            long nextSendMs = 0;
+
+            while (elapsed.ElapsedMilliseconds < timeoutMs)
+            {
+                if (elapsed.ElapsedMilliseconds >= nextSendMs)
+                {
+                    foreach (var (remoteId, tunnel) in pending)
+                    {
+                        if (!reports.ContainsKey(remoteId))
+                            _communicator.SendPacket(tunnel, _localId, remoteId, TunnelPacketType.ProbeRequest, Array.Empty<byte>());
+                    }
+
+                    nextSendMs += resendIntervalMs;
+                }
+
+                if (localProbeTask.IsCompleted && pending.All(t => reports.ContainsKey(t.remoteId)))
+                    break;
+
+                await Task.Delay(50).ConfigureAwait(false);
+            }
+
+            result.LocalUnresponsive = await localProbeTask.ConfigureAwait(false);
+
+            foreach (var (remoteId, _) in pending)
+            {
+                if (!reports.TryGetValue(remoteId, out var failedIds))
+                {
+                    result.MissingReports.Add(remoteId);
+                    continue;
+                }
+
+                foreach (uint failedId in failedIds)
+                    result.RemoteFailures.Add((remoteId, failedId));
+            }
+        }
+        finally
+        {
+            _probeReports = null;
+        }
+
+        return result;
+    }
+
+    // Receive thread. The probe takes seconds, so run it off-thread and cache the
+    // result: the requester resends until a report arrives, and each resend should be
+    // answered from cache instead of starting another probe.
+    private void Communicator_ProbeRequestReceived(uint senderId, CnCNetTunnel tunnel)
+    {
+        var cached = _lastProbeReply;
+        if (cached != null &&
+            (Stopwatch.GetTimestamp() - cached.CompletedTicks) / (double)Stopwatch.Frequency < PROBE_REPLY_CACHE_SECONDS)
+        {
+            _communicator.SendPacket(tunnel, _localId, senderId, TunnelPacketType.ProbeReport, cached.Payload);
+            return;
+        }
+
+        if (Interlocked.CompareExchange(ref _probeRunning, 1, 0) != 0)
+            return; // probe already running; the requester's resend picks up the cached result
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                List<uint> unresponsive;
+                try
+                {
+                    unresponsive = await ProbeTargetsAsync().ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    unresponsive = new List<uint>();
+                }
+
+                var payload = new byte[unresponsive.Count * 4];
+                for (int i = 0; i < unresponsive.Count; i++)
+                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(i * 4), unresponsive[i]);
+
+                _lastProbeReply = new ProbeReply(payload, Stopwatch.GetTimestamp());
+                _communicator.SendPacket(tunnel, _localId, senderId, TunnelPacketType.ProbeReport, payload);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _probeRunning, 0);
+            }
+        });
+    }
+
+    // Receive thread. First report per peer wins; resent duplicates are ignored.
+    private void Communicator_ProbeReportReceived(uint senderId, List<uint> unresponsiveIds)
+        => _probeReports?.TryAdd(senderId, unresponsiveIds);
+}
+
+/// <summary>
+/// Result of the distributed pre-launch connectivity check
+/// (<see cref="V3KeepAliveMonitor.ProbeAllPairsAsync"/>).
+/// </summary>
+public sealed class LaunchProbeResult
+{
+    /// <summary>Peers that did not answer the local probe.</summary>
+    public List<uint> LocalUnresponsive = new();
+
+    /// <summary>Peers that never sent a probe report back.</summary>
+    public List<uint> MissingReports = new();
+
+    /// <summary>Peer-reported failures: reporter → the peer it could not reach.</summary>
+    public List<(uint ReporterId, uint FailedId)> RemoteFailures = new();
 }

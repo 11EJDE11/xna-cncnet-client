@@ -48,7 +48,14 @@ public enum TunnelPacketType : byte
     // deliberately distinct from PingRequest/PingResponse: reusing negotiation pings would
     // set PingRequestReceived on the receiver and weaken the stale-TunnelChoice guard.
     KeepAlivePing = 0x0B,
-    KeepAlivePong = 0x0C
+    KeepAlivePong = 0x0C,
+
+    // Pre-launch connectivity check. The host sends ProbeRequest to each peer over their
+    // negotiated path; the receiver probes its own keepalive targets and answers with
+    // ProbeReport, whose payload is 4 bytes (little-endian V3 ID) per unresponsive peer
+    // (empty payload = all reachable).
+    ProbeRequest = 0x0D,
+    ProbeReport = 0x0E
 }
 
 /// <summary>
@@ -483,6 +490,19 @@ public class V3TunnelCommunicator
     /// </summary>
     public Action<uint, int>? KeepAlivePongReceived { get; set; }
 
+    /// <summary>
+    /// Invoked on the receive thread when a peer asks us to probe our own negotiated
+    /// paths (pre-launch connectivity check): the requester's V3 ID and the tunnel the
+    /// request arrived from (used to send the report back).
+    /// </summary>
+    public Action<uint, CnCNetTunnel>? ProbeRequestReceived { get; set; }
+
+    /// <summary>
+    /// Invoked on the receive thread when a peer reports its probe result: the
+    /// reporter's V3 ID and the V3 IDs of peers it could not reach.
+    /// </summary>
+    public Action<uint, List<uint>>? ProbeReportReceived { get; set; }
+
     private void ProcessReceivedPacket(ReadOnlyMemory<byte> data, long receivedTime, CnCNetTunnel tunnel)
     {
         try
@@ -514,6 +534,24 @@ public class V3TunnelCommunicator
                         KeepAlivePongReceived?.Invoke(parsed.SenderId, (int)Math.Round(rttMs));
                 }
 
+                return;
+            }
+
+            // Connectivity probes are handled at this layer for the same reason as
+            // keepalives: no per-pair handler, no negotiator state.
+            if (parsed.NegotiationType == TunnelPacketType.ProbeRequest)
+            {
+                ProbeRequestReceived?.Invoke(parsed.SenderId, tunnel);
+                return;
+            }
+
+            if (parsed.NegotiationType == TunnelPacketType.ProbeReport)
+            {
+                var unresponsiveIds = new List<uint>(parsed.Payload.Length / 4);
+                for (int i = 0; i + 4 <= parsed.Payload.Length; i += 4)
+                    unresponsiveIds.Add(BinaryPrimitives.ReadUInt32LittleEndian(parsed.Payload.Span[i..]));
+
+                ProbeReportReceived?.Invoke(parsed.SenderId, unresponsiveIds);
                 return;
             }
 
