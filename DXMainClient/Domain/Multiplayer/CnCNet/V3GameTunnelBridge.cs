@@ -105,8 +105,13 @@ public class V3GameTunnelBridge
     {
         foreach (var player in _otherPlayers)
         {
-            if (player.Tunnel is P2PTunnel)
-                _tunnelHandler.CleanupP2PPair(_localId, player.Id);
+            // Drop only the endpoints auto-learned during the game. The chosen path must
+            // survive the bridge: peers still in the lobby keep exchanging keepalives over
+            // it, and wiping it strands the pair (pings become unsendable) until a full
+            // renegotiation. Players who left the lobby mid-game get their kept endpoint
+            // dropped on lobby teardown (ClearAll).
+            if (player.Tunnel is P2PTunnel p2pTunnel)
+                _tunnelHandler.CleanupP2PPair(_localId, player.Id, p2pTunnel.PeerEndpoint);
         }
     }
 

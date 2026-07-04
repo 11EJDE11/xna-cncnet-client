@@ -152,19 +152,11 @@ public class V3KeepAliveMonitor
             return;
         }
 
-        // In-game the bridge traffic proves liveness on its own; pause monitoring but
-        // keep baselines fresh so returning to the lobby doesn't trigger instant
-        // false timeouts from an hour-old "last pong".
-        if (gameBridgeRunning)
-        {
-            foreach (var tracker in _trackers.Values)
-                tracker.ResetBaseline(now);
-
-            return;
-        }
-
         // Relay tunnels: refresh our registration (also refreshes our own NAT mapping,
-        // which keeps the session's STUN-discovered external endpoint valid).
+        // which keeps the session's STUN-discovered external endpoint valid). This must
+        // run in-game too: peers who returned to the lobby before us keep pinging us
+        // through these relays, and an expired registration would drop their pings and
+        // make them falsely declare us unreachable.
         if ((now - _lastRegistrationRefreshTicks) / (double)Stopwatch.Frequency >= KEEPALIVE_INTERVAL_SECONDS)
         {
             _lastRegistrationRefreshTicks = now;
@@ -177,6 +169,17 @@ public class V3KeepAliveMonitor
 
             if (relayTunnels.Count > 0)
                 _communicator.SendRegistrationToTunnels(_localId, relayTunnels, quiet: true);
+        }
+
+        // In-game the bridge traffic proves liveness on its own; pause monitoring but
+        // keep baselines fresh so returning to the lobby doesn't trigger instant
+        // false timeouts from an hour-old "last pong".
+        if (gameBridgeRunning)
+        {
+            foreach (var tracker in _trackers.Values)
+                tracker.ResetBaseline(now);
+
+            return;
         }
 
         var activeIds = new HashSet<uint>();
