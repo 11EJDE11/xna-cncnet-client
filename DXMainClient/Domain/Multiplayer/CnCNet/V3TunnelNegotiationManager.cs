@@ -32,6 +32,11 @@ public class V3TunnelNegotiationManager
     private readonly List<V3PlayerInfo> _v3PlayerInfos = new();
     private readonly NegotiationDataManager _negotiationData = new();
 
+    // Pairs whose P2P routes had to be kept when the player left mid-game (the bridge
+    // was still routing to them); cleaned up once the game bridge stops so departed
+    // players' routing entries don't accumulate across a long session.
+    private readonly List<(uint LocalId, uint RemoteId)> _deferredP2PCleanups = new();
+
     public V3TunnelNegotiationManager(IV3NegotiationHost host, TunnelHandler tunnelHandler, WindowManager windowManager)
     {
         this.host = host;
@@ -43,6 +48,7 @@ public class V3TunnelNegotiationManager
         // empty player list, so its lookups fail and the events fall through harmlessly.
         tunnelHandler.KeepAliveMonitor.PongReceived += OnKeepAlivePongReceived;
         tunnelHandler.KeepAliveMonitor.TimedOut += OnKeepAliveTimedOut;
+        tunnelHandler.GameBridgeStopped += FlushDeferredP2PCleanups;
     }
 
     public IReadOnlyList<V3PlayerInfo> PlayerInfos => _v3PlayerInfos;
@@ -88,7 +94,7 @@ public class V3TunnelNegotiationManager
         {
             DetachNegotiator(v3p);
             v3p.StopNegotiation();
-            CleanupP2PForPlayer(v3p, keepChosenTunnel: IsLocalGameRouteActive());
+            CleanupP2PForRemovedPlayer(v3p);
             _v3PlayerInfos.Remove(v3p);
         }
 
@@ -729,7 +735,7 @@ public class V3TunnelNegotiationManager
                 v3Player.StopNegotiation();
             }
 
-            CleanupP2PForPlayer(v3Player, keepChosenTunnel: IsLocalGameRouteActive());
+            CleanupP2PForRemovedPlayer(v3Player);
             _v3PlayerInfos.Remove(v3Player);
         }
 
@@ -1012,6 +1018,45 @@ public class V3TunnelNegotiationManager
             : null;
 
         tunnelHandler.CleanupP2PPair(localV3Player.Id, player.Id, keepEndpoint);
+    }
+
+    /// <summary>
+    /// P2P cleanup for a player leaving the lobby. While a game route is active their
+    /// chosen path must survive (the bridge may still be forwarding to them — e.g. they
+    /// only lost IRC, not the game connection), so the full cleanup is deferred until
+    /// <see cref="TunnelHandler.GameBridgeStopped"/> fires.
+    /// </summary>
+    private void CleanupP2PForRemovedPlayer(V3PlayerInfo player)
+    {
+        bool gameRouteActive = IsLocalGameRouteActive();
+        CleanupP2PForPlayer(player, keepChosenTunnel: gameRouteActive);
+
+        if (gameRouteActive && player.Tunnel is P2PTunnel)
+        {
+            var localV3Player = FindPlayer(ProgramConstants.PLAYERNAME);
+            if (localV3Player != null && player.Name != ProgramConstants.PLAYERNAME &&
+                !_deferredP2PCleanups.Contains((localV3Player.Id, player.Id)))
+            {
+                _deferredP2PCleanups.Add((localV3Player.Id, player.Id));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs the P2P cleanups that were deferred because a game route was still active,
+    /// skipping any pair whose player has since rejoined the lobby.
+    /// </summary>
+    private void FlushDeferredP2PCleanups()
+    {
+        foreach (var (localId, remoteId) in _deferredP2PCleanups)
+        {
+            if (_v3PlayerInfos.Any(p => p.Id == remoteId))
+                continue;
+
+            tunnelHandler.CleanupP2PPair(localId, remoteId);
+        }
+
+        _deferredP2PCleanups.Clear();
     }
 
     private bool IsLocalGameRouteActive()

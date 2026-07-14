@@ -103,6 +103,13 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         internal int ConsecutivePingFailures { get; set; }
 
         /// <summary>
+        /// Whether this tunnel has ever answered an ICMP echo. Unknown ping results only
+        /// count as failures once this is true; some networks block ICMP entirely while
+        /// UDP tunnel traffic works fine, and such tunnels must not be declared failed.
+        /// </summary>
+        internal bool HasRespondedToPing { get; set; }
+
+        /// <summary>
         /// Whether this is a direct peer-to-peer path rather than a relay tunnel server.
         /// Relay tunnels are always false; <see cref="P2PTunnel"/> overrides this to true.
         /// Used to exclude synthetic P2P entries from relay-only operations (registration,

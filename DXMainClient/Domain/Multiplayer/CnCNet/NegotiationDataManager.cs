@@ -17,10 +17,9 @@ public class NegotiationDataManager
     /// </summary>
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, NegotiationStatus>> _negotiationStatuses = new();
 
-
     /// <summary>
     /// This tracks what each player reports about their negotiation with each other player
-    /// // reportingPlayer -> targetPlayer -> ping
+    /// reportingPlayer -> targetPlayer -> ping
     /// </summary>
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, PingValue>> _playerPingMatrix = new();
 
@@ -118,7 +117,6 @@ public class NegotiationDataManager
         if (_playerPingMatrix.TryGetValue(player2, out var player2Pings) &&
             player2Pings.TryGetValue(player1, out ping) && ping.IsValid())
             return ping;
-
 
         return null;
     }

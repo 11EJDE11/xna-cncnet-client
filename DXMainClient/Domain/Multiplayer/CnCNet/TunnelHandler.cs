@@ -66,6 +66,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private readonly P2PEndpointDiscovery _p2pEndpointDiscovery;
 
         public event EventHandler TunnelsRefreshed;
+
+        /// <summary>
+        /// Fired after the in-game tunnel bridge has stopped (also when no bridge was
+        /// running), i.e. once the negotiated routes are no longer needed for game data.
+        /// </summary>
+        public event Action GameBridgeStopped;
         public event EventHandler CurrentTunnelPinged;
         public event EventHandler<CnCNetTunnel> TunnelFailed;
         public event Action<string, int> TunnelPinged; //address, port
@@ -99,6 +105,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// </summary>
         private void EvaluateTunnelHealth(CnCNetTunnel tunnel)
         {
+            if (!tunnel.Ping.IsUnknown())
+                tunnel.HasRespondedToPing = true;
+
             bool pingBad = tunnel.Ping.IsUnknown() || tunnel.Ping.Milliseconds > TUNNEL_FAILED_PING_AMOUNT;
 
             if (!pingBad)
@@ -106,6 +115,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 tunnel.ConsecutivePingFailures = 0;
                 return;
             }
+
+            // An unknown result only signals failure if this tunnel has answered ICMP
+            // before; otherwise ICMP may simply be blocked on the network while UDP
+            // tunnel traffic works fine.
+            if (tunnel.Ping.IsUnknown() && !tunnel.HasRespondedToPing)
+                return;
 
             tunnel.ConsecutivePingFailures++;
 
@@ -482,6 +497,8 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 GameTunnelBridge.Stop();
                 GameTunnelBridge = null;
             }
+
+            GameBridgeStopped?.Invoke();
         }
 
         public void InitializeTunnelCommunicator()
