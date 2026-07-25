@@ -1,6 +1,7 @@
 using ClientGUI;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using ClientCore.Extensions;
+using Microsoft.Xna.Framework;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
@@ -21,6 +22,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private readonly TunnelHandler tunnelHandler;
         private TunnelListBox lbTunnelList;
+        private XNAPanel pnlTunnelListDisabledOverlay;
         private XNALabel lblDescription;
         private XNADropDown ddMode;
         private XNAClientButton btnApply;
@@ -64,6 +66,13 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             AddChild(lbTunnelList);
             lbTunnelList.SelectedIndexChanged += LbTunnelList_SelectedIndexChanged;
 
+            pnlTunnelListDisabledOverlay = new XNAPanel(WindowManager);
+            pnlTunnelListDisabledOverlay.Name = nameof(pnlTunnelListDisabledOverlay);
+            pnlTunnelListDisabledOverlay.ClientRectangle = lbTunnelList.ClientRectangle;
+            pnlTunnelListDisabledOverlay.DrawBorders = false;
+            pnlTunnelListDisabledOverlay.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
+            AddChild(pnlTunnelListDisabledOverlay);
+
             btnApply = new XNAClientButton(WindowManager);
             btnApply.Name = nameof(btnApply);
             btnApply.Width = UIDesignConstants.BUTTON_WIDTH_92;
@@ -98,6 +107,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             bool isDynamic = mode == TunnelMode.V3Dynamic;
 
             lbTunnelList.Enabled = !isDynamic;
+            pnlTunnelListDisabledOverlay.Visible = isDynamic;
 
             if (!isDynamic)
                 lbTunnelList.TargetVersion = mode == TunnelMode.V2Legacy ? 2 : 3;
@@ -152,6 +162,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             bool isDynamic = currentMode == TunnelMode.V3Dynamic;
             lbTunnelList.Enabled = !isDynamic;
+            pnlTunnelListDisabledOverlay.Visible = isDynamic;
 
             if (!isDynamic && currentTunnel != null)
                 lbTunnelList.SelectTunnel(currentTunnel.Address, currentTunnel.Port);

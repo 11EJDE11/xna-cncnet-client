@@ -1264,6 +1264,15 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             gameCheckCancellation = new CancellationTokenSource();
             CnCNetGameCheck.Instance.InitializeService(gameCheckCancellation);
+
+            if (UserINISettings.Instance.EnableP2P)
+            {
+                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.Orange, Renderer.GetSafeString(
+                    ("Direct P2P connections are enabled. Your IP address may be shared with other " +
+                     "players when a P2P connection is used in a match. You can change this in Options.")
+                        .L10N("Client:Main:P2PEnabledOnlineNotice"),
+                    lbChatMessages.FontIndex)));
+            }
         }
 
         private void ConnectionManager_PrivateCTCPReceived(object sender, PrivateCTCPEventArgs e)
