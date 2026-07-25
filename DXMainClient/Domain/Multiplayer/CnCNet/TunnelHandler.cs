@@ -531,7 +531,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// Removes a player pair's P2P endpoints from the communicator's routing tables,
         /// optionally preserving the chosen path's endpoint.
         /// </summary>
-        public void CleanupP2PPair(uint localId, uint remoteId, IPEndPoint keepEndpoint = null) => _tunnelCommunicator.CleanupP2PPair(localId, remoteId, keepEndpoint);
+#nullable enable
+        public void CleanupP2PPair(uint localId, uint remoteId, IPEndPoint? keepEndpoint = null) => _tunnelCommunicator.CleanupP2PPair(localId, remoteId, keepEndpoint);
+#nullable restore
 
         /// <summary>
         /// Clears the cached STUN result so the next P2P negotiation re-queries.
