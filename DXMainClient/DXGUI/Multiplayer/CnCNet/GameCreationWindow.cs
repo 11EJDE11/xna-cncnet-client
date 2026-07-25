@@ -37,8 +37,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private XNALabel lblPassword;
 
         private XNALabel lblTunnelServer;
-        private XNALabel lblDynamicTunnels;
+        private XNADropDown ddTunnelMode;
         private TunnelListBox lbTunnelList;
+        private XNAPanel pnlTunnelListDisabledOverlay;
 
         private XNAClientButton btnCreateGame;
         private XNAClientButton btnCancel;
@@ -135,23 +136,33 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             lblTunnelServer.Name = nameof(lblTunnelServer);
             lblTunnelServer.ClientRectangle = new Rectangle(UIDesignConstants.EMPTY_SPACE_SIDES +
                 UIDesignConstants.CONTROL_HORIZONTAL_MARGIN, lblPassword.Bottom + UIDesignConstants.CONTROL_VERTICAL_MARGIN * 4, 0, 0);
-            lblTunnelServer.Text = "Tunnel server:".L10N("Client:Main:TunnelServer");
+            lblTunnelServer.Text = "Tunnel mode:".L10N("Client:Main:TunnelServer");
             lblTunnelServer.Enabled = false;
             lblTunnelServer.Visible = false;
 
-            lblDynamicTunnels = new XNALabel(WindowManager);
-            lblDynamicTunnels.Name = nameof(lblDynamicTunnels);
-            lblDynamicTunnels.ClientRectangle = new Rectangle(UIDesignConstants.EMPTY_SPACE_SIDES +
-                UIDesignConstants.CONTROL_HORIZONTAL_MARGIN, lblTunnelServer.Y, 0, 0);
-            lblDynamicTunnels.Text = "Dynamic tunnels are enabled. You can change this in the settings.".L10N("Client:Main:DynamicTunnelsInfo");
-            lblDynamicTunnels.Enabled = false;
-            lblDynamicTunnels.Visible = false;
+            ddTunnelMode = new XNADropDown(WindowManager);
+            ddTunnelMode.Name = nameof(ddTunnelMode);
+            ddTunnelMode.X = lblTunnelServer.X;
+            ddTunnelMode.Y = lblTunnelServer.Bottom + UIDesignConstants.CONTROL_VERTICAL_MARGIN;
+            ddTunnelMode.Width = 220;
+            ddTunnelMode.Height = UIDesignConstants.BUTTON_HEIGHT;
+            ddTunnelMode.AddItem(new XNADropDownItem { Text = "Dynamic (V3)".L10N("Client:Main:TunnelSelModeDynamic"), Tag = TunnelMode.V3Dynamic });
+            ddTunnelMode.AddItem(new XNADropDownItem { Text = "Static (V3)".L10N("Client:Main:TunnelSelModeStatic"), Tag = TunnelMode.V3Static });
+            ddTunnelMode.AddItem(new XNADropDownItem { Text = "Legacy (V2)".L10N("Client:Main:TunnelSelModeLegacy"), Tag = TunnelMode.V2Legacy });
+            ddTunnelMode.SelectedIndexChanged += DdTunnelMode_SelectedIndexChanged;
 
             lbTunnelList.X = UIDesignConstants.EMPTY_SPACE_SIDES +
                 UIDesignConstants.CONTROL_HORIZONTAL_MARGIN;
-            lbTunnelList.Y = lblTunnelServer.Bottom + UIDesignConstants.CONTROL_VERTICAL_MARGIN;
+            lbTunnelList.Y = ddTunnelMode.Bottom + UIDesignConstants.CONTROL_VERTICAL_MARGIN;
             lbTunnelList.Disable();
             lbTunnelList.ListRefreshed += LbTunnelList_ListRefreshed;
+
+            pnlTunnelListDisabledOverlay = new XNAPanel(WindowManager);
+            pnlTunnelListDisabledOverlay.Name = nameof(pnlTunnelListDisabledOverlay);
+            pnlTunnelListDisabledOverlay.ClientRectangle = lbTunnelList.ClientRectangle;
+            pnlTunnelListDisabledOverlay.DrawBorders = false;
+            pnlTunnelListDisabledOverlay.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
+            pnlTunnelListDisabledOverlay.Visible = false;
 
             btnCreateGame = new XNAClientButton(WindowManager);
             btnCreateGame.Name = nameof(btnCreateGame);
@@ -185,9 +196,10 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             AddChild(tbPassword);
             AddChild(lblPassword);
             AddChild(btnDisplayAdvancedOptions);
-            AddChild(lblDynamicTunnels);
             AddChild(lblTunnelServer);
+            AddChild(ddTunnelMode);
             AddChild(lbTunnelList);
+            AddChild(pnlTunnelListDisabledOverlay);
             AddChild(btnCreateGame);
             if (!ClientConfiguration.Instance.DisableMultiplayerGameLoading)
                 AddChild(btnLoadMPGame);
@@ -303,14 +315,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             Height = btnCreateGame.Bottom + UIDesignConstants.CONTROL_VERTICAL_MARGIN + UIDesignConstants.EMPTY_SPACE_BOTTOM;
 
-            bool showTunnelList = ShouldShowTunnelList();
             lblTunnelServer.Enable();
-            lblTunnelServer.Visible = showTunnelList;
-
-            if (showTunnelList)
-                lbTunnelList.Enable();
-            else
-                lbTunnelList.Disable();
+            ddTunnelMode.Enable();
+            lbTunnelList.Visible = true;
 
             btnDisplayAdvancedOptions.Disable();
 
@@ -321,27 +328,40 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         public void Refresh()
         {
-            bool showTunnelList = ShouldShowTunnelList();
             bool isAdvancedMode = Name == "GameCreationWindow_Advanced";
 
-            if (!showTunnelList)
-            {
-                lblDynamicTunnels.Visible = true;
-                lbTunnelList.Visible = false;
-                lblTunnelServer.Visible = false;
-                btnDisplayAdvancedOptions.Visible = false;
-            }
-            else
-            {
-                lblDynamicTunnels.Visible = false;
-                lbTunnelList.Visible = isAdvancedMode;
-                lblTunnelServer.Visible = isAdvancedMode;
-                btnDisplayAdvancedOptions.Visible = !isAdvancedMode;
-            }
+            lblTunnelServer.Visible = isAdvancedMode;
+            ddTunnelMode.Visible = isAdvancedMode;
+            lbTunnelList.Visible = isAdvancedMode;
+            btnDisplayAdvancedOptions.Visible = !isAdvancedMode;
 
-            lbTunnelList.TargetVersion = (TunnelMode)UserINISettings.Instance.TunnelMode.Value == TunnelMode.V2Legacy ? 2 : 3;
+            var mode = (TunnelMode)UserINISettings.Instance.TunnelMode.Value;
+            int selectedIndex = ddTunnelMode.Items.FindIndex(i => (TunnelMode)i.Tag == mode);
+            if (selectedIndex == -1)
+                selectedIndex = ddTunnelMode.Items.FindIndex(i => (TunnelMode)i.Tag == TunnelMode.V3Static);
+            ddTunnelMode.SelectedIndex = selectedIndex;
+
+            DdTunnelMode_SelectedIndexChanged(this, EventArgs.Empty);
 
             btnLoadMPGame.AllowClick = AllowLoadingGame();
+        }
+
+        private void DdTunnelMode_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            var mode = (TunnelMode)(ddTunnelMode.SelectedItem?.Tag ?? TunnelMode.V3Static);
+            bool isDynamic = mode == TunnelMode.V3Dynamic;
+
+            lbTunnelList.Enabled = !isDynamic;
+            pnlTunnelListDisabledOverlay.Visible = isDynamic;
+            lbTunnelList.TargetVersion = mode == TunnelMode.V2Legacy ? 2 : 3;
+
+            if ((TunnelMode)UserINISettings.Instance.TunnelMode.Value != mode)
+            {
+                UserINISettings.Instance.TunnelMode.Value = (int)mode;
+                UserINISettings.Instance.SaveSettings();
+            }
+
+            LbTunnelList_ListRefreshed(this, EventArgs.Empty);
         }
 
         private bool AllowLoadingGame()
@@ -360,15 +380,6 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return false;
 
             return true;
-        }
-
-        /// <summary>
-        /// Determines if the tunnel list should be shown.
-        /// The tunnel list is visible when legacy tunnels are enabled or dynamic tunnels are disabled.
-        /// </summary>
-        private bool ShouldShowTunnelList()
-        {
-            return (TunnelMode)UserINISettings.Instance.TunnelMode.Value != TunnelMode.V3Dynamic;
         }
     }
 }
