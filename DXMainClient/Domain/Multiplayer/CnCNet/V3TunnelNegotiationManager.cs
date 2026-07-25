@@ -158,11 +158,22 @@ public class V3TunnelNegotiationManager
         if (localV3Player == null)
             return;
 
+        var pInfo = host.Players.Find(p => p.Name == player.Name);
+
         var availableTunnels = GetAvailableTunnelsForNegotiation();
         if (availableTunnels.Count == 0)
         {
             host.AddNotice("Cannot negotiate tunnel: no V3 tunnels are available. Wait for the tunnel list to refresh or switch to a different tunnel mode.".L10N("Client:Main:NegotiationNoTunnels"), Color.Yellow);
+
+            // Report this pair as explicitly Failed rather than leaving it silently absent —
+            // BroadcastNegotiationInfo skips NotStarted entries, so without this the pair would
+            // never appear over the wire and would look permanently stuck to everyone else.
+            _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, player.Name, NegotiationStatus.Failed);
             BroadcastNegotiationInfo();
+
+            if (pInfo != null)
+                host.OnLocalNegotiationStatus(pInfo, NegotiationStatus.Failed, -1);
+
             host.OnNegotiationStateChanged();
             return;
         }
@@ -170,7 +181,6 @@ public class V3TunnelNegotiationManager
         _negotiationData.UpdateStatus(ProgramConstants.PLAYERNAME, player.Name, NegotiationStatus.InProgress);
         BroadcastNegotiationInfo();
 
-        var pInfo = host.Players.Find(p => p.Name == player.Name);
         if (pInfo != null)
             host.OnLocalNegotiationStatus(pInfo, NegotiationStatus.InProgress, -1);
 
@@ -748,11 +758,14 @@ public class V3TunnelNegotiationManager
     /// </summary>
     public void StopAllNegotiations(bool keepGameRoutes = false)
     {
+        bool gameRouteActive = keepGameRoutes || IsLocalGameRouteActive();
+
         foreach (var v3Player in _v3PlayerInfos)
         {
             DetachNegotiator(v3Player);
             v3Player.StopNegotiation();
-            CleanupP2PForPlayer(v3Player, keepChosenTunnel: keepGameRoutes || IsLocalGameRouteActive());
+            CleanupP2PForPlayer(v3Player, keepChosenTunnel: gameRouteActive);
+            DeferP2PCleanupIfNeeded(v3Player, gameRouteActive);
         }
     }
 
@@ -1021,6 +1034,26 @@ public class V3TunnelNegotiationManager
     }
 
     /// <summary>
+    /// Queues a pair's P2P routing entry for cleanup once <see cref="TunnelHandler.GameBridgeStopped"/>
+    /// fires. Call this whenever a chosen P2P path was just kept alive past its normal cleanup
+    /// point (<paramref name="gameRouteActive"/> was true) so it isn't kept forever —
+    /// <see cref="FlushDeferredP2PCleanups"/> skips any pair whose player is still tracked locally,
+    /// so entries added defensively for players who are still around are simply no-ops.
+    /// </summary>
+    private void DeferP2PCleanupIfNeeded(V3PlayerInfo player, bool gameRouteActive)
+    {
+        if (!gameRouteActive || player.Tunnel is not P2PTunnel)
+            return;
+
+        var localV3Player = FindPlayer(ProgramConstants.PLAYERNAME);
+        if (localV3Player == null || player.Name == ProgramConstants.PLAYERNAME)
+            return;
+
+        if (!_deferredP2PCleanups.Contains((localV3Player.Id, player.Id)))
+            _deferredP2PCleanups.Add((localV3Player.Id, player.Id));
+    }
+
+    /// <summary>
     /// P2P cleanup for a player leaving the lobby. While a game route is active their
     /// chosen path must survive (the bridge may still be forwarding to them — e.g. they
     /// only lost IRC, not the game connection), so the full cleanup is deferred until
@@ -1030,16 +1063,7 @@ public class V3TunnelNegotiationManager
     {
         bool gameRouteActive = IsLocalGameRouteActive();
         CleanupP2PForPlayer(player, keepChosenTunnel: gameRouteActive);
-
-        if (gameRouteActive && player.Tunnel is P2PTunnel)
-        {
-            var localV3Player = FindPlayer(ProgramConstants.PLAYERNAME);
-            if (localV3Player != null && player.Name != ProgramConstants.PLAYERNAME &&
-                !_deferredP2PCleanups.Contains((localV3Player.Id, player.Id)))
-            {
-                _deferredP2PCleanups.Add((localV3Player.Id, player.Id));
-            }
-        }
+        DeferP2PCleanupIfNeeded(player, gameRouteActive);
     }
 
     /// <summary>

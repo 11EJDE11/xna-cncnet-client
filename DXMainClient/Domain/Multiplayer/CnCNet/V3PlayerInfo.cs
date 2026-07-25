@@ -238,6 +238,21 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
         negotiator?.Dispose();
     }
 
+    /// <summary>
+    /// Stops and disposes <paramref name="negotiator"/> only if it is still the active
+    /// negotiator. Used by <see cref="NegotiationWorkerAsync"/>'s own cleanup so a worker
+    /// whose negotiator was already replaced (e.g. by <see cref="SetNegotiator"/> during a
+    /// renegotiation restart) can't reach back and dispose the replacement out from under it.
+    /// </summary>
+    private bool StopNegotiationIfCurrent(V3PlayerNegotiator negotiator)
+    {
+        if (Interlocked.CompareExchange(ref _negotiator, null, negotiator) != negotiator)
+            return false;
+
+        negotiator.Dispose();
+        return true;
+    }
+
     public void ResetNegotiator()
     {
         Tunnel = null;
@@ -291,13 +306,13 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
             if (!success)
             {
                 Logger.Log($"V3PlayerInfo: Negotiation failed for player {Name} (ID: {Id})");
-                StopNegotiation();
+                StopNegotiationIfCurrent(negotiator);
             }
         }
         catch (Exception ex)
         {
             Logger.Log($"V3PlayerInfo: Negotiation error with player {Name} (ID: {Id}): {ex.Message}");
-            StopNegotiation();
+            StopNegotiationIfCurrent(negotiator);
         }
 
         Logger.Log($"V3PlayerInfo: Negotiation finished for {Name} (ID: {Id})");
