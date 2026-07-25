@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using ClientCore;
 using Rampastring.Tools;
 using System.Text;
 
@@ -54,41 +55,45 @@ public class V3PlayerNegotiator : IDisposable
     // latest instance.
     private volatile TaskCompletionSource<bool> _negotiationCompletionSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    // All timing/retry knobs below are configurable via NetworkDefinitions.ini
+    // (section [V3TunnelNegotiation]) so a bad default can be corrected in the field
+    // without a client release. See ClientConfiguration.cs for the documented defaults.
+
     // How long the non-decider will keep sending Connected packets overall.
-    private const int NON_DECIDER_TOTAL_TIMEOUT_MS = 20000;
+    private static int NON_DECIDER_TOTAL_TIMEOUT_MS => ClientConfiguration.Instance.V3NonDeciderTotalTimeoutMs;
 
     // How long the decider will wait to receive a Ping Request from the non-decider.
     // If none are received in time, the tunnel is skipped.
-    private static readonly TimeSpan DECIDER_CONNECTED_PHASE_TIMEOUT = TimeSpan.FromSeconds(15);
+    private static TimeSpan DECIDER_CONNECTED_PHASE_TIMEOUT => TimeSpan.FromMilliseconds(ClientConfiguration.Instance.V3ConnectedPhaseTimeoutMs);
 
     // How long the decider will wait for pings to complete. If it takes this long,
     // pick the best one from the results that have come in.
-    private static readonly TimeSpan DECIDER_PING_PHASE_TIMEOUT = TimeSpan.FromSeconds(15);
-    private const int PINGS_PER_TUNNEL = 5;
-    private const int PING_TIMEOUT_MS = 2000; //consider it dropped, move on to the next ping
+    private static TimeSpan DECIDER_PING_PHASE_TIMEOUT => TimeSpan.FromMilliseconds(ClientConfiguration.Instance.V3DeciderPingPhaseTimeoutMs);
+    private static int PINGS_PER_TUNNEL => ClientConfiguration.Instance.V3PingsPerTunnel;
+    private static int PING_TIMEOUT_MS => ClientConfiguration.Instance.V3PingTimeoutMs; //consider it dropped, move on to the next ping
 
     // P2P paths respond in ~1-3ms on a LAN and up to ~150ms across networks. Use a tighter
     // ping budget than relay negotiation so a doomed candidate (e.g. the reflexive address
     // between same-NAT peers, which needs NAT hairpinning) doesn't stall the upgrade decision.
-    private const int P2P_PINGS_PER_TUNNEL = 4;
-    private const int P2P_PING_TIMEOUT_MS = 1000;
-    private const int NON_DECIDER_CONNECTED_INTERVAL_MS = 500; //delay Connected packets a bit to avoid overloading
+    private static int P2P_PINGS_PER_TUNNEL => ClientConfiguration.Instance.V3P2PPingsPerTunnel;
+    private static int P2P_PING_TIMEOUT_MS => ClientConfiguration.Instance.V3P2PPingTimeoutMs;
+    private static int NON_DECIDER_CONNECTED_INTERVAL_MS => ClientConfiguration.Instance.V3NonDeciderConnectedIntervalMs; //delay Connected packets a bit to avoid overloading
 
     // P2P upgrade round: how long to wait for the peer's candidate addresses, how long the
     // non-decider waits for the upgrade tunnel choice, and how long the decider waits for the
     // peer to start punching the direct paths before falling back to the relay.
-    private const int P2P_CANDIDATE_EXCHANGE_TIMEOUT_MS = 3000;
-    private const int P2P_UPGRADE_NONDECIDER_TIMEOUT_MS = 10000;
-    private static readonly TimeSpan P2P_UPGRADE_CONNECTED_TIMEOUT = TimeSpan.FromSeconds(3);
+    private static int P2P_CANDIDATE_EXCHANGE_TIMEOUT_MS => ClientConfiguration.Instance.V3P2PCandidateExchangeTimeoutMs;
+    private static int P2P_UPGRADE_NONDECIDER_TIMEOUT_MS => ClientConfiguration.Instance.V3P2PUpgradeNonDeciderTimeoutMs;
+    private static TimeSpan P2P_UPGRADE_CONNECTED_TIMEOUT => TimeSpan.FromMilliseconds(ClientConfiguration.Instance.V3P2PUpgradeConnectedTimeoutMs);
 
     // When the decider has picked a tunnel, they need to inform the non-decider.
     // As it's UDP and not guaranteed to make it, we need an acknowledgement.
-    private const int TUNNEL_CHOICE_RETRY_INTERVAL_MS = 1000;
-    private const int TUNNEL_CHOICE_MAX_RETRIES = 10;
+    private static int TUNNEL_CHOICE_RETRY_INTERVAL_MS => ClientConfiguration.Instance.V3TunnelChoiceRetryIntervalMs;
+    private static int TUNNEL_CHOICE_MAX_RETRIES => ClientConfiguration.Instance.V3TunnelChoiceMaxRetries;
 
     // Pick a tunnel early if we have 50% of the results. The remaining tunnels
     // will be high ping or timing out.
-    private const double EARLY_SELECTION_THRESHOLD = 0.5;
+    private static double EARLY_SELECTION_THRESHOLD => ClientConfiguration.Instance.V3EarlySelectionThreshold;
 
     // volatile: reassigned for the P2P upgrade round (see _negotiationCompletionSource) and
     // read by the receive thread when a TunnelAck arrives.

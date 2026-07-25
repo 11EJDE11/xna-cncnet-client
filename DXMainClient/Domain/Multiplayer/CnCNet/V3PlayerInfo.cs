@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using ClientCore;
 using Rampastring.Tools;
 
 #nullable enable
@@ -43,7 +44,10 @@ public class TunnelTestResult
     // Channel_UserAdded is called, while the joining player will begin negotiation
     // when ApplyPlayerOptions is sent by the host. The timeout should be long enough for
     // the joining player to receive that IRC message + attempt connections to each tunnel.
-    private const int CONNECTED_TIMEOUT_MS = 15000;
+    // Shares its value with V3PlayerNegotiator's connected-phase timeout (the same
+    // handshake, seen from each side) - configurable via NetworkDefinitions.ini
+    // ([V3TunnelNegotiation] ConnectedPhaseTimeoutMs).
+    private static int CONNECTED_TIMEOUT_MS => ClientConfiguration.Instance.V3ConnectedPhaseTimeoutMs;
 
     private readonly object _pingLock = new();
     private readonly List<PingResult> _pingResults = [];
@@ -156,7 +160,8 @@ public enum NegotiationStartResult
 /// </summary>
 public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGameID)
 {
-    private const int PACKET_LOSS_WEIGHT = 10;
+    // Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] PacketLossWeight).
+    private static int PACKET_LOSS_WEIGHT => ClientConfiguration.Instance.V3PacketLossWeight;
     private V3PlayerNegotiator? _negotiator;
 
     public uint Id { get; set; } = id;

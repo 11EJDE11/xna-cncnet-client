@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using ClientCore;
 using Rampastring.XNAUI;
 
 #nullable enable
@@ -27,16 +28,19 @@ public class V3KeepAliveMonitor
     /// expiring during long waits between negotiation and game start; typical NAT UDP
     /// timeouts are 30-180 seconds.
     /// </summary>
-    private const double KEEPALIVE_INTERVAL_SECONDS = 15.0;
+    /// Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] KeepAliveIntervalSeconds).
+    private static double KEEPALIVE_INTERVAL_SECONDS => ClientConfiguration.Instance.V3KeepAliveIntervalSeconds;
 
-    /// <summary>How often the keepalive state machine runs; also the retry cadence for unanswered pings.</summary>
-    private const double KEEPALIVE_TICK_SECONDS = 5.0;
+    /// <summary>How often the keepalive state machine runs; also the retry cadence for unanswered pings.
+    /// Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] KeepAliveTickSeconds).</summary>
+    private static double KEEPALIVE_TICK_SECONDS => ClientConfiguration.Instance.V3KeepAliveTickSeconds;
 
     /// <summary>
     /// Unanswered pings in a row before a peer is declared unreachable (~15-20 seconds
     /// after their connection actually died — far faster than IRC notices it).
+    /// Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] KeepAliveMaxMisses).
     /// </summary>
-    private const int KEEPALIVE_MAX_MISSES = 3;
+    private static int KEEPALIVE_MAX_MISSES => ClientConfiguration.Instance.V3KeepAliveMaxMisses;
 
     private readonly V3TunnelCommunicator _communicator;
     private readonly WindowManager _windowManager;
@@ -323,8 +327,9 @@ public class V3KeepAliveMonitor
         return unresponsive;
     }
 
-    /// <summary>How long a completed probe result is answered from cache, covering the requester's UDP resends.</summary>
-    private const double PROBE_REPLY_CACHE_SECONDS = 5.0;
+    /// <summary>How long a completed probe result is answered from cache, covering the requester's UDP resends.
+    /// Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] ProbeReplyCacheSeconds).</summary>
+    private static double PROBE_REPLY_CACHE_SECONDS => ClientConfiguration.Instance.V3ProbeReplyCacheSeconds;
 
     private int _probeRunning;
     private volatile ProbeReply? _lastProbeReply;

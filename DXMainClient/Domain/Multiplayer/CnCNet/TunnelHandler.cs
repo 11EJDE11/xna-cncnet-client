@@ -22,20 +22,22 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
     {
         /// <summary>
         /// Determines the time between pinging the current tunnel (if it's set).
+        /// Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] CurrentTunnelPingIntervalSeconds).
         /// </summary>
-        private const double CURRENT_TUNNEL_PING_INTERVAL = 20.0;
+        private static double CURRENT_TUNNEL_PING_INTERVAL => ClientConfiguration.Instance.V3CurrentTunnelPingIntervalSeconds;
 
         /// <summary>
         /// A reciprocal to the value which determines how frequent the full tunnel
-        /// refresh would be done instead of just pinging the current tunnel (1/N of 
+        /// refresh would be done instead of just pinging the current tunnel (1/N of
         /// current tunnel ping refreshes would be substituted by a full list refresh).
-        /// Multiply by <see cref="CURRENT_TUNNEL_PING_INTERVAL"/> to get the interval 
+        /// Multiply by <see cref="CURRENT_TUNNEL_PING_INTERVAL"/> to get the interval
         /// between full list refreshes.
+        /// Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] CyclesPerTunnelListRefresh).
         /// </summary>
-        private const uint CYCLES_PER_TUNNEL_LIST_REFRESH = 6;
+        private static uint CYCLES_PER_TUNNEL_LIST_REFRESH => ClientConfiguration.Instance.V3CyclesPerTunnelListRefresh;
 
         private static readonly int[] SUPPORTED_TUNNEL_VERSIONS = [2, 3];
-        private static readonly TimeSpan tunnelRefreshInterval = TimeSpan.FromSeconds(CURRENT_TUNNEL_PING_INTERVAL);
+        private static TimeSpan tunnelRefreshInterval => TimeSpan.FromSeconds(CURRENT_TUNNEL_PING_INTERVAL);
 
         private readonly object _refreshLock = new();
         private bool _refreshInProgress = false;
@@ -82,14 +84,19 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private readonly Stopwatch refreshTimer = Stopwatch.StartNew();
         private TimeSpan? lastTunnelRefreshTimestamp;
         private uint skipCount = 0;
-        private const int TUNNEL_FAILED_PING_AMOUNT = 2000;
+
+        /// <summary>
+        /// Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] TunnelFailedPingAmountMs).
+        /// </summary>
+        private static int TUNNEL_FAILED_PING_AMOUNT => ClientConfiguration.Instance.V3TunnelFailedPingAmountMs;
 
         /// <summary>
         /// How many bad ping results in a row a tunnel needs before <see cref="TunnelFailed"/>
         /// fires. ICMP echoes get dropped or deprioritized sporadically; a single miss must not
         /// trigger renegotiations for everyone using the tunnel.
+        /// Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] TunnelFailedConsecutivePings).
         /// </summary>
-        private const int TUNNEL_FAILED_CONSECUTIVE_PINGS = 2;
+        private static int TUNNEL_FAILED_CONSECUTIVE_PINGS => ClientConfiguration.Instance.V3TunnelFailedConsecutivePings;
 
         /// <summary>
         /// The keepalive subsystem for negotiated V3 paths: NAT/registration refresh, live

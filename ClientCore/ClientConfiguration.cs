@@ -20,6 +20,7 @@ namespace ClientCore
         private const string LINKS = "Links";
         private const string TRANSLATIONS = "Translations";
         private const string USER_DEFAULTS = "UserDefaults";
+        private const string V3_TUNNEL_NEGOTIATION = "V3TunnelNegotiation";
 
         public const string CLIENT_SETTINGS = "DTACnCNetClient.ini";
         public const string GAME_OPTIONS = "GameOptions.ini";
@@ -510,6 +511,129 @@ namespace ClientCore
         public string P2PStunServers => networkDefinitionsIni.GetStringValue(SETTINGS, "P2PStunServers", string.Empty);
 
         public List<string> IRCServers => GetIRCServers();
+
+        #endregion
+
+        #region V3 tunnel negotiation
+
+        /// <summary>
+        /// How long (ms) the non-decider in a pairwise negotiation keeps sending Connected
+        /// packets to candidate tunnels overall before giving up.
+        /// </summary>
+        public int V3NonDeciderTotalTimeoutMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "NonDeciderTotalTimeoutMs", 20000);
+
+        /// <summary>
+        /// How long (ms) either side of a negotiation waits for a candidate tunnel to answer
+        /// the initial Connected handshake before treating that tunnel as unreachable.
+        /// </summary>
+        public int V3ConnectedPhaseTimeoutMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "ConnectedPhaseTimeoutMs", 15000);
+
+        /// <summary>
+        /// How long (ms) the decider waits for a candidate tunnel's ping cycle to finish once
+        /// connected. If this elapses first, the tunnel is judged on whatever pings did arrive.
+        /// </summary>
+        public int V3DeciderPingPhaseTimeoutMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "DeciderPingPhaseTimeoutMs", 15000);
+
+        /// <summary>
+        /// Number of pings sent to each candidate relay tunnel during negotiation.
+        /// </summary>
+        public int V3PingsPerTunnel => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "PingsPerTunnel", 5);
+
+        /// <summary>
+        /// Timeout (ms) for a single ping to a candidate relay tunnel before it's considered dropped.
+        /// </summary>
+        public int V3PingTimeoutMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "PingTimeoutMs", 2000);
+
+        /// <summary>
+        /// Number of pings sent to each candidate direct P2P path during the upgrade round.
+        /// </summary>
+        public int V3P2PPingsPerTunnel => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "P2PPingsPerTunnel", 4);
+
+        /// <summary>
+        /// Timeout (ms) for a single ping to a candidate direct P2P path before it's considered dropped.
+        /// </summary>
+        public int V3P2PPingTimeoutMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "P2PPingTimeoutMs", 1000);
+
+        /// <summary>
+        /// Delay (ms) between the non-decider's repeated Connected packets to a single candidate tunnel.
+        /// </summary>
+        public int V3NonDeciderConnectedIntervalMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "NonDeciderConnectedIntervalMs", 500);
+
+        /// <summary>
+        /// How long (ms) the P2P upgrade round waits for the peer's candidate addresses.
+        /// </summary>
+        public int V3P2PCandidateExchangeTimeoutMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "P2PCandidateExchangeTimeoutMs", 3000);
+
+        /// <summary>
+        /// How long (ms) the non-decider waits for the P2P upgrade tunnel choice before falling back to the relay.
+        /// </summary>
+        public int V3P2PUpgradeNonDeciderTimeoutMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "P2PUpgradeNonDeciderTimeoutMs", 10000);
+
+        /// <summary>
+        /// How long (ms) the decider waits for the peer to start punching a direct P2P path before falling back to the relay.
+        /// </summary>
+        public int V3P2PUpgradeConnectedTimeoutMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "P2PUpgradeConnectedTimeoutMs", 3000);
+
+        /// <summary>
+        /// Delay (ms) between retries of the decider's TunnelChoice message while waiting for the non-decider's ack.
+        /// </summary>
+        public int V3TunnelChoiceRetryIntervalMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "TunnelChoiceRetryIntervalMs", 1000);
+
+        /// <summary>
+        /// Maximum number of retries for the decider's TunnelChoice message before giving up on the negotiation.
+        /// </summary>
+        public int V3TunnelChoiceMaxRetries => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "TunnelChoiceMaxRetries", 10);
+
+        /// <summary>
+        /// Fraction (0-1) of candidate tunnels that must finish their ping cycle before the decider
+        /// picks a winner early instead of waiting for every candidate to finish.
+        /// </summary>
+        public double V3EarlySelectionThreshold => networkDefinitionsIni.GetDoubleValue(V3_TUNNEL_NEGOTIATION, "EarlySelectionThreshold", 0.5);
+
+        /// <summary>
+        /// Ping penalty (ms) applied per percentage point of packet loss when ranking negotiated tunnels/paths.
+        /// </summary>
+        public int V3PacketLossWeight => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "PacketLossWeight", 10);
+
+        /// <summary>
+        /// How often (seconds) the currently-selected tunnel server is pinged in V2/V3 static mode.
+        /// </summary>
+        public double V3CurrentTunnelPingIntervalSeconds => networkDefinitionsIni.GetDoubleValue(V3_TUNNEL_NEGOTIATION, "CurrentTunnelPingIntervalSeconds", 20.0);
+
+        /// <summary>
+        /// Number of ping cycles between automatic refreshes of the full tunnel server list.
+        /// </summary>
+        public uint V3CyclesPerTunnelListRefresh => (uint)networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "CyclesPerTunnelListRefresh", 6);
+
+        /// <summary>
+        /// Ping (ms) above which a tunnel server is considered to be responding badly.
+        /// </summary>
+        public int V3TunnelFailedPingAmountMs => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "TunnelFailedPingAmountMs", 2000);
+
+        /// <summary>
+        /// Number of consecutive bad pings before a tunnel server is reported as failed.
+        /// </summary>
+        public int V3TunnelFailedConsecutivePings => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "TunnelFailedConsecutivePings", 2);
+
+        /// <summary>
+        /// Interval (seconds) between P2P keepalive ping rounds sent to negotiated peers.
+        /// </summary>
+        public double V3KeepAliveIntervalSeconds => networkDefinitionsIni.GetDoubleValue(V3_TUNNEL_NEGOTIATION, "KeepAliveIntervalSeconds", 15.0);
+
+        /// <summary>
+        /// How often (seconds) the keepalive monitor's timer ticks to check for due pings/misses.
+        /// </summary>
+        public double V3KeepAliveTickSeconds => networkDefinitionsIni.GetDoubleValue(V3_TUNNEL_NEGOTIATION, "KeepAliveTickSeconds", 5.0);
+
+        /// <summary>
+        /// Number of consecutive missed keepalive pings before a P2P path is treated as dead.
+        /// </summary>
+        public int V3KeepAliveMaxMisses => networkDefinitionsIni.GetIntValue(V3_TUNNEL_NEGOTIATION, "KeepAliveMaxMisses", 3);
+
+        /// <summary>
+        /// How long (seconds) a P2P probe reply is cached for before it's queried again.
+        /// </summary>
+        public double V3ProbeReplyCacheSeconds => networkDefinitionsIni.GetDoubleValue(V3_TUNNEL_NEGOTIATION, "ProbeReplyCacheSeconds", 5.0);
 
         #endregion
 
