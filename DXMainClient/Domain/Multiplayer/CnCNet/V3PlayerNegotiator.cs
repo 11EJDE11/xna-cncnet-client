@@ -361,8 +361,11 @@ public class V3PlayerNegotiator : IDisposable
     // In the P2P upgrade round (<paramref name="isUpgradeRound"/>) a timeout is benign: the relay
     // tunnel from round 1 is already agreed, so we just keep it rather than reporting a failure.
     private async Task PerformNonDeciderNegotiationAsync(
-        bool isUpgradeRound = false, int totalTimeoutMs = NON_DECIDER_TOTAL_TIMEOUT_MS)
+        bool isUpgradeRound = false, int totalTimeoutMs = -1)
     {
+        if (totalTimeoutMs < 0)
+            totalTimeoutMs = NON_DECIDER_TOTAL_TIMEOUT_MS;
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(_negotiationToken);
         Task connectedPacketsTask = SendConnectedPacketsAsync(cts.Token);
 
@@ -435,7 +438,7 @@ public class V3PlayerNegotiator : IDisposable
 
     //send a ping, wait for response or timeout, next ping...
     private async Task PerformPingsAsync(CnCNetTunnel tunnel, TunnelTestResult result,
-        int pingCount = PINGS_PER_TUNNEL, int pingTimeoutMs = PING_TIMEOUT_MS)
+        int pingCount, int pingTimeoutMs)
     {
         int timedOutPings = 0;
 
@@ -521,7 +524,7 @@ public class V3PlayerNegotiator : IDisposable
                     if (tunnel.IsDirect)
                         _ = PerformPingsAsync(tunnel, result, P2P_PINGS_PER_TUNNEL, P2P_PING_TIMEOUT_MS);
                     else
-                        _ = PerformPingsAsync(tunnel, result);
+                        _ = PerformPingsAsync(tunnel, result, PINGS_PER_TUNNEL, PING_TIMEOUT_MS);
                 }
                 break;
 
