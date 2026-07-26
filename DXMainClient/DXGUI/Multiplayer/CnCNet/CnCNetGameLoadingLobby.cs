@@ -983,8 +983,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             UpdateLoadGameButtonStatus();
         }
 
-        private void TunnelHandler_TunnelFailed(object sender, CnCNetTunnel failedTunnel)
+        private void TunnelHandler_TunnelFailed(object sender, TunnelFailedEventArgs e)
         {
+            CnCNetTunnel failedTunnel = e.Tunnel;
             if (tunnelHandler.GameTunnelBridge != null && tunnelHandler.GameTunnelBridge.IsRunning)
                 return;
 

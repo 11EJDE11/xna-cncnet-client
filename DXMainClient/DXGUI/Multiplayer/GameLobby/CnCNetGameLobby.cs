@@ -357,8 +357,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void TunnelHandler_CurrentTunnelPinged(object sender, EventArgs e) => UpdatePing();
 
-        private void TunnelHandler_TunnelFailed(object sender, CnCNetTunnel failedTunnel)
+        private void TunnelHandler_TunnelFailed(object sender, TunnelFailedEventArgs e)
         {
+            CnCNetTunnel failedTunnel = e.Tunnel;
             if (tunnelHandler.GameTunnelBridge != null && tunnelHandler.GameTunnelBridge.IsRunning)
                 return;
 

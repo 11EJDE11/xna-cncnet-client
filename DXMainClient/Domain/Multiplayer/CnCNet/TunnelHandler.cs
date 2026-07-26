@@ -75,7 +75,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// </summary>
         public event Action GameBridgeStopped;
         public event EventHandler CurrentTunnelPinged;
-        public event EventHandler<CnCNetTunnel> TunnelFailed;
+        public event EventHandler<TunnelFailedEventArgs> TunnelFailed;
         public event Action<string, int> TunnelPinged; //address, port
 
         private WindowManager wm;
