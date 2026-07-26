@@ -6,11 +6,13 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+
 using ClientCore;
+
 using Rampastring.Tools;
-using System.Text;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 
@@ -257,18 +259,19 @@ public class V3PlayerNegotiator : IDisposable
                 continue;
 
             _ = WaitForTunnelResultsAsync(result, _negotiationToken,
-                connectedTimeout ?? DECIDER_CONNECTED_PHASE_TIMEOUT, () => {
-                lock (completionLock)
+                connectedTimeout ?? DECIDER_CONNECTED_PHASE_TIMEOUT, () =>
                 {
-                    completedTunnels++;
-                    if (!selectionMade && (completedTunnels >= totalTunnels ||
-                        completedTunnels >= Math.Max(1, totalTunnels * EARLY_SELECTION_THRESHOLD)))
+                    lock (completionLock)
                     {
-                        selectionMade = true;
-                        selectionTcs.TrySetResult(true);
+                        completedTunnels++;
+                        if (!selectionMade && (completedTunnels >= totalTunnels ||
+                            completedTunnels >= Math.Max(1, totalTunnels * EARLY_SELECTION_THRESHOLD)))
+                        {
+                            selectionMade = true;
+                            selectionTcs.TrySetResult(true);
+                        }
                     }
-                }
-            }, $"{_remotePlayer.Name} via {tunnel.Name}");
+                }, $"{_remotePlayer.Name} via {tunnel.Name}");
         }
 
         // Wait for early selection or all completion

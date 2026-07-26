@@ -1,13 +1,18 @@
 #nullable enable
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using Rampastring.XNAUI;
-using Rampastring.XNAUI.XNAControls;
 using System;
 using System.Collections.Generic;
+
 using ClientCore.Extensions;
+
 using ClientGUI;
+
 using DTAClient.Domain.Multiplayer.CnCNet;
+
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+
+using Rampastring.XNAUI;
+using Rampastring.XNAUI.XNAControls;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby;
 

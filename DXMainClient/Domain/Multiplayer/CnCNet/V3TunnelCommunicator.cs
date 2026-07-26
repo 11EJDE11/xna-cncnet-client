@@ -1,5 +1,4 @@
 #nullable enable
-using Rampastring.Tools;
 using System;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
@@ -10,6 +9,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+
+using Rampastring.Tools;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 
@@ -75,7 +76,7 @@ public delegate void PacketHandler(uint senderId, uint receiverId,
 /// </summary>
 public class V3TunnelCommunicator
 {
-    private readonly static byte[] MAGIC_BYTES = [(byte)'C', (byte)'N', (byte)'C', (byte)'N', (byte)'E', (byte)'T']; // CNCNET
+    private static readonly byte[] MAGIC_BYTES = [(byte)'C', (byte)'N', (byte)'C', (byte)'N', (byte)'E', (byte)'T']; // CNCNET
 
     // Maximum size of a single UDP datagram payload, used to size the receive buffer.
     private const int MAX_DATAGRAM_SIZE = 65507;

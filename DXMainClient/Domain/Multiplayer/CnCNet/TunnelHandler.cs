@@ -555,6 +555,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public void SendRegistrationToTunnels(uint localId, List<CnCNetTunnel> tunnels = null) => _tunnelCommunicator.SendRegistrationToTunnels(localId, tunnels);
 
         public void SendPacket(CnCNetTunnel tunnel, uint senderId, uint receiverId,
-            TunnelPacketType packetType, byte[] payload = null)  => _tunnelCommunicator.SendPacket(tunnel, senderId, receiverId, packetType, payload);
+            TunnelPacketType packetType, byte[] payload = null) => _tunnelCommunicator.SendPacket(tunnel, senderId, receiverId, packetType, payload);
     }
 }
