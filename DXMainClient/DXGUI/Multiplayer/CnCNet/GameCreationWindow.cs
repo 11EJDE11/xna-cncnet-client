@@ -136,7 +136,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             lblTunnelServer.Name = nameof(lblTunnelServer);
             lblTunnelServer.ClientRectangle = new Rectangle(UIDesignConstants.EMPTY_SPACE_SIDES +
                 UIDesignConstants.CONTROL_HORIZONTAL_MARGIN, lblPassword.Bottom + UIDesignConstants.CONTROL_VERTICAL_MARGIN * 4, 0, 0);
-            lblTunnelServer.Text = "Tunnel mode:".L10N("Client:Main:TunnelServer");
+            lblTunnelServer.Text = "Tunnel mode:".L10N("Client:Main:TunnelModeLabel");
             lblTunnelServer.Enabled = false;
             lblTunnelServer.Visible = false;
 
