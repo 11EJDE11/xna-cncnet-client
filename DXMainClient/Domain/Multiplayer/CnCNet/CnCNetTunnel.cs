@@ -1,4 +1,5 @@
 ﻿using Rampastring.Tools;
+
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -193,6 +194,31 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                     Ping = PingValue.Unknown;
                 }
             }
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is not CnCNetTunnel otherTunnel)
+                return false;
+
+            return Address == otherTunnel.Address && Port == otherTunnel.Port;
+        }
+
+        public override int GetHashCode() => new { Address, Port }.GetHashCode();
+
+        public static bool operator ==(CnCNetTunnel left, CnCNetTunnel right)
+        {
+            if (left is null && right is null)
+                return true;
+            if (left is null || right is null)
+                return false;
+
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(CnCNetTunnel left, CnCNetTunnel right)
+        {
+            return !(left == right);
         }
     }
 }
