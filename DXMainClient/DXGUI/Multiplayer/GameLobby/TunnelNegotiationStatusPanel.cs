@@ -1,3 +1,4 @@
+#nullable enable
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Rampastring.XNAUI;
@@ -7,8 +8,6 @@ using System.Collections.Generic;
 using ClientCore.Extensions;
 using ClientGUI;
 using DTAClient.Domain.Multiplayer.CnCNet;
-
-#nullable enable
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby;
 

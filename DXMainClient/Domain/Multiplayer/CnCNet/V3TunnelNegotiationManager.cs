@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
@@ -13,8 +14,6 @@ using ClientCore.Extensions;
 using Microsoft.Xna.Framework;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
-
-#nullable enable
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 

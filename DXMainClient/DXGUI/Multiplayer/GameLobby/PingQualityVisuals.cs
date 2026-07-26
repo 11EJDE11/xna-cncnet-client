@@ -1,9 +1,8 @@
+#nullable enable
 using System;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-
-#nullable enable
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby;
 

@@ -1,6 +1,5 @@
-using System.Net;
-
 #nullable enable
+using System.Net;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 

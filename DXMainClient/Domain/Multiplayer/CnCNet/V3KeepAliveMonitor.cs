@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
@@ -9,8 +10,6 @@ using System.Threading.Tasks;
 
 using ClientCore;
 using Rampastring.XNAUI;
-
-#nullable enable
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 

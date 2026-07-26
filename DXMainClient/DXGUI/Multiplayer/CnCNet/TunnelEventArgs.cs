@@ -1,7 +1,6 @@
+#nullable enable
 using DTAClient.Domain.Multiplayer.CnCNet;
 using System;
-
-#nullable enable
 
 namespace DTAClient.DXGUI.Multiplayer.CnCNet;
 

@@ -1,8 +1,7 @@
+#nullable enable
 using System.Collections.Generic;
 
 using Microsoft.Xna.Framework;
-
-#nullable enable
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 

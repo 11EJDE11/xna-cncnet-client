@@ -1,7 +1,6 @@
+#nullable enable
 using System;
 using ClientCore.Extensions;
-
-#nullable enable
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 

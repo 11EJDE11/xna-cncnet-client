@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,8 +9,6 @@ using System.Threading.Tasks;
 
 using ClientCore;
 using Rampastring.Tools;
-
-#nullable enable
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 

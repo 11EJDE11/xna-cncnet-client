@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -7,8 +8,6 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Buffers.Binary;
 using Rampastring.Tools;
-
-#nullable enable
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 
