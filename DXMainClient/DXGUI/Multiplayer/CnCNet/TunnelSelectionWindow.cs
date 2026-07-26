@@ -18,7 +18,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             this.tunnelHandler = tunnelHandler;
         }
 
-        public event EventHandler<TunnelEventArgs> TunnelSelected;
+        public event EventHandler<TunnelSelectedEventArgs> TunnelSelected;
 
         private readonly TunnelHandler tunnelHandler;
         private TunnelListBox lbTunnelList;
@@ -141,7 +141,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (mode != TunnelMode.V3Dynamic && tunnel == null)
                 return;
 
-            TunnelSelected?.Invoke(this, new TunnelEventArgs(tunnel, mode));
+            TunnelSelected?.Invoke(this, new TunnelSelectedEventArgs(tunnel, mode));
         }
 
         private void BtnCancel_LeftClick(object sender, EventArgs e) => Disable();

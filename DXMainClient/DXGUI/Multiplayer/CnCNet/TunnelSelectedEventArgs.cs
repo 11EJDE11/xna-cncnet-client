@@ -1,12 +1,13 @@
 #nullable enable
 using DTAClient.Domain.Multiplayer.CnCNet;
+
 using System;
 
 namespace DTAClient.DXGUI.Multiplayer.CnCNet;
 
-class TunnelEventArgs : EventArgs
+public class TunnelSelectedEventArgs : EventArgs
 {
-    public TunnelEventArgs(CnCNetTunnel? tunnel, TunnelMode mode)
+    public TunnelSelectedEventArgs(CnCNetTunnel? tunnel, TunnelMode mode)
     {
         Tunnel = tunnel;
         Mode = mode;

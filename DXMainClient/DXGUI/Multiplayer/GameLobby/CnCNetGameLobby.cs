@@ -632,7 +632,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 _tunnelMode);
         }
 
-        private void TunnelSelectionWindow_TunnelSelected(object sender, TunnelEventArgs e)
+        private void TunnelSelectionWindow_TunnelSelected(object sender, TunnelSelectedEventArgs e)
         {
             HandleTunnelModeChange(e.Mode, true, autoSelectTunnel: e.Mode == TunnelMode.V3Dynamic);
 

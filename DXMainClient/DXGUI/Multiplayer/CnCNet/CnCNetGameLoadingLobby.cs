@@ -427,7 +427,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 _tunnelMode);
         }
 
-        private void TunnelSelectionWindow_TunnelSelected(object sender, TunnelEventArgs e)
+        private void TunnelSelectionWindow_TunnelSelected(object sender, TunnelSelectedEventArgs e)
         {
             HandleTunnelModeChange(e.Mode, true);
 
