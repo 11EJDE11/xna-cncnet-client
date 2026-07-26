@@ -153,7 +153,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private void DoTunnelFailed(CnCNetTunnel tunnel)
         {
             if (TunnelFailed != null)
-                wm.AddCallback(TunnelFailed, this, tunnel);
+                wm.AddCallback(TunnelFailed, this, new TunnelFailedEventArgs(tunnel));
         }
 
         private void ConnectionManager_Connected(object sender, EventArgs e)
