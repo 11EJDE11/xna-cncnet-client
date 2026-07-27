@@ -39,6 +39,7 @@ namespace DTAClient.DXGUI.Generic
 
         private XNALabel lblPlaybackSettings;
         private XNAClientCheckBox chkShroudEnabled;
+        private XNAClientCheckBox chkSpectator;
         private XNAClientCheckBox chkLockedViewport;
         private XNAClientCheckBox chkSelectUnits;
 
@@ -110,6 +111,15 @@ namespace DTAClient.DXGUI.Generic
             chkSelectUnits.Checked = false;
             chkSelectUnits.ToolTipText = "Shows which units were selected by the recording player.".L10N("Client:Main:ReplaySelectUnitsTooltip");
 
+            chkSpectator = new XNAClientCheckBox(WindowManager);
+            chkSpectator.Name = nameof(chkSpectator);
+            chkSpectator.ClientRectangle = new Rectangle(checkboxX + 260, checkboxY + checkboxSpacing, 200, 20);
+            chkSpectator.Text = "Spectator view".L10N("Client:Main:SpectatorView");
+            chkSpectator.Checked = false;
+            chkSpectator.ToolTipText = ("Watch as an observer: reveals the whole map and shows cloaked and " +
+                "disguised units. Leave off to watch from the recording player's point of view.")
+                .L10N("Client:Main:ReplaySpectatorTooltip");
+
             btnLaunch = new XNAClientButton(WindowManager);
             btnLaunch.Name = nameof(btnLaunch);
             btnLaunch.ClientRectangle = new Rectangle(200, 445, 110, 23);
@@ -137,6 +147,7 @@ namespace DTAClient.DXGUI.Generic
             AddChild(chkShroudEnabled);
             AddChild(chkLockedViewport);
             AddChild(chkSelectUnits);
+            AddChild(chkSpectator);
             AddChild(btnLaunch);
             AddChild(btnDelete);
             AddChild(btnCancel);
@@ -197,6 +208,35 @@ namespace DTAClient.DXGUI.Generic
             // Update the settings fore play support
             IniFile spawnIni = new IniFile(spawnerSettingsFile.FullName);
 
+            // A replay only plays back correctly against the game files it was recorded with.
+            // Mismatched files do not error - the replay loads with the correct players and then
+            // nothing happens, because unit orders reference object IDs that no longer exist. Stop
+            // here instead and say which files are wrong.
+            List<string> fileMismatches = ReplayFileHashes.FindMismatches(spawnIni);
+            if (fileMismatches.Count > 0)
+            {
+                foreach (string mismatch in fileMismatches)
+                    Logger.Log("Replay file mismatch: " + mismatch);
+
+                const int maxListed = 6;
+                string details = string.Join(Environment.NewLine,
+                    fileMismatches.Take(maxListed).Select(m => "  - " + m));
+
+                if (fileMismatches.Count > maxListed)
+                    details += Environment.NewLine + $"  ...and {fileMismatches.Count - maxListed} more";
+
+                XNAMessageBox.Show(WindowManager,
+                    "Cannot Play Replay".L10N("Client:Main:ReplayFileMismatchTitle"),
+                    string.Format(("This replay was recorded with different game files, so it would " +
+                        "not play back correctly.\n\n{0}\n\nUpdating to the same game version as the " +
+                        "recording should resolve this.").L10N("Client:Main:ReplayFileMismatchText"),
+                        details));
+
+                // The window is still open at this point (it is only disabled once the game is
+                // actually launched further down), so just stop here.
+                return;
+            }
+
             spawnIni.SetStringValue("Settings", "ReplayFile", replayPath);
 
             int selectedSpeed = ddGameSpeed.SelectedIndex;
@@ -205,6 +245,7 @@ namespace DTAClient.DXGUI.Generic
             spawnIni.SetIntValue("Settings", "ReplayShroudEnabled", chkShroudEnabled.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked ? 1 : 0);
+            spawnIni.SetIntValue("Settings", "ReplaySpectator", chkSpectator.Checked ? 1 : 0);
             spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
 
             spawnIni.WriteIniFile();

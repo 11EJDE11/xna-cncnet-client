@@ -1786,6 +1786,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
+            // Only worth carrying when a replay is actually being recorded - the spawner embeds
+            // spawn.ini verbatim, so this is what lets playback detect that the game files have
+            // changed since the recording was made.
+            if (spawnIni.GetBooleanValue("Settings", "EnableReplayRecording", false))
+                ReplayFileHashes.Write(spawnIni);
+
             spawnIni.WriteIniFile();
 
             return houseInfos;
