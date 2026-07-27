@@ -196,9 +196,10 @@ public class V3KeepAliveMonitor
             activeIds.Add(remoteId);
 
             var tracker = _trackers.GetOrAdd(remoteId, _ => new KeepAliveTracker(tunnel, now));
-            if (!ReferenceEquals(tracker.Tunnel, tunnel))
+            if (tracker.Tunnel != tunnel)
             {
-                // Pair renegotiated onto a different path; measure it from scratch.
+                // Pair renegotiated onto a different path; measure it from scratch. Compared by
+                // value so a rebuilt instance for the same endpoint doesn't discard the baseline.
                 tracker.Tunnel = tunnel;
                 tracker.ResetBaseline(now);
             }

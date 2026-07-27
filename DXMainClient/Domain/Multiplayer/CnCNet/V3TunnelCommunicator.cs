@@ -374,11 +374,11 @@ public class V3TunnelCommunicator
         if (!IsInitialized)
             return;
 
-        if (_tunnelToEndpoint.TryAdd(tunnel, tunnel.PeerEndpoint))
-        {
-            _endpointToTunnel[tunnel.PeerEndpoint] = tunnel;
+        bool isNewPath = _tunnelToEndpoint.TryAdd(tunnel, tunnel.PeerEndpoint);
+        _endpointToTunnel[tunnel.PeerEndpoint] = tunnel;
+
+        if (isNewPath)
             Logger.Log($"V3TunnelCommunicator: Registered P2P path {tunnel.Name}");
-        }
 
         _p2pPeerNames[(localId, remoteId)] = tunnel.PeerName;
         _p2pEndpointsByPair.GetOrAdd((localId, remoteId), _ => new ConcurrentDictionary<IPEndPoint, byte>())[tunnel.PeerEndpoint] = 0;

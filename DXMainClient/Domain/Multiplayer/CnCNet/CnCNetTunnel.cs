@@ -11,7 +11,15 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
     /// <summary>
     /// A CnCNet tunnel server.
     /// </summary>
-    public class CnCNetTunnel
+    /// <remarks>
+    /// Equality is by <see cref="Address"/> and <see cref="Port"/>, not by reference. The same
+    /// endpoint can be represented by more than one instance — a relay list refresh, or a
+    /// renegotiation rebuilding its <see cref="P2PTunnel"/> candidates — and every consumer
+    /// (routing maps, per-tunnel test results, keep-alive trackers) must treat those as one
+    /// path. Both properties are immutable after construction, so instances are safe as
+    /// dictionary keys.
+    /// </remarks>
+    public class CnCNetTunnel : IEquatable<CnCNetTunnel>
     {
         private const int REQUEST_TIMEOUT = 10000; // In milliseconds
         private const int PING_TIMEOUT = 1000;
@@ -196,15 +204,20 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
         }
 
-        public override bool Equals(object obj)
+        public bool Equals(CnCNetTunnel other)
         {
-            if (obj is not CnCNetTunnel otherTunnel)
+            if (other is null)
                 return false;
 
-            return Address == otherTunnel.Address && Port == otherTunnel.Port;
+            return Address == other.Address && Port == other.Port;
         }
 
-        public override int GetHashCode() => new { Address, Port }.GetHashCode();
+        public override bool Equals(object obj) => Equals(obj as CnCNetTunnel);
+
+        // Implemented with a ValueTuple rather than an anonymous type: SendPacket hashes the
+        // tunnel to look up its endpoint for every outbound game packet, and an anonymous
+        // type would allocate on that path.
+        public override int GetHashCode() => (Address, Port).GetHashCode();
 
         public static bool operator ==(CnCNetTunnel left, CnCNetTunnel right)
         {

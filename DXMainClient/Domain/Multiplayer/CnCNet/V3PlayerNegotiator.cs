@@ -603,7 +603,7 @@ public class V3PlayerNegotiator : IDisposable
                     if (payload.Length >= 2)
                         _remotePlayer.P2PEnabled = payload.Span[1] != 0;
 
-                    if (!ReferenceEquals(tunnel, _pendingChoiceTunnel))
+                    if (tunnel != _pendingChoiceTunnel)
                     {
                         Logger.Log($"V3PlayerNegotiator: Ignoring acknowledgment from {_remotePlayer.Name} via {tunnel.Name}; it is not the tunnel of the outstanding choice");
                         break;
@@ -967,8 +967,13 @@ public class V3PlayerNegotiator : IDisposable
             var p2pTunnel = new P2PTunnel(ep, _remotePlayer.Name);
             _tunnelHandler.AddP2PTunnel(p2pTunnel, _localPlayer.Id, _remotePlayer.Id);
             _remotePlayer.AddTunnelResult(p2pTunnel);
+
             lock (_tunnelsLock)
-                _tunnels.Add(p2pTunnel);
+            {
+                if (!_tunnels.Contains(p2pTunnel))
+                    _tunnels.Add(p2pTunnel);
+            }
+
             tunnels.Add(p2pTunnel);
         }
         return tunnels;
