@@ -108,9 +108,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             lbTunnelList.Enabled = !isDynamic;
             pnlTunnelListDisabledOverlay.Visible = isDynamic;
-
-            if (!isDynamic)
-                lbTunnelList.TargetVersion = mode == TunnelMode.V2Legacy ? 2 : 3;
+            lbTunnelList.TargetVersion = mode == TunnelMode.V2Legacy ? 2 : 3;
 
             UpdateApplyButton();
         }
@@ -157,14 +155,11 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             originalTunnel = currentTunnel;
             originalMode = currentMode;
 
-            // Set mode dropdown — fires DdMode_SelectedIndexChanged which updates tunnel list version filter
             ddMode.SelectedIndex = Math.Max(0, ddMode.Items.FindIndex(i => (TunnelMode)i.Tag == currentMode));
 
-            bool isDynamic = currentMode == TunnelMode.V3Dynamic;
-            lbTunnelList.Enabled = !isDynamic;
-            pnlTunnelListDisabledOverlay.Visible = isDynamic;
+            DdMode_SelectedIndexChanged(this, EventArgs.Empty);
 
-            if (!isDynamic && currentTunnel != null)
+            if (GetSelectedMode() != TunnelMode.V3Dynamic && currentTunnel != null)
                 lbTunnelList.SelectTunnel(currentTunnel.Address, currentTunnel.Port);
             else
                 lbTunnelList.SelectedIndex = -1;

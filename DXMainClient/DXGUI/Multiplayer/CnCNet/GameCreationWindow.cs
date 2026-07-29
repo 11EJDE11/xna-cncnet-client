@@ -323,6 +323,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             SetAttributesFromIni();
 
+            UpdateTunnelListState();
+
             CenterOnParent();
         }
 
@@ -346,13 +348,26 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             btnLoadMPGame.AllowClick = AllowLoadingGame();
         }
 
-        private void DdTunnelMode_SelectedIndexChanged(object sender, EventArgs e)
+        private TunnelMode GetSelectedMode() => (TunnelMode)(ddTunnelMode.SelectedItem?.Tag ?? TunnelMode.V3Static);
+
+        /// <summary>
+        /// Applies the tunnel list's enabled state and the "disabled" dimming overlay for the
+        /// currently selected tunnel mode. The overlay is only shown when the tunnel list itself
+        /// is displayed, otherwise it would be drawn over the non-advanced window.
+        /// </summary>
+        private void UpdateTunnelListState()
         {
-            var mode = (TunnelMode)(ddTunnelMode.SelectedItem?.Tag ?? TunnelMode.V3Static);
-            bool isDynamic = mode == TunnelMode.V3Dynamic;
+            bool isDynamic = GetSelectedMode() == TunnelMode.V3Dynamic;
 
             lbTunnelList.Enabled = !isDynamic;
-            pnlTunnelListDisabledOverlay.Visible = isDynamic;
+            pnlTunnelListDisabledOverlay.Visible = isDynamic && lbTunnelList.Visible;
+        }
+
+        private void DdTunnelMode_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            var mode = GetSelectedMode();
+
+            UpdateTunnelListState();
             lbTunnelList.TargetVersion = mode == TunnelMode.V2Legacy ? 2 : 3;
 
             if ((TunnelMode)UserINISettings.Instance.TunnelMode.Value != mode)
