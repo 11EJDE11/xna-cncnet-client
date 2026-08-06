@@ -225,18 +225,43 @@ namespace DTAClient.DXGUI.Generic
                 if (fileMismatches.Count > maxListed)
                     details += Environment.NewLine + $"  ...and {fileMismatches.Count - maxListed} more";
 
-                XNAMessageBox.Show(WindowManager,
-                    "Cannot Play Replay".L10N("Client:Main:ReplayFileMismatchTitle"),
-                    string.Format(("This replay was recorded with different game files, so it would " +
-                        "not play back correctly.\n\n{0}\n\nUpdating to the same game version as the " +
-                        "recording should resolve this.").L10N("Client:Main:ReplayFileMismatchText"),
-                        details));
+                // Versions are more use than hashes for tracking down the right build, so lead with
+                // them where the replay carries them. Replays recorded by the Quick Match client do
+                // not currently store versions, in which case only the hashes above are available.
+                string versions = BuildVersionComparison(replay);
+                if (!string.IsNullOrEmpty(versions))
+                    details = versions + Environment.NewLine + Environment.NewLine + details;
 
-                // The window is still open at this point (it is only disabled once the game is
-                // actually launched further down), so just stop here.
+                // Offer to continue rather than refusing outright. The mismatch is a strong signal
+                // but not a certainty - the differing file may not affect this particular replay -
+                // and a tester who knows what changed should not be blocked from looking.
+                var msgBox = new XNAMessageBox(WindowManager,
+                    "Replay File Mismatch".L10N("Client:Main:ReplayFileMismatchTitle"),
+                    string.Format(("This replay was recorded with different game files, so it will " +
+                        "most likely not play back correctly - it may load and then do nothing.\n\n{0}\n\n" +
+                        "Full hashes are in the client log. Updating to the same game version as the " +
+                        "recording should resolve this.\n\nPlay it anyway?")
+                        .L10N("Client:Main:ReplayFileMismatchText"),
+                        details),
+                    XNAMessageBoxButtons.YesNo);
+
+                msgBox.YesClickedAction = _ => LaunchReplay(replay, spawnIni, spawnMapContent, replayPath);
+                msgBox.Show();
+
+                // Nothing else to do on this path - either the callback launches, or the viewer
+                // declines and the window stays open (it is only disabled once the game starts).
                 return;
             }
 
+            LaunchReplay(replay, spawnIni, spawnMapContent, replayPath);
+        }
+
+        /// <summary>
+        /// Finishes writing the spawn files and starts the game. Split out from the launch handler
+        /// so it can also be reached from the "play anyway" answer to the file mismatch prompt.
+        /// </summary>
+        private void LaunchReplay(ReplayGame replay, IniFile spawnIni, string spawnMapContent, string replayPath)
+        {
             spawnIni.SetStringValue("Settings", "ReplayFile", replayPath);
 
             int selectedSpeed = ddGameSpeed.SelectedIndex;
@@ -528,6 +553,31 @@ namespace DTAClient.DXGUI.Generic
 
             components = parsed.ToArray();
             return true;
+        }
+
+        /// <summary>
+        /// "recorded with X, you have Y" lines for whichever versions the replay actually carries.
+        /// Returns an empty string when the replay stores none of them, so the caller can fall back
+        /// to showing file hashes alone.
+        /// </summary>
+        private string BuildVersionComparison(ReplayGame replay)
+        {
+            var lines = new List<string>();
+
+            AddVersionLine(lines, "Spawner", replay.SpawnerVersion, GetCurrentSpawnerVersion());
+            AddVersionLine(lines, "Phobos", replay.PhobosVersion, GetCurrentPhobosVersion());
+            AddVersionLine(lines, "Game client", replay.GameClientVersion, GetCurrentGameClientVersion());
+
+            return lines.Count == 0 ? string.Empty : string.Join(Environment.NewLine, lines);
+        }
+
+        private static void AddVersionLine(List<string> lines, string label, string recorded, string local)
+        {
+            if (string.IsNullOrWhiteSpace(recorded))
+                return;
+
+            string localText = string.IsNullOrWhiteSpace(local) ? "unknown" : local;
+            lines.Add($"  {label}: replay {recorded.Trim()}, yours {localText.Trim()}");
         }
 
         private string GetCurrentSpawnerVersion()

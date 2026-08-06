@@ -35,15 +35,20 @@ namespace DTAClient.Domain
         private const string MISSING_MARKER = "MISSING";
 
         /// <summary>
-        /// Files that can change simulation outcome. Cosmetic content (language, movies, theme and
-        /// maps mixes) is left out on purpose - it cannot desync a replay and would only add noise.
-        ///
-        /// The spawner DLLs are also left out: Quick Match injects CnCNet-QM-Spawner.dll while this
-        /// client uses CnCNet-Spawner.dll, so hashing them by name would flag a mismatch on every
-        /// cross-client playback. The spawner is covered by the SpawnerVersion key instead. Syringe
-        /// is a loader rather than part of the simulation, so it is out for the same reason.
+        /// The list of tracked files ships with the game package, in the same file the lobby
+        /// file-hash check uses. Keeping it as data rather than code means it can be corrected by
+        /// shipping a package, without rebuilding either client, and there is only one copy to
+        /// maintain across this client and the Quick Match one.
         /// </summary>
-        private static readonly string[] TrackedFiles =
+        private const string CONFIG_FILE = "FHCConfig.ini";
+        private const string CONFIG_SECTION = "ReplayFilenameList";
+
+        /// <summary>
+        /// Used only when the package predates [ReplayFilenameList], so an older install still
+        /// records something useful rather than silently recording no hashes at all. A trailing /
+        /// means every .ini inside that directory.
+        /// </summary>
+        private static readonly string[] FallbackEntries =
         {
             "gamemd-spawn.exe",
             "Ares.dll",
@@ -61,16 +66,9 @@ namespace DTAClient.Domain
             "rulesmd.ini",
             "artmd.ini",
             "aimd.ini",
-        };
 
-        /// <summary>
-        /// Every .ini below these is tracked. These hold the settings that change the rules of a
-        /// match - crate amounts, AI difficulty, playstyle and so on.
-        /// </summary>
-        private static readonly string[] TrackedDirectories =
-        {
-            "INI/Game Options",
-            "INI/Map Code",
+            "INI/Game Options/",
+            "INI/Map Code/",
         };
 
         /// <summary>
@@ -141,46 +139,96 @@ namespace DTAClient.Domain
                 else if (localHash == MISSING_MARKER)
                     mismatches.Add($"{relativePath} is missing locally");
                 else
-                    mismatches.Add($"{relativePath} differs from the version this replay was recorded with");
+                    mismatches.Add($"{relativePath} — replay: {ShortHash(recordedHash)}, yours: {ShortHash(localHash)}");
             }
 
             return mismatches;
+        }
+
+        /// <summary>
+        /// Reads the tracked entries from the package, falling back to the built-in list when the
+        /// installed package is older than this feature.
+        /// </summary>
+        private static List<string> ReadTrackedEntries()
+        {
+            var entries = new List<string>();
+
+            FileInfo configFile = SafePath.GetFile(ProgramConstants.GamePath, ProgramConstants.BASE_RESOURCE_PATH, CONFIG_FILE);
+            if (configFile.Exists)
+            {
+                var config = new IniFile(configFile.FullName);
+                List<string> keys = config.GetSectionKeys(CONFIG_SECTION);
+
+                if (keys != null)
+                {
+                    foreach (string key in keys)
+                    {
+                        string value = config.GetStringValue(CONFIG_SECTION, key, string.Empty).Trim();
+                        if (!string.IsNullOrEmpty(value))
+                            entries.Add(value);
+                    }
+                }
+            }
+
+            if (entries.Count == 0)
+            {
+                Logger.Log($"ReplayFileHashes: no [{CONFIG_SECTION}] in {CONFIG_FILE}, using the built-in list");
+                entries.AddRange(FallbackEntries);
+            }
+
+            return entries;
         }
 
         private static SortedDictionary<string, string> Collect()
         {
             var hashes = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (string relativePath in TrackedFiles)
+            foreach (string entry in ReadTrackedEntries())
             {
-                string fullPath = SafePath.CombineFilePath(ProgramConstants.GamePath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+                // A trailing slash means "every .ini in this directory".
+                if (entry.EndsWith("/", StringComparison.Ordinal))
+                {
+                    string relativeDir = entry.TrimEnd('/');
+                    DirectoryInfo dir = SafePath.GetDirectory(ProgramConstants.GamePath, relativeDir.Replace('/', Path.DirectorySeparatorChar));
+                    if (!dir.Exists)
+                        continue;
+
+                    foreach (FileInfo file in dir.EnumerateFiles("*.ini").OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        string dirHash = HashFile(file.FullName);
+                        if (dirHash != null)
+                            hashes[relativeDir + "/" + file.Name] = dirHash;
+                    }
+
+                    continue;
+                }
+
+                string fullPath = SafePath.CombineFilePath(ProgramConstants.GamePath, entry.Replace('/', Path.DirectorySeparatorChar));
 
                 if (!File.Exists(fullPath))
                 {
-                    hashes[relativePath] = MISSING_MARKER;
+                    hashes[entry] = MISSING_MARKER;
                     continue;
                 }
 
                 string hash = HashFile(fullPath);
                 if (hash != null)
-                    hashes[relativePath] = hash;
-            }
-
-            foreach (string relativeDir in TrackedDirectories)
-            {
-                DirectoryInfo dir = SafePath.GetDirectory(ProgramConstants.GamePath, relativeDir.Replace('/', Path.DirectorySeparatorChar));
-                if (!dir.Exists)
-                    continue;
-
-                foreach (FileInfo file in dir.EnumerateFiles("*.ini").OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase))
-                {
-                    string hash = HashFile(file.FullName);
-                    if (hash != null)
-                        hashes[relativeDir + "/" + file.Name] = hash;
-                }
+                    hashes[entry] = hash;
             }
 
             return hashes;
+        }
+
+        /// <summary>
+        /// Enough of a SHA1 to identify a build without filling the dialog. Full hashes go to the
+        /// client log for anyone who needs to match them exactly.
+        /// </summary>
+        private static string ShortHash(string hash)
+        {
+            if (string.IsNullOrEmpty(hash))
+                return "unknown";
+
+            return hash.Length <= 12 ? hash : hash.Substring(0, 12);
         }
 
         private static string HashFile(string path)
