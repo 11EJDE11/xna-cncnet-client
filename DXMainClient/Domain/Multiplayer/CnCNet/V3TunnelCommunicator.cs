@@ -54,7 +54,16 @@ public enum TunnelPacketType : byte
     // ProbeReport, whose payload is 4 bytes (little-endian V3 ID) per unresponsive peer
     // (empty payload = all reachable).
     ProbeRequest = 0x0D,
-    ProbeReport = 0x0E
+    ProbeReport = 0x0E,
+
+    // Matchmaking phase, exchanged over the matchmaking servers before a pair negotiates.
+    // TunnelList advertises every relay tunnel the sender knows, as a chunk of
+    // {4-byte tunnel key, 1-byte ping, 1-byte flags} entries behind a
+    // {format version, chunk index, chunk count} header.
+    // TunnelSet is the decider's answer: the agreed shortlist, as bare 4-byte tunnel keys in
+    // preference order behind a format version byte. See TunnelShortlist for the encoding.
+    TunnelList = 0x0F,
+    TunnelSet = 0x10
 }
 
 /// <summary>
@@ -179,7 +188,13 @@ public class V3TunnelCommunicator
             Logger.Log($"V3TunnelCommunicator: Added {added} new tunnel endpoint(s) from refresh");
     }
 
-    private static bool IsV3RelayTunnel(CnCNetTunnel tunnel) => tunnel.Version == 3 && !tunnel.IsDirect;
+    /// <summary>
+    /// Whether the communicator can route packets through this tunnel. Matchmaking servers
+    /// (version 4) qualify: the version marks their role in the master list, but on the wire they
+    /// speak the same protocol as a version 3 relay.
+    /// </summary>
+    private static bool IsV3RelayTunnel(CnCNetTunnel tunnel)
+        => (tunnel.Version == 3 || tunnel.Version == CnCNetTunnel.MATCHMAKING_VERSION) && !tunnel.IsDirect;
 
     /// <summary>
     /// Registers a handler for packets between the specified local and remote IDs.
@@ -307,7 +322,9 @@ public class V3TunnelCommunicator
         if (!IsInitialized)
             return;
 
-        var targetTunnels = tunnels?.Where(t => t.Version == 3 && !t.IsDirect).ToList() ??
+        // Shares the routing tables' predicate so matchmaking servers are registered on like any
+        // other relay. A server only forwards to registered clients.
+        var targetTunnels = tunnels?.Where(IsV3RelayTunnel).ToList() ??
                             _endpointToTunnel.Values.Where(t => !t.IsDirect).ToList();
 
         var packet = CreatePacket(localId, 0u, TunnelPacketType.Register);
@@ -360,6 +377,33 @@ public class V3TunnelCommunicator
         catch (Exception ex)
         {
             Logger.Log($"V3TunnelCommunicator:  Failed to send {packetType} packet to {tunnel.Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Sends an already-framed packet from a caller-owned buffer, so a hot path can reuse one
+    /// buffer instead of allocating per packet. The first 8 bytes must be the sender and receiver
+    /// IDs, as written by <see cref="CreatePacket"/>.
+    /// </summary>
+    /// <param name="length">Number of bytes in <paramref name="packet"/> to send.</param>
+    public void SendRawPacket(CnCNetTunnel? tunnel, byte[] packet, int length)
+    {
+        if (!IsInitialized || tunnel == null)
+            return;
+
+        if (!_tunnelToEndpoint.TryGetValue(tunnel, out IPEndPoint? endpoint))
+        {
+            Logger.Log($"V3TunnelCommunicator: Cannot send packet - no cached endpoint for tunnel {tunnel.Name}");
+            return;
+        }
+
+        try
+        {
+            _udpClient!.Client.SendTo(packet, 0, length, SocketFlags.None, endpoint);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"V3TunnelCommunicator: Failed to send packet to {tunnel.Name}: {ex.Message}");
         }
     }
 
@@ -670,15 +714,16 @@ public class V3TunnelCommunicator
             {
                 try
                 {
-                    if (udpClient.Client == null)
+                    // Snapshot the socket for the whole iteration. Shutdown() closes the UdpClient
+                    // from another thread, which nulls its Client property, so re-reading it
+                    // mid-iteration can hand back a socket and then null.
+                    var socket = udpClient.Client;
+                    if (socket == null)
                         break;
 
-                    if (udpClient.Client.Poll(500_000, SelectMode.SelectRead)) // 500ms
+                    if (socket.Poll(500_000, SelectMode.SelectRead)) // 500ms
                     {
-                        if (udpClient.Client == null)
-                            break;
-
-                        int received = udpClient.Client.ReceiveFrom(receiveBuffer, ref remoteEndpoint);
+                        int received = socket.ReceiveFrom(receiveBuffer, ref remoteEndpoint);
                         var receivedTime = Stopwatch.GetTimestamp();
 
                         if (_endpointToTunnel.TryGetValue((IPEndPoint)remoteEndpoint, out var tunnel))
@@ -713,10 +758,6 @@ public class V3TunnelCommunicator
         catch (ObjectDisposedException)
         {
             Logger.Log("V3TunnelCommunicator: Receive thread: Socket disposed");
-        }
-        catch (NullReferenceException)
-        {
-            Logger.Log("V3TunnelCommunicator: Receive thread: Socket closed during receive");
         }
         catch (Exception ex)
         {

@@ -19,15 +19,29 @@ namespace DTAClient.Domain.Multiplayer.CnCNet;
 /// <summary>
 /// Handles negotiating best tunnel with a single other player.
 /// </summary>
+/// <remarks>
+/// Three phases, in order:
+/// <list type="number">
+/// <item><description><see cref="MatchmakingExchange"/> agrees the handful of tunnels this pair
+/// will test.</description></item>
+/// <item><description>The relay round: the non-decider offers each shortlisted tunnel, the decider
+/// pings the ones that answer and tells the peer which won.</description></item>
+/// <item><description>The optional P2P upgrade round, which re-runs the relay round over direct
+/// paths and keeps whichever is faster.</description></item>
+/// </list>
+/// </remarks>
 public class V3PlayerNegotiator : IDisposable
 {
     private readonly V3PlayerInfo _localPlayer; //our V3PlayerInfo ID
     private readonly V3PlayerInfo _remotePlayer;
-    // Tunnels to test with. Mutated when the P2P upgrade round adds direct paths, while other
-    // tasks enumerate it (Connected sends, result printing), so all access goes through
-    // _tunnelsLock; enumerators take a snapshot via TunnelsSnapshot().
-    private readonly List<CnCNetTunnel> _tunnels; //list of tunnels to test with
+    /// <summary>
+    /// Tunnels to test with. Empty until the matchmaking phase agrees a shortlist, then mutated
+    /// when the P2P upgrade round adds direct paths while other tasks enumerate it, so all access
+    /// goes through <c>_tunnelsLock</c>; enumerators use <see cref="TunnelsSnapshot"/>.
+    /// </summary>
+    private readonly List<CnCNetTunnel> _tunnels = [];
     private readonly object _tunnelsLock = new();
+
     private readonly TunnelHandler _tunnelHandler;
 
     /// <summary>
@@ -41,6 +55,19 @@ public class V3PlayerNegotiator : IDisposable
     private readonly bool _isDecider;
     private readonly bool _p2pEnabled;
     private readonly TaskCompletionSource<IReadOnlyList<IPEndPoint>?> _p2pPeerEndpointTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Agrees the shortlist with the peer before any relay tunnel is touched. Runs once, at the
+    /// top of <see cref="NegotiateAsync"/>.
+    /// </summary>
+    private readonly MatchmakingExchange _matchmaking;
+
+    /// <summary>
+    /// Gates relay negotiation packet handling until the shortlist is agreed and its per-tunnel
+    /// results exist. Anything arriving before then is a leftover from a torn-down round.
+    /// </summary>
+    private volatile bool _relayPhaseStarted;
+
     private readonly CancellationTokenSource _negotiationCts = new();
     // Cached because Dispose() disposes _negotiationCts, and fire-and-forget tasks
     // (e.g. PerformPingsAsync) may still be running; reading Token off a disposed
@@ -64,8 +91,17 @@ public class V3PlayerNegotiator : IDisposable
     private static int NON_DECIDER_TOTAL_TIMEOUT_MS => ClientConfiguration.Instance.V3NonDeciderTotalTimeoutMs;
 
     // How long the decider will wait to receive a Ping Request from the non-decider.
-    // If none are received in time, the tunnel is skipped.
-    private static TimeSpan DECIDER_CONNECTED_PHASE_TIMEOUT => TimeSpan.FromMilliseconds(ClientConfiguration.Instance.V3ConnectedPhaseTimeoutMs);
+    // If none are received in time, the tunnel is skipped. Which value applies depends on whether
+    // matchmaking agreed the shortlist: see _connectedPhaseTimeoutMs.
+    private static int CONNECTED_PHASE_TIMEOUT_MS => ClientConfiguration.Instance.V3ConnectedPhaseTimeoutMs;
+    private static int CONNECTED_PHASE_TIMEOUT_SYNCED_MS => ClientConfiguration.Instance.V3ConnectedPhaseTimeoutSyncedMs;
+
+    /// <summary>
+    /// The connected-phase budget in force for this negotiation. An agreed shortlist leaves both
+    /// peers entering the relay phase within about a second of each other, so the long allowance
+    /// for lobby-join skew is only needed when matchmaking fell through.
+    /// </summary>
+    private int _connectedPhaseTimeoutMs = CONNECTED_PHASE_TIMEOUT_MS;
 
     // How long the decider will wait for pings to complete. If it takes this long,
     // pick the best one from the results that have come in.
@@ -84,6 +120,11 @@ public class V3PlayerNegotiator : IDisposable
     // non-decider waits for the upgrade tunnel choice, and how long the decider waits for the
     // peer to start punching the direct paths before falling back to the relay.
     private static int P2P_CANDIDATE_EXCHANGE_TIMEOUT_MS => ClientConfiguration.Instance.V3P2PCandidateExchangeTimeoutMs;
+
+    // How many copies of our P2P candidate list go out, and how far apart. Unacknowledged, and
+    // losing every copy costs the pair its direct connection for the whole round.
+    private static int P2P_CANDIDATE_SEND_COUNT => ClientConfiguration.Instance.V3P2PCandidateSendCount;
+    private static int P2P_CANDIDATE_SEND_INTERVAL_MS => ClientConfiguration.Instance.V3P2PCandidateSendIntervalMs;
     private static int P2P_UPGRADE_NONDECIDER_TIMEOUT_MS => ClientConfiguration.Instance.V3P2PUpgradeNonDeciderTimeoutMs;
     private static TimeSpan P2P_UPGRADE_CONNECTED_TIMEOUT => TimeSpan.FromMilliseconds(ClientConfiguration.Instance.V3P2PUpgradeConnectedTimeoutMs);
 
@@ -91,6 +132,10 @@ public class V3PlayerNegotiator : IDisposable
     // As it's UDP and not guaranteed to make it, we need an acknowledgement.
     private static int TUNNEL_CHOICE_RETRY_INTERVAL_MS => ClientConfiguration.Instance.V3TunnelChoiceRetryIntervalMs;
     private static int TUNNEL_CHOICE_MAX_RETRIES => ClientConfiguration.Instance.V3TunnelChoiceMaxRetries;
+
+    // How many of those retries the non-decider stays alive to answer once it has won its round.
+    // See LingerForTunnelChoiceRetriesAsync.
+    private static int ACK_LINGER_RETRIES => ClientConfiguration.Instance.V3NonDeciderAckLingerRetries;
 
     // Pick a tunnel early if we have 50% of the results. The remaining tunnels
     // will be high ping or timing out.
@@ -113,12 +158,15 @@ public class V3PlayerNegotiator : IDisposable
     public event EventHandler<TunnelChosenEventArgs>? NegotiationResult;
     public event EventHandler? NegotiationComplete;
 
+    /// <param name="tunnels">
+    /// Every relay tunnel available to this client. The matchmaking phase narrows this to the
+    /// handful the pair actually negotiates over.
+    /// </param>
     public V3PlayerNegotiator(V3PlayerInfo localPlayer, V3PlayerInfo remotePlayer, List<CnCNetTunnel> tunnels,
         TunnelHandler tunnelHandler, bool p2pEnabled = false)
     {
         _localPlayer = localPlayer;
         _remotePlayer = remotePlayer;
-        _tunnels = new List<CnCNetTunnel>(tunnels);
         _tunnelHandler = tunnelHandler;
         _p2pEnabled = p2pEnabled;
         _negotiationToken = _negotiationCts.Token;
@@ -133,8 +181,13 @@ public class V3PlayerNegotiator : IDisposable
         if (localPlayer.Id == remotePlayer.Id)
             Logger.Log($"V3PlayerNegotiator: WARNING - player ID collision between {localPlayer.Name} and {remotePlayer.Name} (ID: {localPlayer.Id}). Falling back to name ordering to pick the decider.");
 
-        _remotePlayer.InitializeTunnelResults(tunnels);
+        // The full pool goes to the exchange and no further; the negotiator only sees the
+        // shortlist that comes back.
+        _matchmaking = new MatchmakingExchange(
+            _localPlayer, _remotePlayer, new List<CnCNetTunnel>(tunnels), _tunnelHandler, _isDecider);
 
+        // Per-tunnel results wait until the shortlist is agreed. The handler is registered now
+        // because the matchmaking phase needs it; see _relayPhaseStarted.
         _tunnelHandler.RegisterV3PacketHandler(_localPlayer.Id, _remotePlayer.Id, OnPacketReceived);
     }
 
@@ -154,7 +207,43 @@ public class V3PlayerNegotiator : IDisposable
             _negotiationCompletionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _tunnelAckReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            _tunnelHandler.SendRegistrationToTunnels(_localPlayer.Id, TunnelsSnapshot());
+            // Agree which few tunnels to test before touching any of them, so this pair registers
+            // on its shortlist rather than on every tunnel it knows.
+            var matchmaking = await _matchmaking.RunAsync(_negotiationToken);
+            var shortlist = matchmaking.Tunnels;
+
+            if (shortlist.Count == 0)
+            {
+                Logger.Log($"V3PlayerNegotiator: No candidate tunnels for {_remotePlayer.Name}");
+                _negotiationCompletionSource.TrySetResult(false);
+
+                if (!_negotiationToken.IsCancellationRequested)
+                {
+                    RaiseNegotiationResult(null, 0, "No candidate tunnels available");
+                    RaiseNegotiationComplete();
+                }
+
+                return false;
+            }
+
+            lock (_tunnelsLock)
+            {
+                _tunnels.Clear();
+                _tunnels.AddRange(shortlist);
+            }
+
+            _connectedPhaseTimeoutMs = matchmaking.Agreed
+                ? CONNECTED_PHASE_TIMEOUT_SYNCED_MS
+                : CONNECTED_PHASE_TIMEOUT_MS;
+
+            _remotePlayer.InitializeTunnelResults(shortlist, _connectedPhaseTimeoutMs);
+            _relayPhaseStarted = true;
+
+            Logger.Log($"V3PlayerNegotiator: Negotiating with {_remotePlayer.Name} over {shortlist.Count} tunnel(s) " +
+                $"({(matchmaking.Agreed ? "matchmade" : "locally ranked")}, {_connectedPhaseTimeoutMs / 1000}s connect budget): " +
+                string.Join(", ", shortlist.Select(t => t.Name)));
+
+            _tunnelHandler.SendRegistrationToTunnels(_localPlayer.Id, shortlist);
 
             if (_isDecider)
                 await PerformDeciderNegotiationAsync();
@@ -162,6 +251,11 @@ public class V3PlayerNegotiator : IDisposable
                 await PerformNonDeciderNegotiationAsync();
 
             bool negotiationSucceeded = await _negotiationCompletionSource.Task;
+
+            // Recorded while _tunnels still holds only the relay shortlist; the upgrade round below
+            // adds direct paths, which say nothing about any tunnel server.
+            if (!_negotiationToken.IsCancellationRequested)
+                RecordHandshakeOutcomes();
 
             // P2P upgrade round: now that a relay tunnel is agreed (and can carry the exchange),
             // offer direct candidate addresses through it and re-run the same negotiation over
@@ -180,6 +274,9 @@ public class V3PlayerNegotiator : IDisposable
             }
 
             PrintNegotiationResults();
+
+            if (negotiationSucceeded && !_isDecider)
+                await LingerForTunnelChoiceRetriesAsync();
 
             // Skip the completion event if we were disposed mid-negotiation (the upgrade round
             // swallows the cancellation) — whoever cancelled has already replaced or removed
@@ -205,6 +302,87 @@ public class V3PlayerNegotiator : IDisposable
             }
 
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Keeps the non-decider's packet handler registered for a few of the decider's retry
+    /// intervals after the round is won, so a lost <see cref="TunnelPacketType.TunnelAck"/> is
+    /// answered by the next retry rather than never.
+    /// </summary>
+    /// <remarks>
+    /// <para>The ack is a single unacknowledged datagram. The decider re-sends its choice when one
+    /// goes missing and this side re-acks any duplicate — but only while it still exists, and
+    /// without this the round ends the instant the ack is handed to the socket, unregistering the
+    /// handler before the first retry can arrive. Every subsequent retry then reaches a client that
+    /// silently discards it.</para>
+    ///
+    /// <para>Losing that race is expensive out of proportion to the one lost packet: the decider
+    /// burns its whole retry budget, reports a direct connection as unestablished when it was
+    /// working, and reverts to the relay while this side stays on the path it already agreed —
+    /// leaving the pair routing asymmetrically with neither side able to notice, since the game
+    /// bridge accepts data from any tunnel and keepalives are answered below the negotiator.</para>
+    ///
+    /// <para>Invisible to the user: the result was raised when the choice arrived, so the pair
+    /// already reads as succeeded. Only teardown waits, and a disposal cuts the wait short.</para>
+    /// </remarks>
+    private async Task LingerForTunnelChoiceRetriesAsync()
+    {
+        int lingerMs = TUNNEL_CHOICE_RETRY_INTERVAL_MS * ACK_LINGER_RETRIES;
+        if (lingerMs <= 0)
+            return;
+
+        try
+        {
+            await Task.Delay(lingerMs, _negotiationToken);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Records which shortlisted tunnels actually carried traffic from the peer, so a tunnel that
+    /// answers ICMP but never relays stops being shortlisted ahead of tunnels that do.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is recorded unless at least one tunnel worked. If none did, the peer is the likely
+    /// fault — it left, never started, or its network is down — and counting that against every
+    /// tunnel tested would demote the whole shortlist on the strength of one absent player.
+    /// </remarks>
+    private void RecordHandshakeOutcomes()
+    {
+        // Direct paths are excluded: they are properties of the two peers' NATs, not of a server.
+        var relayTunnels = TunnelsSnapshot().Where(t => !t.IsDirect).ToList();
+        if (relayTunnels.Count == 0)
+            return;
+
+        // Whichever packet this side is the one to receive: the decider is sent Connected, the
+        // non-decider a PingRequest.
+        bool RelayedFromPeer(CnCNetTunnel tunnel)
+        {
+            var result = _remotePlayer.GetTunnelResult(tunnel);
+            if (result == null)
+                return false;
+
+            return _isDecider ? result.ConnectedReceived : result.PingRequestReceived;
+        }
+
+        if (!relayTunnels.Any(RelayedFromPeer))
+            return;
+
+        foreach (var tunnel in relayTunnels)
+        {
+            if (RelayedFromPeer(tunnel))
+            {
+                tunnel.RecordHandshakeSuccess();
+                continue;
+            }
+
+            tunnel.RecordHandshakeFailure();
+            Logger.Log($"V3PlayerNegotiator: {tunnel.Name} relayed nothing from {_remotePlayer.Name} " +
+                $"({tunnel.ConsecutiveHandshakeFailures} in a row" +
+                $"{(tunnel.HasCompletedHandshake ? string.Empty : ", never worked")})");
         }
     }
 
@@ -237,8 +415,7 @@ public class V3PlayerNegotiator : IDisposable
         bool raiseFailure = true)
     {
         var awaitTunnels = tunnelsToAwait ?? _remotePlayer.TunnelResults.Keys.ToList();
-        int totalTunnels = awaitTunnels.Count;
-        if (totalTunnels == 0)
+        if (awaitTunnels.Count == 0)
         {
             Logger.Log($"V3PlayerNegotiator: No tunnels available for decider negotiation with {_remotePlayer.Name}");
             _negotiationCompletionSource.TrySetResult(false);
@@ -247,37 +424,30 @@ public class V3PlayerNegotiator : IDisposable
             return;
         }
 
-        int completedTunnels = 0;
-        bool selectionMade = false;
-        var completionLock = new object();
-        var selectionTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        foreach (var tunnel in awaitTunnels)
-        {
-            var result = _remotePlayer.GetTunnelResult(tunnel);
-            if (result == null)
-                continue;
-
-            _ = WaitForTunnelResultsAsync(result, _negotiationToken,
-                connectedTimeout ?? DECIDER_CONNECTED_PHASE_TIMEOUT, () =>
-                {
-                    lock (completionLock)
-                    {
-                        completedTunnels++;
-                        if (!selectionMade && (completedTunnels >= totalTunnels ||
-                            completedTunnels >= Math.Max(1, totalTunnels * EARLY_SELECTION_THRESHOLD)))
-                        {
-                            selectionMade = true;
-                            selectionTcs.TrySetResult(true);
-                        }
-                    }
-                }, $"{_remotePlayer.Name} via {tunnel.Name}");
-        }
-
-        // Wait for early selection or all completion
-        await selectionTcs.Task;
+        await AwaitTunnelResultsAsync(awaitTunnels, connectedTimeout ?? TimeSpan.FromMilliseconds(_connectedPhaseTimeoutMs));
 
         var bestTunnel = _remotePlayer.SelectBestTunnel();
+
+        // Nothing connected on the shortened budget. The agreement is one-sided: the peer may never
+        // have received the shortlist and could be starting its own fallback round on the long
+        // budget just as this one expires, so give it the rest of that budget.
+        if (bestTunnel == null && connectedTimeout == null && _connectedPhaseTimeoutMs < CONNECTED_PHASE_TIMEOUT_MS)
+        {
+            var stillWaiting = awaitTunnels
+                .Where(t => _remotePlayer.GetTunnelResult(t)?.ConnectedReceived == false)
+                .ToList();
+
+            if (stillWaiting.Count > 0)
+            {
+                var extension = TimeSpan.FromMilliseconds(CONNECTED_PHASE_TIMEOUT_MS - _connectedPhaseTimeoutMs);
+                Logger.Log($"V3PlayerNegotiator: Nothing connected from {_remotePlayer.Name} within {_connectedPhaseTimeoutMs / 1000}s; " +
+                    $"waiting a further {extension.TotalSeconds:F0}s in case they fell back to a locally ranked shortlist");
+
+                await AwaitTunnelResultsAsync(stillWaiting, extension);
+                bestTunnel = _remotePlayer.SelectBestTunnel();
+            }
+        }
+
         if (bestTunnel != null)
         {
             var bestResult = _remotePlayer.GetTunnelResult(bestTunnel);
@@ -315,6 +485,49 @@ public class V3PlayerNegotiator : IDisposable
             if (raiseFailure)
                 RaiseNegotiationResult(null, 0, "No viable tunnel found");
         }
+    }
+
+    /// <summary>
+    /// Runs the Connected → Ping handshake against <paramref name="tunnels"/> in parallel and
+    /// returns once enough of them have finished for a choice to be made.
+    /// </summary>
+    private async Task AwaitTunnelResultsAsync(IReadOnlyCollection<CnCNetTunnel> tunnels, TimeSpan connectedTimeout)
+    {
+        // Only tunnels with a result can be waited on, and totalTunnels must count those alone so
+        // the completion count can reach it.
+        var pending = tunnels
+            .Select(t => (Tunnel: t, Result: _remotePlayer.GetTunnelResult(t)))
+            .Where(e => e.Result != null)
+            .ToList();
+
+        int totalTunnels = pending.Count;
+        if (totalTunnels == 0)
+            return;
+
+        int completedTunnels = 0;
+        bool selectionMade = false;
+        var completionLock = new object();
+        var selectionTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        foreach (var (tunnel, result) in pending)
+        {
+            _ = WaitForTunnelResultsAsync(result!, _negotiationToken, connectedTimeout, () =>
+                {
+                    lock (completionLock)
+                    {
+                        completedTunnels++;
+                        if (!selectionMade && (completedTunnels >= totalTunnels ||
+                            completedTunnels >= Math.Max(1, totalTunnels * EARLY_SELECTION_THRESHOLD)))
+                        {
+                            selectionMade = true;
+                            selectionTcs.TrySetResult(true);
+                        }
+                    }
+                }, $"{_remotePlayer.Name} via {tunnel.Name}");
+        }
+
+        // Wait for early selection or all completion
+        await selectionTcs.Task;
     }
 
     private static async Task WaitForTunnelResultsAsync(TunnelTestResult result, CancellationToken cancellationToken,
@@ -424,8 +637,16 @@ public class V3PlayerNegotiator : IDisposable
             foreach (var tunnel in TunnelsSnapshot())
             {
                 var result = _remotePlayer.GetTunnelResult(tunnel);
-                if (result == null || result.ConnectedTimedOut || result.PingRequestReceived)
+                if (result == null || result.PingRequestReceived)
                     continue;
+
+                if (result.ConnectedTimedOut)
+                {
+                    // Latch the moment we stop offering this tunnel; ConnectedTimedOut is relative
+                    // to now and reads true for every tunnel by the time results print.
+                    result.ConnectedAbandoned = true;
+                    continue;
+                }
 
                 _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
                     TunnelPacketType.Connected, null);
@@ -484,6 +705,16 @@ public class V3PlayerNegotiator : IDisposable
     private void OnPacketReceived(uint senderId, uint receiverId, TunnelPacketType packetType,
         ReadOnlyMemory<byte> payload, long receivedTime, CnCNetTunnel tunnel)
     {
+        // The matchmaking phase gets first refusal: its packets arrive on matchmaking servers,
+        // which have no TunnelTestResult.
+        if (_matchmaking.TryHandlePacket(packetType, payload, tunnel))
+            return;
+
+        // Everything below belongs to the relay negotiation, which cannot start before there is a
+        // shortlist.
+        if (!_relayPhaseStarted)
+            return;
+
         var result = _remotePlayer.GetTunnelResult(tunnel);
         if (result == null)
         {
@@ -493,7 +724,11 @@ public class V3PlayerNegotiator : IDisposable
             if (tunnel is not P2PTunnel)
                 return;
 
-            result = _remotePlayer.TunnelResults.GetOrAdd(tunnel, static _ => new TunnelTestResult());
+            // Same connect budget as the rest of this round, so an auto-learned path is not still
+            // being offered after every other candidate has been abandoned.
+            int connectedTimeoutMs = _connectedPhaseTimeoutMs;
+            result = _remotePlayer.TunnelResults.GetOrAdd(
+                tunnel, _ => new TunnelTestResult { ConnectedTimeoutMs = connectedTimeoutMs });
 
             bool firstSeen;
             lock (_tunnelsLock)
@@ -588,6 +823,10 @@ public class V3PlayerNegotiator : IDisposable
                     _remotePlayer.Tunnel = tunnel;
 
                     // TunnelAck carries our own P2P flag so the decider knows whether to upgrade.
+                    // Re-sent for every copy of the choice that arrives, not just the first: a
+                    // repeat means the decider is still waiting, so the previous ack was lost.
+                    // LingerForTunnelChoiceRetriesAsync keeps this handler around long enough for
+                    // those repeats to land.
                     _tunnelHandler.SendPacket(tunnel, _localPlayer.Id, _remotePlayer.Id,
                         TunnelPacketType.TunnelAck, [0x01, _p2pEnabled ? (byte)0x01 : (byte)0x00]);
 
@@ -701,6 +940,16 @@ public class V3PlayerNegotiator : IDisposable
                     Logger.Log($"V3PlayerNegotiator: Negotiation completion signaled while waiting for ack from {_remotePlayer.Name}, aborting retries");
                     return false;
                 }
+
+                // A cancelled delay completes rather than throwing, and is not an elapsed retry
+                // interval: without this the loop spins through every remaining attempt at once,
+                // spraying stale choices at a peer that has already moved on.
+                if (_negotiationToken.IsCancellationRequested)
+                {
+                    Logger.Log($"V3PlayerNegotiator: Cancelled while waiting for acknowledgment from {_remotePlayer.Name}");
+                    return false;
+                }
+
                 Logger.Log($"V3PlayerNegotiator: No acknowledgment received, retrying... (attempt {attempt + 1}/{TUNNEL_CHOICE_MAX_RETRIES})");
             }
             catch (OperationCanceledException)
@@ -781,7 +1030,7 @@ public class V3PlayerNegotiator : IDisposable
                     sb.AppendLine(
                         $"Tunnel: {tunnel.Name} | " +
                         $"PingRequest received: {result.PingRequestReceived} | " +
-                        $"Connected timed out: {result.ConnectedTimedOut}"
+                        $"Abandoned: {result.ConnectedAbandoned}"
                     );
                 }
             }
@@ -879,6 +1128,15 @@ public class V3PlayerNegotiator : IDisposable
                 Logger.Log($"V3PlayerNegotiator: Relay fallback to {_remotePlayer.Name} was not acknowledged; assuming peer kept relay {relayTunnel.Name}");
             }
 
+            // Re-checked after the ack wait: a renegotiation can have disposed this negotiator
+            // while it ran, and announcing a result now would apply this dead round's tunnel to
+            // the round that replaced it.
+            if (_negotiationToken.IsCancellationRequested)
+            {
+                Logger.Log($"V3PlayerNegotiator: Negotiation with {_remotePlayer.Name} was cancelled during the relay fallback; not reporting a result");
+                return;
+            }
+
             _negotiationCompletionSource.TrySetResult(true);
             RaiseNegotiationResult(relayTunnel, relayPing, isRelayFallback: true);
         }
@@ -917,9 +1175,16 @@ public class V3PlayerNegotiator : IDisposable
 
     /// <summary>
     /// Advertises our candidate addresses through the established relay tunnel and waits for the
-    /// peer's. Sent a few times since it's a single UDP packet on a path that, while just
-    /// validated, can still drop a datagram. Returns the peer's candidates, or empty on timeout.
+    /// peer's. Returns the peer's candidates, or empty on timeout.
     /// </summary>
+    /// <remarks>
+    /// The two directions are independent, so advertising runs to completion no matter what
+    /// arrives from the peer. Receiving their candidates proves the relay carried a packet to us;
+    /// it says nothing about whether ours reached them, and stopping on it means a single dropped
+    /// datagram leaves them waiting out this timeout and abandoning the upgrade without ever
+    /// punching — which strands every direct path this side is about to test, since the decider
+    /// only pings a path the peer has answered on.
+    /// </remarks>
     private async Task<IReadOnlyList<IPEndPoint>> ExchangeCandidatesAsync(
         IReadOnlyList<IPEndPoint> localEps, CnCNetTunnel relayTunnel)
     {
@@ -927,31 +1192,54 @@ public class V3PlayerNegotiator : IDisposable
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(_negotiationToken);
         cts.CancelAfter(P2P_CANDIDATE_EXCHANGE_TIMEOUT_MS);
+
+        // Started before the wait below so both directions are in flight at once; the copies go
+        // out even when the peer's candidates arrive first, or had already arrived before this
+        // was called (they can beat our own STUN query).
+        Task advertiseTask = AdvertiseCandidatesAsync(payload, relayTunnel, cts.Token);
+
         try
         {
-            // Always send at least once even if the peer's candidates already arrived early
-            // (they can arrive before STUN finishes, completing the TCS before we even enter
-            // this loop — if we skip the send, the peer never gets our candidates).
-            for (int attempt = 0; attempt < 3; attempt++)
-            {
-                _tunnelHandler.SendPacket(relayTunnel, _localPlayer.Id, _remotePlayer.Id,
-                    TunnelPacketType.P2PInfo, payload);
-
-                if (_p2pPeerEndpointTcs.Task.IsCompleted)
-                    break;
-
-                var completed = await Task.WhenAny(_p2pPeerEndpointTcs.Task, Task.Delay(150, cts.Token));
-                if (completed == _p2pPeerEndpointTcs.Task)
-                    break;
-            }
-
             var peerEps = await _p2pPeerEndpointTcs.Task.WaitAsync(cts.Token);
             return peerEps ?? (IReadOnlyList<IPEndPoint>)Array.Empty<IPEndPoint>();
         }
+        catch (OperationCanceledException) when (_negotiationToken.IsCancellationRequested)
+        {
+            return Array.Empty<IPEndPoint>();
+        }
         catch (OperationCanceledException)
         {
-            Logger.Log($"V3PlayerNegotiator: No P2P candidates received from {_remotePlayer.Name} (timeout)");
+            Logger.Log($"V3PlayerNegotiator: No P2P candidates received from {_remotePlayer.Name} within {P2P_CANDIDATE_EXCHANGE_TIMEOUT_MS}ms");
             return Array.Empty<IPEndPoint>();
+        }
+        finally
+        {
+            // Runs before the caller resumes, so every copy is on the wire before punching
+            // starts. Usually free: the sends finish while the peer's own reply is still in
+            // flight.
+            try
+            {
+                await advertiseTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sends our candidate addresses over the relay <see cref="P2P_CANDIDATE_SEND_COUNT"/> times,
+    /// spaced out so the copies are not lost to the same burst.
+    /// </summary>
+    private async Task AdvertiseCandidatesAsync(byte[] payload, CnCNetTunnel relayTunnel, CancellationToken cancellationToken)
+    {
+        for (int attempt = 0; attempt < P2P_CANDIDATE_SEND_COUNT; attempt++)
+        {
+            if (attempt > 0)
+                await Task.Delay(P2P_CANDIDATE_SEND_INTERVAL_MS, cancellationToken);
+
+            _tunnelHandler.SendPacket(relayTunnel, _localPlayer.Id, _remotePlayer.Id,
+                TunnelPacketType.P2PInfo, payload);
         }
     }
 
@@ -1013,6 +1301,7 @@ public class V3PlayerNegotiator : IDisposable
         _tunnelAckReceived.TrySetCanceled();
         _negotiationCompletionSource.TrySetCanceled();
         _p2pPeerEndpointTcs.TrySetCanceled();
+        _matchmaking.Dispose();
         _tunnelHandler.UnregisterV3PacketHandler(_localPlayer.Id, _remotePlayer.Id);
         _negotiationCts.Dispose();
     }

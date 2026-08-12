@@ -36,7 +36,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// </summary>
         private static uint CYCLES_PER_TUNNEL_LIST_REFRESH => ClientConfiguration.Instance.V3CyclesPerTunnelListRefresh;
 
-        private static readonly int[] SUPPORTED_TUNNEL_VERSIONS = [2, 3];
+        // Version 4 identifies a matchmaking server, which speaks the same protocol as a version 3
+        // relay but will not carry games.
+        private static readonly int[] SUPPORTED_TUNNEL_VERSIONS = [2, 3, CnCNetTunnel.MATCHMAKING_VERSION];
         private static TimeSpan tunnelRefreshInterval => TimeSpan.FromSeconds(CURRENT_TUNNEL_PING_INTERVAL);
 
         private readonly object _refreshLock = new();
@@ -62,6 +64,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         }
 
         public List<CnCNetTunnel> Tunnels { get; private set; } = [];
+
+        /// <summary>
+        /// The matchmaking servers peers meet on to exchange tunnel lists before negotiating,
+        /// discovered from the master list by their version and restricted to official servers.
+        /// Every client sees the same set, which is what lets two peers count on meeting on one.
+        /// </summary>
+        public List<CnCNetTunnel> MatchmakingTunnels { get; private set; } = [];
+
         public CnCNetTunnel CurrentTunnel { get; set; } = null;
         public V3GameTunnelBridge GameTunnelBridge;
 
@@ -99,6 +109,13 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private static int TUNNEL_FAILED_CONSECUTIVE_PINGS => ClientConfiguration.Instance.V3TunnelFailedConsecutivePings;
 
         /// <summary>
+        /// How many unanswered probes a tunnel's last good ping survives before it reads as
+        /// unknown. See <see cref="CnCNetTunnel.ApplyPingResult"/>.
+        /// Configurable via NetworkDefinitions.ini ([V3TunnelNegotiation] RetainedPingFailures).
+        /// </summary>
+        private static int PING_RETAINED_FAILURES => ClientConfiguration.Instance.V3RetainedPingFailures;
+
+        /// <summary>
         /// The keepalive subsystem for negotiated V3 paths: NAT/registration refresh, live
         /// pair pings, liveness detection and the launch-time connectivity probe. Owned and
         /// ticked by this handler; consumers subscribe to and configure it directly.
@@ -110,12 +127,17 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         /// once the threshold is crossed (exactly once per losing streak). Call after every
         /// ping result update.
         /// </summary>
-        private void EvaluateTunnelHealth(CnCNetTunnel tunnel)
+        /// <param name="measuredPing">
+        /// The probe's own result, not <see cref="CnCNetTunnel.Ping"/>: a retained measurement
+        /// (see <see cref="CnCNetTunnel.ApplyPingResult"/>) would otherwise keep resetting the
+        /// failure count and a tunnel that has genuinely died would never be reported failed.
+        /// </param>
+        private void EvaluateTunnelHealth(CnCNetTunnel tunnel, PingValue measuredPing)
         {
-            if (!tunnel.Ping.IsUnknown())
+            if (!measuredPing.IsUnknown())
                 tunnel.HasRespondedToPing = true;
 
-            bool pingBad = tunnel.Ping.IsUnknown() || tunnel.Ping.Milliseconds > TUNNEL_FAILED_PING_AMOUNT;
+            bool pingBad = measuredPing.IsUnknown() || measuredPing.Milliseconds > TUNNEL_FAILED_PING_AMOUNT;
 
             if (!pingBad)
             {
@@ -126,7 +148,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             // An unknown result only signals failure if this tunnel has answered ICMP
             // before; otherwise ICMP may simply be blocked on the network while UDP
             // tunnel traffic works fine.
-            if (tunnel.Ping.IsUnknown() && !tunnel.HasRespondedToPing)
+            if (measuredPing.IsUnknown() && !tunnel.HasRespondedToPing)
                 return;
 
             tunnel.ConsecutivePingFailures++;
@@ -231,11 +253,21 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
             // remove old tunnels
             Tunnels = updatedTunnels;
+
+            // Official-only, and deliberately not subject to PingUnofficialCnCNetTunnels the way
+            // the relay pool is: that setting is per-user, and two peers who disagree on it could
+            // hold matchmaking sets with no server in common. This also keeps a third party from
+            // standing one up to observe who is negotiating with whom.
+            MatchmakingTunnels = Tunnels.Where(t => t.IsMatchmaking && t.Official).ToList();
+
             TunnelsRefreshed?.Invoke(this, EventArgs.Empty);
 
-            // Group tunnels by IP address and ping each unique address
+            // Group tunnels by IP address and ping each unique address. Matchmaking servers are
+            // skipped: their latency is never ranked against anything, so pinging them would only
+            // produce spurious TunnelFailed reports.
             var tunnelsByAddress = Tunnels
-                .Where(t => UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended)
+                .Where(t => !t.IsMatchmaking &&
+                    (UserINISettings.Instance.PingUnofficialCnCNetTunnels || t.Official || t.Recommended))
                 .GroupBy(t => t.Address)
                 .ToList();
 
@@ -276,23 +308,16 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
             return Task.Run(() =>
             {
-                PingValue pingResult = PingValue.Unknown;
+                // One probe for the whole address; each tunnel then applies it to its own
+                // retention state, since they can have been unreachable for different lengths
+                // of time before being grouped here.
+                PingValue measuredPing = tunnelsWithSameAddress[0].MeasurePing();
 
-                for (int i = 0; i < tunnelsWithSameAddress.Count; i++)
+                foreach (var tunnel in tunnelsWithSameAddress)
                 {
-                    var tunnel = tunnelsWithSameAddress[i];
+                    tunnel.ApplyPingResult(measuredPing, PING_RETAINED_FAILURES);
 
-                    if (i == 0)
-                    {
-                        tunnel.UpdatePing();
-                        pingResult = tunnel.Ping;
-                    }
-                    else
-                    {
-                        tunnel.Ping = pingResult;
-                    }
-
-                    EvaluateTunnelHealth(tunnel);
+                    EvaluateTunnelHealth(tunnel, measuredPing);
 
                     DoTunnelPinged(tunnel.Address, tunnel.Port);
                 }
@@ -306,10 +331,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 var tunnel = CurrentTunnel;
                 if (tunnel == null) return;
 
-                tunnel.UpdatePing();
-                PingValue pingResult = tunnel.Ping;
+                PingValue measuredPing = tunnel.MeasurePing();
+                tunnel.ApplyPingResult(measuredPing, PING_RETAINED_FAILURES);
 
-                EvaluateTunnelHealth(tunnel);
+                EvaluateTunnelHealth(tunnel, measuredPing);
 
                 DoCurrentTunnelPinged();
 
@@ -321,9 +346,9 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                     var otherTunnelsWithSameAddress = Tunnels.Where(t => t.Address == tunnel.Address && t != tunnel).ToList();
                     foreach (var otherTunnel in otherTunnelsWithSameAddress)
                     {
-                        otherTunnel.Ping = pingResult;
+                        otherTunnel.ApplyPingResult(measuredPing, PING_RETAINED_FAILURES);
 
-                        EvaluateTunnelHealth(otherTunnel);
+                        EvaluateTunnelHealth(otherTunnel, measuredPing);
 
                         DoTunnelPinged(otherTunnel.Address, otherTunnel.Port);
                     }
@@ -510,8 +535,10 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         public void InitializeTunnelCommunicator()
         {
-            if (!_tunnelCommunicator.IsInitialized && Tunnels.Count > 0)
-                _tunnelCommunicator.Initialize(Tunnels);
+            if (_tunnelCommunicator.IsInitialized || Tunnels.Count == 0)
+                return;
+
+            _tunnelCommunicator.Initialize(Tunnels);
         }
 
         /// <summary>
@@ -556,5 +583,14 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         public void SendPacket(CnCNetTunnel tunnel, uint senderId, uint receiverId,
             TunnelPacketType packetType, byte[] payload = null) => _tunnelCommunicator.SendPacket(tunnel, senderId, receiverId, packetType, payload);
+
+        /// <summary>
+        /// Sends an already-framed packet from a caller-owned buffer. See
+        /// <see cref="V3TunnelCommunicator.SendRawPacket"/>.
+        /// </summary>
+#nullable enable
+        public void SendRawPacket(CnCNetTunnel? tunnel, byte[] packet, int length)
+            => _tunnelCommunicator.SendRawPacket(tunnel, packet, length);
+#nullable restore
     }
 }

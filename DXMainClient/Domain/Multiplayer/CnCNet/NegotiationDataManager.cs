@@ -194,20 +194,6 @@ public class NegotiationDataManager
     }
 
     /// <summary>
-    /// Checks if all negotiations have finished (either succeeded or failed).
-    /// </summary>
-    public bool AreAllNegotiationsComplete(IReadOnlyList<string> playerNames)
-    {
-        foreach (var (player1, player2) in GetPlayerPairs(playerNames))
-        {
-            var status = GetNegotiationStatus(player1, player2);
-            if (status == NegotiationStatus.NotStarted || status == NegotiationStatus.InProgress)
-                return false;
-        }
-        return true;
-    }
-
-    /// <summary>
     /// Gets a list of all incomplete negotiations (NotStarted or InProgress).
     /// </summary>
     public List<(string player1, string player2, NegotiationStatus status)> GetIncompleteNegotiations(IReadOnlyList<string> playerNames)

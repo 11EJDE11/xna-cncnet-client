@@ -47,7 +47,12 @@ public class TunnelTestResult
     // Shares its value with V3PlayerNegotiator's connected-phase timeout (the same
     // handshake, seen from each side) - configurable via NetworkDefinitions.ini
     // ([V3TunnelNegotiation] ConnectedPhaseTimeoutMs).
-    private static int CONNECTED_TIMEOUT_MS => ClientConfiguration.Instance.V3ConnectedPhaseTimeoutMs;
+    /// <summary>
+    /// How long the non-decider keeps offering this tunnel before giving up. Set by the negotiator
+    /// to match the decider's budget, so neither side waits on a handshake the other has stopped
+    /// attempting.
+    /// </summary>
+    public int ConnectedTimeoutMs { get; set; } = ClientConfiguration.Instance.V3ConnectedPhaseTimeoutMs;
 
     private readonly object _pingLock = new();
     private readonly List<PingResult> _pingResults = [];
@@ -140,7 +145,14 @@ public class TunnelTestResult
 
     public DateTime? FirstConnectedSentTime { get; set; }
     public bool ConnectedTimedOut => FirstConnectedSentTime.HasValue &&
-        (DateTime.UtcNow - FirstConnectedSentTime.Value).TotalMilliseconds > CONNECTED_TIMEOUT_MS;
+        (DateTime.UtcNow - FirstConnectedSentTime.Value).TotalMilliseconds > ConnectedTimeoutMs;
+
+    /// <summary>
+    /// Whether the non-decider gave up offering this tunnel because its connect budget ran out.
+    /// Latched, unlike <see cref="ConnectedTimedOut"/>, which is recomputed from the clock and so
+    /// reads true for every tunnel once the negotiation outlives the budget.
+    /// </summary>
+    public bool ConnectedAbandoned { get; set; }
 
     public bool PingRequestReceived { get; set; }
 }
@@ -191,11 +203,11 @@ public class V3PlayerInfo(uint id, string name, int playerIndex, ushort playerGa
     /// <summary>
     /// Creates a fresh set of <see cref="TunnelTestResult"/> entries for all available tunnels.
     /// </summary>
-    public void InitializeTunnelResults(List<CnCNetTunnel> tunnels)
+    public void InitializeTunnelResults(List<CnCNetTunnel> tunnels, int connectedTimeoutMs)
     {
         TunnelResults.Clear();
         foreach (var tunnel in tunnels)
-            TunnelResults[tunnel] = new TunnelTestResult();
+            TunnelResults[tunnel] = new TunnelTestResult { ConnectedTimeoutMs = connectedTimeoutMs };
     }
 
     /// <summary>

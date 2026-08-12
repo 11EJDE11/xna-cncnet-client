@@ -18,6 +18,17 @@ namespace DTAClient.Domain.Multiplayer.CnCNet;
 /// </summary>
 public class V3GameTunnelBridge
 {
+    /// <summary>Sender and receiver IDs prefixed to every packet sent through a tunnel.</summary>
+    private const int HEADER_SIZE = 8;
+
+    private const int MAX_DATAGRAM_SIZE = 65507;
+
+    /// <summary>
+    /// Holds the outgoing packet: the 8-byte header followed by the game's datagram, received
+    /// directly into place. Only touched by the bridge thread.
+    /// </summary>
+    private readonly byte[] _sendBuffer = new byte[MAX_DATAGRAM_SIZE];
+
     private readonly uint _localId;
     private readonly int _localPort;
     private readonly List<V3PlayerInfo> _otherPlayers;
@@ -92,10 +103,16 @@ public class V3GameTunnelBridge
             return;
 
         _isRunning = false;
-        _localGameClient?.Close();
+
+        // Unregister before the socket goes away: the handler forwards straight into it.
         _tunnelHandler.UnregisterV3PacketHandler(_localId, 0);
+
+        // Let the worker leave its receive loop before closing, so it cannot be part way through a
+        // call on a socket being disposed underneath it. Poll's 500ms timeout bounds the wait.
         if (Thread.CurrentThread != _bridgeThread)
             _bridgeThread.Join(1000);
+
+        _localGameClient?.Close();
         CleanupP2PRoutes();
 
         Logger.Log("V3GameTunnelBridge: Stopped");
@@ -132,21 +149,44 @@ public class V3GameTunnelBridge
         if (player == null)
             return;
 
-        if (_gameEndpoint != null)
+        var gameEndpoint = _gameEndpoint;
+        if (gameEndpoint == null)
+            return;
+
+        // Runs on the communicator's receive thread, so Stop() can close the socket underneath it.
+        // Snapshotting keeps a shutdown from turning into a null deref.
+        var gameSocket = _isRunning ? _localGameClient.Client : null;
+        if (gameSocket == null)
+            return;
+
+        try
         {
-            try
-            {
-                // Forward straight from the received buffer to avoid copying every game packet.
-                if (MemoryMarshal.TryGetArray(payload, out ArraySegment<byte> segment))
-                    _localGameClient.Client.SendTo(segment.Array!, segment.Offset, segment.Count, SocketFlags.None, _gameEndpoint);
-                else
-                    _localGameClient.Send(payload.ToArray(), payload.Length, _gameEndpoint);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"V3GameTunnelBridge: Error sending to game: {ex.Message}");
-            }
+            // Forward straight from the received buffer to avoid copying every game packet.
+            if (MemoryMarshal.TryGetArray(payload, out ArraySegment<byte> segment))
+                gameSocket.SendTo(segment.Array!, segment.Offset, segment.Count, SocketFlags.None, gameEndpoint);
+            else
+                gameSocket.SendTo(payload.ToArray(), SocketFlags.None, gameEndpoint);
         }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown raced this send; the bridge is going away regardless.
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"V3GameTunnelBridge: Error sending to game: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Records where the game is listening, copying the endpoint rather than storing it:
+    /// ReceiveFrom reuses its EndPoint instance across calls.
+    /// </summary>
+    private void CaptureGameEndpoint(EndPoint remoteEndPoint)
+    {
+        if (remoteEndPoint is not IPEndPoint ipEndPoint || _gameEndpoint?.Equals(ipEndPoint) == true)
+            return;
+
+        _gameEndpoint = new IPEndPoint(ipEndPoint.Address, ipEndPoint.Port);
     }
 
     /// <summary>
@@ -158,23 +198,37 @@ public class V3GameTunnelBridge
     {
         try
         {
-            IPEndPoint remoteEndPoint = new(IPAddress.Any, 0);
+            EndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
+
             while (_isRunning)
             {
                 try
                 {
-                    if (_localGameClient.Client.Poll(500_000, SelectMode.SelectRead)) // 500ms
-                    {
-                        byte[] gameData = _localGameClient.Receive(ref remoteEndPoint);
-                        _gameEndpoint = remoteEndPoint;
+                    // Snapshot the socket for the whole iteration. Closing the UdpClient nulls its
+                    // Client property, so reading it twice can hand back a socket and then null if
+                    // Stop() lands in between.
+                    var gameSocket = _localGameClient.Client;
+                    if (gameSocket == null)
+                        break;
 
-                        if (gameData.Length < 4)
+                    if (gameSocket.Poll(500_000, SelectMode.SelectRead)) // 500ms
+                    {
+                        // Received straight into the send buffer past the header, so the packet
+                        // sent onward is the same memory with the IDs written in front of it.
+                        int received = gameSocket.ReceiveFrom(
+                            _sendBuffer, HEADER_SIZE, _sendBuffer.Length - HEADER_SIZE,
+                            SocketFlags.None, ref remoteEndPoint);
+
+                        CaptureGameEndpoint(remoteEndPoint);
+
+                        if (received < 4)
                         {
-                            Logger.Log($"V3GameTunnelBridge: Ignoring too-short game packet (length={gameData.Length})");
+                            Logger.Log($"V3GameTunnelBridge: Ignoring too-short game packet (length={received})");
                             continue;
                         }
 
-                        ushort receiverId = BinaryPrimitives.ReadUInt16BigEndian(gameData.AsSpan(2));
+                        ushort receiverId = BinaryPrimitives.ReadUInt16BigEndian(
+                            _sendBuffer.AsSpan(HEADER_SIZE + 2));
                         var recipient = _otherPlayers.FirstOrDefault(p => p.PlayerGameId == receiverId);
 
                         if (recipient != null)
@@ -185,14 +239,22 @@ public class V3GameTunnelBridge
                                 continue;
                             }
 
-                            _tunnelHandler.SendPacket(recipient.Tunnel, _localId, recipient.Id,
-                                TunnelPacketType.GameData, gameData);
+                            BinaryPrimitives.WriteUInt32LittleEndian(_sendBuffer, _localId);
+                            BinaryPrimitives.WriteUInt32LittleEndian(_sendBuffer.AsSpan(4), recipient.Id);
+
+                            _tunnelHandler.SendRawPacket(recipient.Tunnel, _sendBuffer, HEADER_SIZE + received);
                         }
                         else
                         {
                             Logger.Log($"V3GameTunnelBridge: No matching recipient found for receiverId={receiverId}");
                         }
                     }
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Stop() closed the socket after this iteration snapshotted it.
+                    Logger.Log("V3GameTunnelBridge: Local server socket disposed, exiting");
+                    break;
                 }
                 catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
                 {

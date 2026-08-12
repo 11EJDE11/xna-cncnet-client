@@ -74,6 +74,11 @@ public class V3TunnelNegotiationManager
         return BinaryPrimitives.ReadUInt32LittleEndian(hash);
     }
 
+    /// <summary>
+    /// The relay tunnels this client may use for game traffic — the pool the matchmaking phase
+    /// advertises and narrows, not the set anything registers on, so it stays wide. Matchmaking
+    /// servers announce themselves as version 4 and are excluded by the version check.
+    /// </summary>
     private List<CnCNetTunnel> GetAvailableTunnelsForNegotiation()
     {
         return tunnelHandler.Tunnels
@@ -683,6 +688,11 @@ public class V3TunnelNegotiationManager
 
         foreach (var v3Player in playersToRestart)
         {
+            // Detach before disposing, as every other teardown path does. A negotiator cancelled
+            // mid-round can still raise a result as it unwinds (the P2P round's relay fallback
+            // does exactly this), and that stale event would otherwise land on the fresh round and
+            // overwrite its state with the old round's tunnel.
+            DetachNegotiator(v3Player);
             v3Player.StopNegotiation();
             CleanupP2PForPlayer(v3Player, keepChosenTunnel: false);
             v3Player.ResetNegotiator();
