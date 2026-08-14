@@ -42,6 +42,7 @@ namespace DTAClient.DXGUI.Generic
         private XNAClientCheckBox chkSpectator;
         private XNAClientCheckBox chkLockedViewport;
         private XNAClientCheckBox chkSelectUnits;
+        private XNAClientCheckBox chkShowChatAndBeacons;
 
         private const string SPAWNER_BINARY_NAME = "CnCNet-Spawner.dll";
         private const string PHOBOS_BINARY_NAME = "phobos.dll";
@@ -120,6 +121,14 @@ namespace DTAClient.DXGUI.Generic
                 "disguised units. Leave off to watch from the recording player's point of view.")
                 .L10N("Client:Main:ReplaySpectatorTooltip");
 
+            chkShowChatAndBeacons = new XNAClientCheckBox(WindowManager);
+            chkShowChatAndBeacons.Name = nameof(chkShowChatAndBeacons);
+            chkShowChatAndBeacons.ClientRectangle = new Rectangle(checkboxX, checkboxY + checkboxSpacing * 2, 250, 20);
+            chkShowChatAndBeacons.Text = "Show chat and beacons".L10N("Client:Main:ShowChatAndBeacons");
+            chkShowChatAndBeacons.Checked = false;
+            chkShowChatAndBeacons.ToolTipText = "Replays chat messages, beacons and taunts."
+                .L10N("Client:Main:ReplayShowChatAndBeaconsTooltip");
+
             btnLaunch = new XNAClientButton(WindowManager);
             btnLaunch.Name = nameof(btnLaunch);
             btnLaunch.ClientRectangle = new Rectangle(200, 445, 110, 23);
@@ -148,6 +157,7 @@ namespace DTAClient.DXGUI.Generic
             AddChild(chkLockedViewport);
             AddChild(chkSelectUnits);
             AddChild(chkSpectator);
+            AddChild(chkShowChatAndBeacons);
             AddChild(btnLaunch);
             AddChild(btnDelete);
             AddChild(btnCancel);
@@ -271,6 +281,7 @@ namespace DTAClient.DXGUI.Generic
             spawnIni.SetIntValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked ? 1 : 0);
             spawnIni.SetIntValue("Settings", "ReplaySpectator", chkSpectator.Checked ? 1 : 0);
+            spawnIni.SetIntValue("Settings", "ReplayShowChatAndBeacons", chkShowChatAndBeacons.Checked ? 1 : 0);
             spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
 
             spawnIni.WriteIniFile();
