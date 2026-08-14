@@ -515,7 +515,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (dieCount > MAX_DICE || dieCount < 1)
             {
-                AddNotice("You can only between 1 to 10 dies at once.".L10N("Client:Main:ChatboxCommandRollInvalid2"));
+                AddNotice("You can only have between 1 to 10 dice at once.".L10N("Client:Main:ChatboxCommandRollInvalid2"));
                 return;
             }
 
@@ -833,22 +833,25 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         return;
                     }
                 }
+            }
 
-                int totalPlayerCount = Players.Count(p => p.SideId < ddPlayerSides[0].Items.Count - 1)
-                    + AIPlayers.Count;
+            int totalPlayerCount = Players.Count(p => p.SideId < ddPlayerSides[0].Items.Count - 1)
+                + AIPlayers.Count;
 
+            if (GameModeMap.EnforceMinPlayers)
+            {
                 int minPlayers = GameModeMap.MinPlayers;
                 if (totalPlayerCount < minPlayers)
                 {
                     InsufficientPlayersNotification();
                     return;
                 }
+            }
 
-                if (GameModeMap.EnforceMaxPlayers && totalPlayerCount > GameModeMap.MaxPlayers)
-                {
-                    TooManyPlayersNotification();
-                    return;
-                }
+            if (GameModeMap.EnforceMaxPlayers && totalPlayerCount > GameModeMap.MaxPlayers)
+            {
+                TooManyPlayersNotification();
+                return;
             }
 
             int iId = 0;

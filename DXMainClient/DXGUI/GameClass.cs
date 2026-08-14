@@ -25,6 +25,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Rampastring.XNAUI.XNAControls;
 using MainMenu = DTAClient.DXGUI.Generic.MainMenu;
+using System.Threading.Tasks;
+
 #if WINFORMS
 using System.Windows.Forms;
 #endif
@@ -40,7 +42,15 @@ namespace DTAClient.DXGUI
         public GameClass()
         {
             graphics = new GraphicsDeviceManager(this);
+#if GL
+            // VSync drives frame pacing via SwapBuffers, eliminating micro-stutter caused
+            // by unsynchronised frame delivery. IsFixedTimeStep=false lets VSync be the
+            // sole frame timer so the client renders at the display's refresh rate.
+            graphics.SynchronizeWithVerticalRetrace = true;
+            IsFixedTimeStep = false;
+#else
             graphics.SynchronizeWithVerticalRetrace = false;
+#endif
 #if !XNA
             graphics.HardwareModeSwitch = false;
 
@@ -94,8 +104,8 @@ namespace DTAClient.DXGUI
 
             try
             {
-                Texture2D texture = new Texture2D(GraphicsDevice, 100, 100, false, SurfaceFormat.Color);
-                Color[] colorArray = new Color[100 * 100];
+                Texture2D texture = new Texture2D(GraphicsDevice, 10, 10, false, SurfaceFormat.Color);
+                Color[] colorArray = new Color[10 * 10];
                 texture.SetData(colorArray);
 
                 _ = AssetLoader.LoadTextureUncached("checkBoxClear.png");
@@ -143,6 +153,10 @@ namespace DTAClient.DXGUI
 
             WindowManager wm = new(this, graphics);
             wm.Initialize(content, ProgramConstants.GetBaseResourcePath());
+
+            IServiceProvider serviceProvider = null;
+            Task buildServiceProviderTask = Task.Run(() => { serviceProvider = BuildServiceProvider(wm); });
+
             IMEHandler imeHandler = IMEHandler.Create(this);
             wm.IMEHandler = imeHandler;
 
@@ -225,7 +239,7 @@ namespace DTAClient.DXGUI
             ProgramConstants.PLAYERNAME = playerName;
             UserINISettings.Instance.PlayerName.Value = playerName;
 
-            IServiceProvider serviceProvider = BuildServiceProvider(wm);
+            buildServiceProviderTask.GetAwaiter().GetResult();
 
             Logger.Log("Initializing loading screen.");
             LoadingScreen ls = serviceProvider.GetService<LoadingScreen>();
