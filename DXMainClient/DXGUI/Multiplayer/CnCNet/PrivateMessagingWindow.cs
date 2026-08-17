@@ -73,7 +73,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         /// Users for which a WHOIS request to resolve their ident is pending,
         /// so that multiple rapid clicks on the block button can't double-toggle.
         /// </summary>
-        private readonly HashSet<string> pendingWhoIsUsers = new HashSet<string>();
+        private readonly Dictionary<string, EventHandler<WhoEventArgs>> pendingWhoIsUsers =
+            new Dictionary<string, EventHandler<WhoEventArgs>>(StringComparer.OrdinalIgnoreCase);
 
         private GlobalContextMenu globalContextMenu;
 
@@ -283,7 +284,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void ConnectionManager_UserRemoved(object sender, UserNameIndexEventArgs e)
         {
-            pendingWhoIsUsers.Remove(e.UserName);
+            CancelPendingWhoIs(e.UserName);
 
             var pmUser = privateMessageUsers.Find(pmsgUser => pmsgUser.IrcUser.Name == e.UserName);
             ChatMessage leaveMessage = null;
@@ -360,6 +361,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                     if (lbItem == lbUserList.SelectedItem)
                     {
                         tbMessageInput.Enabled = !IsUserBlocked(e.User);
+                        UpdateBlockUserButton();
 
                         if (joinMessage != null)
                             lbMessages.AddMessage(joinMessage);
@@ -484,26 +486,38 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return;
             }
 
-            if (!pendingWhoIsUsers.Add(ircUser.Name))
+            if (pendingWhoIsUsers.ContainsKey(ircUser.Name))
                 return;
 
-            void WhoIsReply(object whoSender, WhoEventArgs whoEventargs)
+            EventHandler<WhoEventArgs> whoIsReply = (whoSender, whoEventargs) =>
             {
-                if (whoEventargs.UserName != ircUser.Name)
+                if (!string.Equals(whoEventargs.UserName, ircUser.Name, StringComparison.OrdinalIgnoreCase))
                     return;
 
-                connectionManager.WhoReplyReceived -= WhoIsReply;
-                pendingWhoIsUsers.Remove(ircUser.Name);
+                CancelPendingWhoIs(ircUser.Name);
 
                 if (!string.IsNullOrEmpty(whoEventargs.Ident))
                 {
                     ircUser.Ident = whoEventargs.Ident;
                     ToggleIgnoreUserAndNotify(ircUser, whoEventargs.Ident);
                 }
-            }
+            };
 
-            connectionManager.WhoReplyReceived += WhoIsReply;
+            pendingWhoIsUsers.Add(ircUser.Name, whoIsReply);
+            connectionManager.WhoReplyReceived += whoIsReply;
             connectionManager.SendWhoIsMessage(ircUser.Name);
+        }
+
+        private void CancelPendingWhoIs(string userName)
+        {
+            if (string.IsNullOrEmpty(userName))
+                return;
+
+            if (pendingWhoIsUsers.TryGetValue(userName, out EventHandler<WhoEventArgs> whoIsReply))
+            {
+                connectionManager.WhoReplyReceived -= whoIsReply;
+                pendingWhoIsUsers.Remove(userName);
+            }
         }
 
         private void ToggleIgnoreUserAndNotify(IRCUser ircUser, string ident)
