@@ -1,256 +1,284 @@
 using ClientCore;
+using ClientCore.Extensions;
 using ClientGUI;
 using DTAClient.Domain;
-using ClientCore.Extensions;
+using DTAClient.DXGUI.Campaign;
+using DTAClient.DXGUI.Generic.LoadGamePanels;
 using Microsoft.Xna.Framework;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Diagnostics;
-using DTAClient.DXGUI.Campaign;
 
 namespace DTAClient.DXGUI.Generic
 {
     /// <summary>
-    /// A window for loading saved singleplayer games.
+    /// A window for loading saved singleplayer games and, where the game supports it, watching
+    /// recorded replays.
+    ///
+    /// Structured as a tab shell around <see cref="LoadGamePanel"/>s, the same way OptionsWindow
+    /// wraps its option panels. Games without replay support get a single panel and no tab strip,
+    /// so the window looks exactly as it always has.
     /// </summary>
     public class GameLoadingWindow : XNAWindow
     {
-        private const string SAVED_GAMES_DIRECTORY = "Saved Games";
+        private const int BUTTON_WIDTH = 110;
+        private const int BUTTON_HEIGHT = 23;
+        private const int BUTTON_SPACING = 10;
 
-        public GameLoadingWindow(WindowManager windowManager, DiscordHandler discordHandler, CampaignTagSelector campaignTagSelector) : base(windowManager)
+        public GameLoadingWindow(WindowManager windowManager, DiscordHandler discordHandler,
+            CampaignTagSelector campaignTagSelector) : base(windowManager)
         {
             this.discordHandler = discordHandler;
             this.campaignTagSelector = campaignTagSelector;
         }
 
-        private DiscordHandler discordHandler;
-        private CampaignTagSelector campaignTagSelector;
+        private readonly DiscordHandler discordHandler;
+        private readonly CampaignTagSelector campaignTagSelector;
 
-        private XNAMultiColumnListBox lbSaveGameList;
+        private XNAClientTabControl tabControl;
+        private LoadGamePanel[] panels;
+        private SavedGamesPanel savedGamesPanel;
+
         private XNAClientButton btnLaunch;
         private XNAClientButton btnDelete;
         private XNAClientButton btnCancel;
 
-        private List<SavedGame> savedGames = new List<SavedGame>();
+        /// <summary>
+        /// The buttons each panel contributes to the row, kept per panel so switching tabs just
+        /// swaps which set is visible.
+        /// </summary>
+        private Dictionary<LoadGamePanel, XNAClientButton[]> extraButtons;
+
+        private int buttonRowY;
+
+        private LoadGamePanel ActivePanel => panels[tabControl == null ? 0 : tabControl.SelectedTab];
 
         public override void Initialize()
         {
             Name = "GameLoadingWindow";
             BackgroundTexture = AssetLoader.LoadTexture("loadmissionbg.png");
 
-            ClientRectangle = new Rectangle(0, 0, 600, 380);
-            CenterOnParent();
+            savedGamesPanel = new SavedGamesPanel(WindowManager, discordHandler, campaignTagSelector);
 
-            lbSaveGameList = new XNAMultiColumnListBox(WindowManager);
-            lbSaveGameList.Name = nameof(lbSaveGameList);
-            lbSaveGameList.ClientRectangle = new Rectangle(13, 13, 574, 317);
-            lbSaveGameList.AddColumn("SAVED GAME NAME".L10N("Client:Main:SavedGameNameColumnHeader"), 400);
-            lbSaveGameList.AddColumn("DATE / TIME".L10N("Client:Main:SavedGameDateTimeColumnHeader"), 174);
-            lbSaveGameList.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
-            lbSaveGameList.PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
-            lbSaveGameList.SelectedIndexChanged += ListBox_SelectedIndexChanged;
-            lbSaveGameList.AllowKeyboardInput = true;
+            var panelList = new List<LoadGamePanel> { savedGamesPanel };
+
+            if (ReplayManager.IsSupported)
+                panelList.Add(new ReplaysPanel(WindowManager, discordHandler));
+
+            panels = panelList.ToArray();
+
+            bool showTabs = panels.Length > 1;
+
+            // The replay panel needs the room; a lone saved-games list does not, and growing the
+            // window for every game would change how it looks for the ones without replays.
+            ClientRectangle = showTabs
+                ? new Rectangle(0, 0, 700, 540)
+                : new Rectangle(0, 0, 600, 380);
+
+            int panelTop = 12;
+
+            if (showTabs)
+            {
+                tabControl = new XNAClientTabControl(WindowManager);
+                tabControl.Name = nameof(tabControl);
+                tabControl.ClientRectangle = new Rectangle(12, 12, 0, 23);
+                tabControl.FontIndex = 1;
+                tabControl.ClickSound = new EnhancedSoundEffect("button.wav");
+
+                foreach (LoadGamePanel panel in panels)
+                    tabControl.AddTab(panel.TabTitle, UIDesignConstants.BUTTON_WIDTH_133);
+
+                tabControl.SelectedIndexChanged += TabControl_SelectedIndexChanged;
+
+                panelTop = tabControl.Bottom + 12;
+            }
+
+            int buttonY = Height - BUTTON_HEIGHT - 12;
+            int panelHeight = buttonY - panelTop - 12;
+
+            foreach (LoadGamePanel panel in panels)
+            {
+                panel.ClientRectangle = new Rectangle(12, panelTop, Width - 24, panelHeight);
+
+                // AddChild initializes the panel straight away, so its rectangle has to be set
+                // first and its events hooked up afterwards - a panel populates its list during
+                // Initialize, which would otherwise reach the buttons before they exist.
+                AddChild(panel);
+                panel.Disable();
+            }
+
+            panels[0].Enable();
+
+            buttonRowY = buttonY;
 
             btnLaunch = new XNAClientButton(WindowManager);
             btnLaunch.Name = nameof(btnLaunch);
-            btnLaunch.ClientRectangle = new Rectangle(125, 345, 110, 23);
+            btnLaunch.ClientRectangle = new Rectangle(0, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT);
             btnLaunch.Text = "Load".L10N("Client:Main:ButtonLoad");
             btnLaunch.AllowClick = false;
-            btnLaunch.LeftClick += BtnLaunch_LeftClick;
+            btnLaunch.LeftClick += (_, _) => ActivePanel.Launch();
 
             btnDelete = new XNAClientButton(WindowManager);
             btnDelete.Name = nameof(btnDelete);
-            btnDelete.ClientRectangle = new Rectangle(btnLaunch.Right + 10, btnLaunch.Y, 110, 23);
+            btnDelete.ClientRectangle = new Rectangle(0, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT);
             btnDelete.Text = "Delete".L10N("Client:Main:ButtonDelete");
             btnDelete.AllowClick = false;
-            btnDelete.LeftClick += BtnDelete_LeftClick;
+            btnDelete.LeftClick += (_, _) => ActivePanel.Delete();
 
             btnCancel = new XNAClientButton(WindowManager);
             btnCancel.Name = nameof(btnCancel);
-            btnCancel.ClientRectangle = new Rectangle(btnDelete.Right + 10, btnLaunch.Y, 110, 23);
+            btnCancel.ClientRectangle = new Rectangle(0, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT);
             btnCancel.Text = "Cancel".L10N("Client:Main:ButtonCancel");
-            btnCancel.LeftClick += BtnCancel_LeftClick;
+            btnCancel.LeftClick += (_, _) => Disable();
 
-            AddChild(lbSaveGameList);
+            CreateExtraButtons(buttonY);
+
+            foreach (LoadGamePanel panel in panels)
+            {
+                panel.SelectionChanged += (_, _) => UpdateButtonStates();
+                panel.LaunchRequested += (_, _) => Disable();
+            }
+
+            if (tabControl != null)
+                AddChild(tabControl);
+
             AddChild(btnLaunch);
             AddChild(btnDelete);
             AddChild(btnCancel);
 
             base.Initialize();
 
-            ListSaves();
+            CenterOnParent();
+
+            LayOutButtonRow();
+            UpdateButtonStates();
         }
 
-        private void ListBox_SelectedIndexChanged(object sender, EventArgs e)
+        /// <summary>
+        /// Builds the buttons each panel asked for. They belong to the window so the whole dialog
+        /// keeps a single row of buttons instead of scattering actions across the panel.
+        /// </summary>
+        private void CreateExtraButtons(int buttonY)
         {
-            if (lbSaveGameList.SelectedIndex == -1)
+            extraButtons = new Dictionary<LoadGamePanel, XNAClientButton[]>();
+
+            foreach (LoadGamePanel panel in panels)
             {
-                btnLaunch.AllowClick = false;
-                btnDelete.AllowClick = false;
+                var buttons = new List<XNAClientButton>();
+
+                foreach (LoadGamePanelAction action in panel.ExtraActions)
+                {
+                    LoadGamePanelAction capturedAction = action;
+
+                    var button = new XNAClientButton(WindowManager);
+                    button.Name = "btn" + capturedAction.Text.Replace(" ", string.Empty);
+                    button.ClientRectangle = new Rectangle(0, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT);
+                    button.Text = capturedAction.Text;
+                    button.LeftClick += (_, _) => capturedAction.Action();
+
+                    AddChild(button);
+                    button.Disable();
+
+                    buttons.Add(button);
+                }
+
+                extraButtons[panel] = buttons.ToArray();
             }
-            else
-            {
-                btnLaunch.AllowClick = true;
-                btnDelete.AllowClick = true;
-            }
         }
 
-        public void Open()
+        /// <summary>
+        /// Shows the active panel's buttons and centres the whole row, which changes width as
+        /// panels contribute a different number of buttons.
+        /// </summary>
+        private void LayOutButtonRow()
         {
-            Enable();
-        }
+            LoadGamePanel activePanel = ActivePanel;
 
-        private void BtnCancel_LeftClick(object sender, EventArgs e)
-        {
-            Disable();
-        }
-
-        private void BtnLaunch_LeftClick(object sender, EventArgs e)
-        {
-            SavedGame sg = savedGames[lbSaveGameList.SelectedIndex];
-            Logger.Log("Loading saved game " + sg.FileName);
-
-            Mission mission = campaignTagSelector.UniqueIDToMissions.GetValueOrDefault(sg.CustomMissionID, null);
-
-            CustomMissionHelper.DeleteSupplementalMissionFiles();
-
-            if (mission != null)
-                CustomMissionHelper.CopySupplementalMissionFiles(mission);
-
-            FileInfo spawnerSettingsFile = SafePath.GetFile(ProgramConstants.GamePath, ProgramConstants.SPAWNER_SETTINGS);
-
-            if (spawnerSettingsFile.Exists)
-                spawnerSettingsFile.Delete();
-
-            IniFile spawnIni = new()
+            foreach (KeyValuePair<LoadGamePanel, XNAClientButton[]> entry in extraButtons)
             {
-                Comment = "Generated by CnCNet Client"
-            };
+                bool visible = entry.Key == activePanel;
 
-            IniSection spawnIniSettings = new("Settings");
-            spawnIniSettings.AddKey("Scenario", "spawnmap.ini");
-            spawnIniSettings.AddKey("SaveGameName", sg.FileName);
-            spawnIniSettings.AddKey("LoadSaveGame", "Yes");
-            spawnIniSettings.AddKey("SidebarHack", ClientConfiguration.Instance.SidebarHack.ToString());
-            spawnIniSettings.AddKey("CustomLoadScreen", LoadingScreenController.GetLoadScreenName("g"));
-            spawnIniSettings.AddKey("Firestorm", "No");
-            spawnIniSettings.AddKey("GameSpeed", UserINISettings.Instance.GameSpeed.ToString());
-
-            spawnIni.AddSection(spawnIniSettings);
-
-            if (mission != null)
-            {
-                spawnIniSettings.AddKey("CustomMissionID", sg.CustomMissionID.ToString());
-                CampaignSelector.WriteMissionSectionToSpawnIni(spawnIni, mission);
+                foreach (XNAClientButton button in entry.Value)
+                {
+                    if (visible)
+                        button.Enable();
+                    else
+                        button.Disable();
+                }
             }
 
-            spawnIni.WriteIniFile(spawnerSettingsFile.FullName);
+            XNAClientButton[] activeExtras = extraButtons[activePanel];
 
-            FileInfo spawnMapIniFile = SafePath.GetFile(ProgramConstants.GamePath, "spawnmap.ini");
+            // Panel actions sit between Delete and Cancel, so Cancel stays the rightmost button
+            // and Delete is never adjacent to a Delete All.
+            var row = new List<XNAClientButton> { btnLaunch, btnDelete };
+            row.AddRange(activeExtras);
+            row.Add(btnCancel);
 
-            if (spawnMapIniFile.Exists)
-                spawnMapIniFile.Delete();
+            int rowWidth = (BUTTON_WIDTH * row.Count) + (BUTTON_SPACING * (row.Count - 1));
+            int x = (Width - rowWidth) / 2;
 
-            using (var spawnMapStreamWriter = new StreamWriter(spawnMapIniFile.FullName))
+            foreach (XNAClientButton button in row)
             {
-                spawnMapStreamWriter.WriteLine("[Map]");
-                spawnMapStreamWriter.WriteLine("Size=0,0,50,50");
-                spawnMapStreamWriter.WriteLine("LocalSize=0,0,50,50");
-                spawnMapStreamWriter.WriteLine();
+                button.ClientRectangle = new Rectangle(x, buttonRowY, BUTTON_WIDTH, BUTTON_HEIGHT);
+                x += BUTTON_WIDTH + BUTTON_SPACING;
             }
-
-            discordHandler.UpdatePresence(sg.GUIName, true);
-
-            Disable();
-            GameProcessLogic.GameProcessExited += GameProcessExited_Callback;
-
-            GameProcessLogic.StartGameProcess(WindowManager);
         }
 
-        private void BtnDelete_LeftClick(object sender, EventArgs e)
+        public void Open() => Enable();
+
+        /// <summary>
+        /// Kept for the main menu, which refreshes the window when returning from a game.
+        /// </summary>
+        public void ListSaves() => savedGamesPanel.ListSaves();
+
+        protected override void OnEnabledChanged(object sender, EventArgs args)
         {
-            SavedGame sg = savedGames[lbSaveGameList.SelectedIndex];
-            var msgBox = new XNAMessageBox(WindowManager, "Delete Confirmation".L10N("Client:Main:DeleteConfirmationTitle"),
-                string.Format(("The following saved game will be deleted permanently:\n\n" +
-                    "Filename: {0}\n" +
-                    "Saved game name: {1}\n" +
-                    "Date and time: {2}\n\n" +
-                    "Are you sure you want to proceed?").L10N("Client:Main:DeleteConfirmationText"),
-                    sg.FileName, Renderer.GetSafeString(sg.GUIName, lbSaveGameList.FontIndex), sg.LastModified.ToString()),
-                XNAMessageBoxButtons.YesNo);
-            msgBox.Show();
-            msgBox.YesClickedAction = DeleteMsgBox_YesClicked;
+            base.OnEnabledChanged(sender, args);
+
+            // Files can appear or vanish while the window is closed - a game just finished
+            // recording, or the user deleted something in Explorer.
+            if (Enabled && panels != null)
+                RefreshActivePanel();
         }
 
-        private void DeleteMsgBox_YesClicked(XNAMessageBox obj)
+        private void TabControl_SelectedIndexChanged(object sender, EventArgs e)
         {
-            SavedGame sg = savedGames[lbSaveGameList.SelectedIndex];
+            foreach (LoadGamePanel panel in panels)
+                panel.Disable();
 
-            Logger.Log("Deleting saved game " + sg.FileName);
-            SafePath.DeleteFileIfExists(ProgramConstants.GamePath, SAVED_GAMES_DIRECTORY, sg.FileName);
-            ListSaves();
+            ActivePanel.Enable();
+
+            LayOutButtonRow();
+            RefreshActivePanel();
         }
 
-        private void GameProcessExited_Callback()
+        private void RefreshActivePanel()
         {
-            WindowManager.AddCallback(new Action(GameProcessExited), null);
+            ActivePanel.Refresh();
+            UpdateButtonStates();
         }
 
-        protected virtual void GameProcessExited()
+        private void UpdateButtonStates()
         {
-            GameProcessLogic.GameProcessExited -= GameProcessExited_Callback;
-
-            CustomMissionHelper.DeleteSupplementalMissionFiles();
-
-            discordHandler.UpdatePresence();
-        }
-
-        public void ListSaves()
-        {
-            savedGames.Clear();
-            lbSaveGameList.ClearItems();
-            lbSaveGameList.SelectedIndex = -1;
-
-            DirectoryInfo savedGamesDirectoryInfo = SafePath.GetDirectory(ProgramConstants.GamePath, SAVED_GAMES_DIRECTORY);
-
-            if (!savedGamesDirectoryInfo.Exists)
-            {
-                Logger.Log("Saved Games directory not found!");
+            // Reachable before the buttons are built, e.g. if the window is enabled while the
+            // theme INI is still being applied.
+            if (btnLaunch == null)
                 return;
-            }
 
-            IEnumerable<FileInfo> files = savedGamesDirectoryInfo.EnumerateFiles("*.SAV", SearchOption.TopDirectoryOnly);
+            LoadGamePanel panel = ActivePanel;
 
-            foreach (FileInfo file in files)
-            {
-                // Note: ParseSaveGame modifies savedGames
-                ParseSaveGame(file.FullName);
-            }
+            btnLaunch.Text = panel.LaunchButtonText;
+            btnLaunch.AllowClick = panel.CanLaunch;
+            btnDelete.AllowClick = panel.CanDelete;
 
-            savedGames = savedGames.OrderBy(sg => sg.LastModified.Ticks).ToList();
-            savedGames.Reverse();
+            XNAClientButton[] buttons = extraButtons[panel];
+            IReadOnlyList<LoadGamePanelAction> actions = panel.ExtraActions;
 
-            foreach (SavedGame sg in savedGames)
-            {
-                string[] item = new string[] {
-                    Renderer.GetSafeString(sg.GUIName, lbSaveGameList.FontIndex),
-                    sg.LastModified.ToString() };
-                lbSaveGameList.AddItem(item, true);
-            }
-        }
-
-        private void ParseSaveGame(string fileName)
-        {
-            string shortName = Path.GetFileName(fileName);
-
-            SavedGame sg = new SavedGame(shortName);
-            if (sg.ParseInfo())
-                savedGames.Add(sg);
+            for (int i = 0; i < buttons.Length && i < actions.Count; i++)
+                buttons[i].AllowClick = actions[i].IsEnabled == null || actions[i].IsEnabled();
         }
     }
 }

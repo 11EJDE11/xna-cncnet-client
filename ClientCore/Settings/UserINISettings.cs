@@ -22,6 +22,7 @@ namespace ClientCore
         public const string COMPATIBILITY = "Compatibility";
         public const string GAME_FILTERS = "GameFilters";
         public const string GAME_OPTION_FILTERS = "GameOptionFilters";
+        public const string REPLAYS = "Replays";
         private const string FAVORITE_MAPS = "FavoriteMaps";
 
         private const bool DEFAULT_SHOW_FRIENDS_ONLY_GAMES = false;
@@ -178,6 +179,16 @@ namespace ClientCore
             AutoRemoveUnderscoresFromName = new BoolSetting(iniFile, OPTIONS, "AutoRemoveUnderscoresFromName", true);
             GenerateTranslationStub = new BoolSetting(iniFile, OPTIONS, nameof(GenerateTranslationStub), false);
             GenerateOnlyNewValuesInTranslationStub = new BoolSetting(iniFile, OPTIONS, nameof(GenerateOnlyNewValuesInTranslationStub), false);
+
+            RecordReplays = new BoolSetting(iniFile, REPLAYS, "RecordReplays", true);
+            MaxKeptReplays = new IntSetting(iniFile, REPLAYS, "MaxKeptReplays", 50);
+            MaxReplayFolderSizeMB = new IntSetting(iniFile, REPLAYS, "MaxReplayFolderSizeMB", 2048);
+            ReplayPlaybackShroud = new BoolSetting(iniFile, REPLAYS, "PlaybackShroud", false);
+            ReplayPlaybackLockedViewport = new BoolSetting(iniFile, REPLAYS, "PlaybackLockedViewport", true);
+            ReplayPlaybackSelectUnits = new BoolSetting(iniFile, REPLAYS, "PlaybackSelectUnits", true);
+            ReplayPlaybackSpectator = new BoolSetting(iniFile, REPLAYS, "PlaybackSpectator", false);
+            ReplayPlaybackShowChatAndBeacons = new BoolSetting(iniFile, REPLAYS, "PlaybackShowChatAndBeacons", true);
+            ReplayPlaybackGameSpeed = new IntSetting(iniFile, REPLAYS, "PlaybackGameSpeed", 0);
 
             SortState = new IntSetting(iniFile, GAME_FILTERS, "SortState", (int)SortDirection.None);
             ShowFriendGamesOnly = new BoolSetting(iniFile, GAME_FILTERS, "ShowFriendGamesOnly", DEFAULT_SHOW_FRIENDS_ONLY_GAMES);
@@ -358,6 +369,30 @@ namespace ClientCore
         public BoolSetting GenerateOnlyNewValuesInTranslationStub { get; private set; }
 
         public List<string> FavoriteMaps { get; private set; }
+
+        /***********/
+        /* REPLAYS */
+        /***********/
+
+        public BoolSetting RecordReplays { get; private set; }
+
+        /// <summary>Maximum number of replays to keep. 0 means unlimited.</summary>
+        public IntSetting MaxKeptReplays { get; private set; }
+
+        /// <summary>Maximum total size of the replay directory in megabytes. 0 means unlimited.</summary>
+        public IntSetting MaxReplayFolderSizeMB { get; private set; }
+
+        public BoolSetting ReplayPlaybackShroud { get; private set; }
+
+        public BoolSetting ReplayPlaybackLockedViewport { get; private set; }
+
+        public BoolSetting ReplayPlaybackSelectUnits { get; private set; }
+
+        public BoolSetting ReplayPlaybackSpectator { get; private set; }
+
+        public BoolSetting ReplayPlaybackShowChatAndBeacons { get; private set; }
+
+        public IntSetting ReplayPlaybackGameSpeed { get; private set; }
 
         public void SetValue(string section, string key, string value)
                => SettingsIni.SetStringValue(section, key, value);

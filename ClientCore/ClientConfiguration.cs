@@ -447,6 +447,23 @@ namespace ClientCore
         public bool UseClientRandomStartLocations => clientDefinitionsIni.GetBooleanValue(SETTINGS, "UseClientRandomStartLocations", false);
 
         /// <summary>
+        /// Whether the game supports recording and playing back replays. Off by default, as it
+        /// depends on spawner support that only some games have. A package that enables this gets
+        /// the Record Replay lobby option and the Replays tab in the Load Game window.
+        /// </summary>
+        public bool ReplaySupport => clientDefinitionsIni.GetBooleanValue(SETTINGS, "ReplaySupport", false);
+
+        /// <summary>
+        /// Directory, relative to the game directory, that replays are recorded into and listed from.
+        /// </summary>
+        public string ReplaysDirectory => clientDefinitionsIni.GetStringValue(SETTINGS, "ReplaysDirectory", "Replays");
+
+        /// <summary>
+        /// File extension of replay files, without a leading dot.
+        /// </summary>
+        public string ReplayFileExtension => clientDefinitionsIni.GetStringValue(SETTINGS, "ReplayFileExtension", "yrrp");
+
+        /// <summary>
         /// Returns the name of the game executable file that is used on
         /// Linux and macOS.
         /// </summary>

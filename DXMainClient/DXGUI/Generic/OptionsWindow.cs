@@ -9,6 +9,7 @@ using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
+using System.Collections.Generic;
 using ClientUpdater;
 using DTAClient.Domain;
 
@@ -38,7 +39,14 @@ namespace DTAClient.DXGUI.Generic
         public override void Initialize()
         {
             Name = "OptionsWindow";
-            ClientRectangle = new Rectangle(0, 0, 576, 475);
+
+            // The storage tab only exists for games that accumulate files worth capping, which
+            // today means replays. Its tab does not fit in the original width, so the window grows
+            // by exactly one tab rather than squeezing all seven.
+            bool showStorageTab = ReplayManager.IsSupported;
+
+            ClientRectangle = new Rectangle(0, 0,
+                showStorageTab ? 576 + UIDesignConstants.BUTTON_WIDTH_92 : 576, 475);
             BackgroundTexture = AssetLoader.LoadTextureUncached("optionsbg.png");
 
             tabControl = new XNAClientTabControl(WindowManager);
@@ -52,6 +60,10 @@ namespace DTAClient.DXGUI.Generic
             tabControl.AddTab("CnCNet".L10N("Client:DTAConfig:TabCnCNet"), UIDesignConstants.BUTTON_WIDTH_92);
             tabControl.AddTab("Updater".L10N("Client:DTAConfig:TabUpdater"), UIDesignConstants.BUTTON_WIDTH_92);
             tabControl.AddTab("Components".L10N("Client:DTAConfig:TabComponents"), UIDesignConstants.BUTTON_WIDTH_92);
+
+            if (showStorageTab)
+                tabControl.AddTab("Storage".L10N("Client:DTAConfig:TabStorage"), UIDesignConstants.BUTTON_WIDTH_92);
+
             tabControl.SelectedIndexChanged += TabControl_SelectedIndexChanged;
 
             var btnCancel = new XNAClientButton(WindowManager);
@@ -72,7 +84,7 @@ namespace DTAClient.DXGUI.Generic
             var updaterOptionsPanel = new UpdaterOptionsPanel(WindowManager, UserINISettings.Instance);
             updaterOptionsPanel.OnForceUpdate += (s, e) => { Disable(); OnForceUpdate?.Invoke(this, EventArgs.Empty); };
 
-            optionsPanels = new XNAOptionsPanel[]
+            var panels = new List<XNAOptionsPanel>
             {
                 displayOptionsPanel,
                 new AudioOptionsPanel(WindowManager, UserINISettings.Instance),
@@ -81,6 +93,12 @@ namespace DTAClient.DXGUI.Generic
                 updaterOptionsPanel,
                 componentsPanel
             };
+
+            // Appended last so the Updater and Components tab indices below stay put.
+            if (showStorageTab)
+                panels.Add(new StorageOptionsPanel(WindowManager, UserINISettings.Instance));
+
+            optionsPanels = panels.ToArray();
 
             if (ClientConfiguration.Instance.ModMode || Updater.UpdateMirrors == null || Updater.UpdateMirrors.Count < 1)
             {

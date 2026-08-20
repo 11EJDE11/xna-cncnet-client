@@ -21,7 +21,10 @@ namespace DTAClient.Online
 
         private static readonly IReadOnlyList<string> knownTextFileExtensions = [".txt", ".ini", ".json", ".xml"];
 
-        private string[] fileNamesToCheck = ClientConfiguration.Instance.ClientGameType switch
+        /// <summary>
+        /// Used when the package's FHCConfig.ini does not supply a [FilenameList] of its own.
+        /// </summary>
+        private static readonly string[] DefaultFileNamesToCheck = ClientConfiguration.Instance.ClientGameType switch
         {
             ClientType.TS => new string[]
             {
@@ -83,6 +86,84 @@ namespace DTAClient.Online
 
         public FileHashCalculator() => ParseConfigFile();
 
+        /// <summary>
+        /// One file the compatibility check covers, with the relative path used as its identity.
+        /// </summary>
+        public readonly struct TrackedFile
+        {
+            public TrackedFile(string relativePath, string fullPath)
+            {
+                RelativePath = relativePath;
+                FullPath = fullPath;
+            }
+
+            /// <summary>Path as recorded in the hash set. Part of the lobby hash, so it must not change.</summary>
+            public string RelativePath { get; }
+
+            public string FullPath { get; }
+        }
+
+        /// <summary>
+        /// Every file whose contents are expected to match between players, from the package's
+        /// [FilenameList] plus the game option and map code directories.
+        ///
+        /// Shared with <see cref="DTAClient.Domain.ReplayFileHashes"/> rather than duplicated:
+        /// both answer the same question - which files change how the game plays out - and a
+        /// second list would be one more copy to keep in step. They differ only in what they do
+        /// with the result, the lobby needing a single combined hash and replays needing the
+        /// per-file detail to name what differs.
+        ///
+        /// Entries that do not exist are still returned, so callers can distinguish absent from
+        /// unchanged.
+        /// </summary>
+        public static IEnumerable<TrackedFile> EnumerateTrackedFiles()
+        {
+            foreach (string relativePath in GetFileNamesToCheck())
+            {
+                yield return new TrackedFile(relativePath,
+                    SafePath.CombineFilePath(ProgramConstants.GamePath, relativePath));
+            }
+
+            List<DirectoryInfo> iniPaths = [SafePath.GetDirectory(ProgramConstants.GamePath, "INI", "Game Options")];
+
+            if (ClientConfiguration.Instance.ClientGameType != ClientType.YR)
+                iniPaths.Add(SafePath.GetDirectory(ProgramConstants.GamePath, "INI", "Map Code"));
+
+            foreach (DirectoryInfo path in iniPaths)
+            {
+                if (!path.Exists)
+                    continue;
+
+                foreach (string filename in path.EnumerateFiles("*", SearchOption.AllDirectories).Select(s => s.FullName.Substring(path.FullName.Length)))
+                {
+                    if (Path.GetFileName(filename).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    yield return new TrackedFile(
+                        SafePath.CombineFilePath(path.Name, filename),
+                        SafePath.CombineFilePath(path.FullName, filename));
+                }
+            }
+        }
+
+        private static string[] GetFileNamesToCheck()
+        {
+            IniFile config = new IniFile(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), CONFIGNAME));
+
+            List<string> keys = config.GetSectionKeys("FilenameList");
+            if (keys == null || keys.Count < 1)
+                return DefaultFileNamesToCheck;
+
+            var filenames = new List<string>();
+            foreach (string key in keys)
+            {
+                string value = config.GetStringValue("FilenameList", key, string.Empty);
+                filenames.Add(value == string.Empty ? key : value);
+            }
+
+            return filenames.ToArray();
+        }
+
         private string finalHash = string.Empty;
 
         public void CalculateHashes()
@@ -124,37 +205,11 @@ namespace DTAClient.Online
             if (!string.IsNullOrEmpty(ClientConfiguration.Instance.GameLauncherExecutableName))
                 Logger.Log($"Hash for {ClientConfiguration.Instance.GameLauncherExecutableName}: {fh.LauncherExeHash}");
 
-            foreach (string relativePath in fileNamesToCheck)
+            foreach (TrackedFile tracked in EnumerateTrackedFiles())
             {
-                string fullPath = SafePath.CombineFilePath(ProgramConstants.GamePath, relativePath);
-                string hash = fh.AddHashForFileIfExists(relativePath, fullPath);
+                string hash = fh.AddHashForFileIfExists(tracked.RelativePath, tracked.FullPath);
                 if (!string.IsNullOrEmpty(hash))
-                    Logger.Log($"Hash for {relativePath}: {hash}");
-            }
-
-            List<DirectoryInfo> iniPaths = [SafePath.GetDirectory(ProgramConstants.GamePath, "INI", "Game Options")];
-
-            if (ClientConfiguration.Instance.ClientGameType != ClientType.YR)
-                iniPaths.Add(SafePath.GetDirectory(ProgramConstants.GamePath, "INI", "Map Code"));
-
-            foreach (DirectoryInfo path in iniPaths)
-            {
-                if (path.Exists)
-                {
-                    foreach (string filename in path.EnumerateFiles("*", SearchOption.AllDirectories).Select(s => s.FullName.Substring(path.FullName.Length)))
-                    {
-                        if (Path.GetFileName(filename).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase))
-                            continue;
-
-                        string fileRelativePath = SafePath.CombineFilePath(path.Name, filename);
-                        string fileFullPath = SafePath.CombineFilePath(path.FullName, filename);
-                        Debug.Assert(File.Exists(fileFullPath), $"File {fileFullPath} is supposed to but does not exist.");
-
-                        string hash = fh.AddHashForFileIfExists(fileRelativePath, fileFullPath);
-                        if (!string.IsNullOrEmpty(hash))
-                            Logger.Log("Hash for " + fileRelativePath + ": " + hash);
-                    }
-                }
+                    Logger.Log($"Hash for {tracked.RelativePath}: {hash}");
             }
 
             // Add the hashes for each checked file from the available translations
@@ -190,24 +245,15 @@ namespace DTAClient.Online
         {
             IniFile config = new IniFile(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), CONFIGNAME));
             calculateGameExeHash = config.GetBooleanValue("Settings", "CalculateGameExeHash", true);
-
-            List<string> keys = config.GetSectionKeys("FilenameList");
-            if (keys == null || keys.Count < 1)
-                return;
-
-            List<string> filenames = new List<string>();
-            foreach (string key in keys)
-            {
-                string value = config.GetStringValue("FilenameList", key, string.Empty);
-                filenames.Add(value == string.Empty ? key : value);
-            }
-
-            fileNamesToCheck = filenames.ToArray();
         }
 
         private static string NormalizePath(string path) => path.Replace('\\', '/');
 
-        private static string CalculateSHA1ForFile(string path)
+        /// <summary>
+        /// Hashes one file. Text files are hashed with normalised line endings so a checkout
+        /// difference does not read as a modified file.
+        /// </summary>
+        public static string CalculateSHA1ForFile(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
                 return string.Empty;

@@ -54,11 +54,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         protected const int PLAYER_OPTION_HORIZONTAL_MARGIN = 3;
         protected const int PLAYER_OPTION_CAPTION_Y = 6;
         private const int DROP_DOWN_HEIGHT = 21;
-        private const string SPAWNER_VERSION_SETTINGS_KEY = "SpawnerVersion";
-        private const string PHOBOS_VERSION_SETTINGS_KEY = "PhobosVersion";
         private const string GAME_CLIENT_VERSION_SETTINGS_KEY = "GameClientVersion";
-        private const string SPAWNER_BINARY_NAME = "CnCNet-Spawner.dll";
-        private const string PHOBOS_BINARY_NAME = "phobos.dll";
         protected readonly string BTN_LAUNCH_GAME = "Launch Game".L10N("Client:Main:ButtonLaunchGame");
         protected readonly string BTN_LAUNCH_READY = "I'm Ready".L10N("Client:Main:ButtonIAmReady");
         protected readonly string BTN_LAUNCH_NOT_READY = "Not Ready".L10N("Client:Main:ButtonNotReady");
@@ -99,6 +95,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public List<GameLobbyCheckBox> CheckBoxes { get; } = new();
         public List<GameLobbyDropDown> DropDowns { get; } = new();
+
+        /// <summary>
+        /// Lobby options that belong to this client alone - written to the local spawn.ini and
+        /// remembered in the user's settings, but never broadcast. Kept separate from
+        /// <see cref="CheckBoxes"/> on purpose: that list is serialised positionally into the game
+        /// options message, so anything added to it has to match on every client in the game.
+        /// </summary>
+        public List<LocalGameLobbyCheckBox> LocalCheckBoxes { get; } = new();
 
         public List<IGameSessionSetting> GetBroadcastableSettings()
         {
@@ -389,7 +393,36 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             CheckBoxes.ForEach(chk => chk.CheckedChanged += ChkBox_CheckedChanged);
             DropDowns.ForEach(dd => dd.SelectedIndexChanged += Dropdown_SelectedIndexChanged);
 
+            LocalCheckBoxes.ForEach(chk => chk.CheckedChanged += LocalCheckBox_CheckedChanged);
+            RefreshForcedMultiplayerLabels();
+
             InitializeGameOptionPresetUI();
+        }
+
+        /// <summary>
+        /// Whether a local option is forcing the game into a multiplayer session. Recording a
+        /// replay needs this in skirmish, and it changes what the game speed indices mean.
+        /// </summary>
+        protected bool IsMultiplayerSessionForced
+            => LocalCheckBoxes.Any(chkBox => chkBox.ForcesMultiplayerSession && chkBox.Checked);
+
+        private void LocalCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            ((LocalGameLobbyCheckBox)sender).PersistValue();
+            RefreshForcedMultiplayerLabels();
+        }
+
+        /// <summary>
+        /// Shows the right label set on any drop-down that declared one for a forced multiplayer
+        /// session. Only labels change - the selected index, and so the value the game receives,
+        /// stays exactly as the player left it.
+        /// </summary>
+        private void RefreshForcedMultiplayerLabels()
+        {
+            bool forced = IsMultiplayerSessionForced;
+
+            foreach (GameLobbyDropDown dropDown in DropDowns)
+                dropDown.ApplyForcedMultiplayerLabels(forced);
         }
 
         /// <summary>
@@ -1704,8 +1737,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             settings.SetStringValue("Scenario", ProgramConstants.SPAWNMAP_INI);
             settings.SetStringValue("UIGameMode", GameMode.UntranslatedUIName);
             settings.SetStringValue("UIMapName", Map.UntranslatedName);
-            settings.SetStringValue(SPAWNER_VERSION_SETTINGS_KEY, GetLocalBinaryVersionOrUnknown(SPAWNER_BINARY_NAME));
-            settings.SetStringValue(PHOBOS_VERSION_SETTINGS_KEY, GetLocalBinaryVersionOrUnknown(PHOBOS_BINARY_NAME));
             string gameClientVersion = string.IsNullOrWhiteSpace(Updater.GameVersion) ? "Unknown" : Updater.GameVersion;
             settings.SetStringValue(GAME_CLIENT_VERSION_SETTINGS_KEY, $"{ClientConfiguration.Instance.LocalGame} {gameClientVersion}".Trim());
 
@@ -1730,6 +1761,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             foreach (GameLobbyCheckBox chkBox in CheckBoxes)
                 chkBox.ApplySpawnIniCode(spawnIni);
+
+            foreach (LocalGameLobbyCheckBox chkBox in LocalCheckBoxes)
+                chkBox.ApplySpawnIniCode(spawnIni);
+
+            if (IsMultiplayerSessionForced)
+                spawnIni.SetBooleanValue("Settings", "ForceMultiplayer", true);
 
             foreach (GameLobbyDropDown dd in DropDowns)
                 dd.ApplySpawnIniCode(spawnIni);
@@ -1842,11 +1879,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             string packedGameOptionValues = GetPackedGameOptionValuesString();
             spawnIni.SetStringValue("Settings", "BroadcastedGameOptionValues", packedGameOptionValues);
 
-            // Only worth carrying when a replay is actually being recorded - the spawner embeds
-            // spawn.ini verbatim, so this is what lets playback detect that the game files have
-            // changed since the recording was made.
-            if (spawnIni.GetBooleanValue("Settings", "EnableReplayRecording", false))
-                ReplayFileHashes.Write(spawnIni);
+            // Names the file the spawner records into and, because the spawner embeds spawn.ini
+            // verbatim, stamps in the game file hashes that let playback detect the files having
+            // changed since. Does nothing unless this game is actually being recorded.
+            ReplayManager.PrepareRecording(spawnIni, Map?.UntranslatedName);
 
             spawnIni.WriteIniFile();
 
@@ -1890,29 +1926,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return true;
 
             return false;
-        }
-
-        private static string GetLocalBinaryVersionOrUnknown(string binaryName)
-        {
-            string binaryPath = SafePath.CombineFilePath(ProgramConstants.GamePath, binaryName);
-            if (!File.Exists(binaryPath))
-                return "Unknown";
-
-            try
-            {
-                FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(binaryPath);
-                if (!string.IsNullOrWhiteSpace(versionInfo.FileVersion))
-                    return versionInfo.FileVersion;
-
-                if (!string.IsNullOrWhiteSpace(versionInfo.ProductVersion))
-                    return versionInfo.ProductVersion;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Failed to read version from {binaryName}: {ex.Message}");
-            }
-
-            return "Unknown";
         }
 
         protected virtual string GetIPAddressForPlayer(PlayerInfo player) => "0.0.0.0";
@@ -2249,42 +2262,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             UpdateDiscordPresence(true);
 
-            // Only save replay.dat if we're not exiting from replay playback
-            if (!GameProcessLogic.IsReplayPlayback)
-            {
-                try
-                {
-                    string replaySource = Path.Combine(ProgramConstants.GamePath, "replay.dat");
-                    if (File.Exists(replaySource))
-                    {
-                        string replayDir = Path.Combine(ProgramConstants.GamePath, "replays");
-                        Directory.CreateDirectory(replayDir);
-
-                        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                        string replayDest = Path.Combine(replayDir, $"Replay_{timestamp}.yrrp");
-
-                        // If file already exists, add a counter
-                        int counter = 1;
-                        string baseName = replayDest;
-                        while (File.Exists(replayDest))
-                        {
-                            replayDest = baseName.Replace(".yrrp", $"_{counter}.yrrp");
-                            counter++;
-                        }
-
-                        File.Move(replaySource, replayDest);
-                        Logger.Log($"Replay saved to: {replayDest}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"Failed to move replay.dat: {ex.Message}");
-                }
-            }
-            else
-            {
-                Logger.Log("Skipping replay.dat save - exiting from replay playback");
-            }
+            ReplayManager.Prune();
         }
 
         /// <summary>

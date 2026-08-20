@@ -37,6 +37,17 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
     private int defaultIndex;
 
     /// <summary>
+    /// Raw value of ItemsWhenForcedMultiplayer, kept unparsed so it does not matter whether it
+    /// appears before or after Items in the INI.
+    /// </summary>
+    private string forcedMultiplayerItemsValue;
+
+    /// <summary>
+    /// The labels from Items, captured the first time we swap so they can be put back.
+    /// </summary>
+    private string[] defaultItemLabels;
+
+    /// <summary>
     /// Whether this dropdown should be included in the GAME broadcast.
     /// </summary>
     public bool BroadcastToLobby { get; private set; }
@@ -105,6 +116,9 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
                     AddItem(item);
                 }
                 return;
+            case "ItemsWhenForcedMultiplayer":
+                forcedMultiplayerItemsValue = value;
+                return;
             case "DataWriteMode":
                 if (value.ToUpper() == "INDEX")
                     dataWriteMode = DropDownDataWriteMode.INDEX;
@@ -158,6 +172,56 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
     {
         get => SelectedIndex;
         set => SelectedIndex = value;
+    }
+
+    /// <summary>
+    /// Whether this drop-down has an alternate label set for a forced multiplayer session.
+    /// </summary>
+    public bool HasForcedMultiplayerLabels => !string.IsNullOrWhiteSpace(forcedMultiplayerItemsValue);
+
+    /// <summary>
+    /// Swaps the visible labels when a lobby option forces the game into a multiplayer session.
+    /// The game's speed values mean different things in a skirmish and a multiplayer session, so a
+    /// package can declare both label sets and have the right one shown.
+    ///
+    /// Only the text changes - item order, tags and the selected index are all untouched, because
+    /// the underlying value the game receives is the same either way.
+    /// </summary>
+    public void ApplyForcedMultiplayerLabels(bool active)
+    {
+        if (!HasForcedMultiplayerLabels || Items.Count == 0)
+            return;
+
+        if (defaultItemLabels == null)
+        {
+            defaultItemLabels = new string[Items.Count];
+            for (int i = 0; i < Items.Count; i++)
+                defaultItemLabels[i] = Items[i].Text;
+        }
+
+        if (!active)
+        {
+            for (int i = 0; i < Items.Count && i < defaultItemLabels.Length; i++)
+                Items[i].Text = defaultItemLabels[i];
+
+            return;
+        }
+
+        string[] forcedLabels = forcedMultiplayerItemsValue.SplitWithCleanup();
+
+        if (forcedLabels.Length != Items.Count)
+        {
+            Logger.Log($"{Name}: ItemsWhenForcedMultiplayer has {forcedLabels.Length} entries but " +
+                $"Items has {Items.Count}; ignoring it. The two lists have to line up, because the " +
+                "selected index is what gets written to spawn.ini.");
+            return;
+        }
+
+        for (int i = 0; i < Items.Count; i++)
+        {
+            Items[i].Text = Translation.Instance.LookUp(
+                this, $"ForcedMultiplayerItem{i}", forcedLabels[i], notify: false);
+        }
     }
 
     public void ApplySpawnIniCode(IniFile spawnIni)
