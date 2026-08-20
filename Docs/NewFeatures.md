@@ -4,6 +4,14 @@ This document describes optional, non-breaking changes. While not mandatory, ado
 
 Breaking changes are not covered here; see [Migration.md](Migration.md) instead.
 
+## 2.13.5
+
+- Replay recording and playback are now supported for games whose spawner can record them. Set `ReplaySupport=true` in `ClientDefinitions.ini` to add a `Replays` tab to the Load Game window and a `Storage` tab to the options window, and add a `LocalGameLobbyCheckBox` to `GameLobbyBase.ini` to let players turn recording on. See `ReplaySupport` and `LocalGameLobbyCheckBox` in [INISystem.md](INISystem.md).
+
+- `GameSessionDropDown` now supports `ItemsWhenForcedMultiplayer`, an alternate set of display labels used while a lobby option forces the game into a multiplayer session. See [INISystem.md](INISystem.md).
+
+- `spawn.ini` now always contains a `GameClientVersion` key in `[Settings]`, naming the local game and its version, e.g. `YR 9.3.1`.
+
 ## 2.13.4
 
 - The `KeyboardCommands.ini` file now supports `DisableModifierKeys`. It is recommended to set this key for RA2/YR's `PlanningMode` (Waypoint Mode) command. See [INISystem.md](INISystem.md).

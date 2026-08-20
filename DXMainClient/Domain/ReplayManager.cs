@@ -1,216 +1,297 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 using ClientCore;
 
+using ClientUpdater;
+
 using Rampastring.Tools;
 
-namespace DTAClient.Domain
+namespace DTAClient.Domain;
+
+/// <summary>
+/// Replay paths, naming, listing and pruning.
+/// </summary>
+public static class ReplayManager
 {
+    private const int MaxRecordingBaseFileNameLength = 180;
+
     /// <summary>
-    /// Everything the client knows about where replays live and what they are called. The spawner
-    /// writes recordings straight to the path we hand it, so this is the only place that decides
-    /// the directory, the extension or the file name.
+    /// Whether the current game package enables replay support.
     /// </summary>
-    public static class ReplayManager
+    public static bool IsSupported => ClientConfiguration.Instance.ReplaySupport;
+
+    public static string DirectoryName => ClientConfiguration.Instance.ReplaysDirectory;
+
+    public static string FileExtension => ClientConfiguration.Instance.ReplayFileExtension;
+
+    public static string SearchPattern => "*." + FileExtension;
+
+    /// <summary>
+    /// Identifies the installed game package, e.g. "YR 9.3.1". Written to spawn.ini as
+    /// GameClientVersion so a replay records the version it needs to play back against.
+    /// Not localized - it is recorded into the replay file, not just displayed.
+    /// </summary>
+    public static string GameClientVersion
     {
-        /// <summary>
-        /// Whether the current game supports replays at all. Everything else here is only
-        /// meaningful when this is true.
-        /// </summary>
-        public static bool IsSupported => ClientConfiguration.Instance.ReplaySupport;
-
-        public static string DirectoryName => ClientConfiguration.Instance.ReplaysDirectory;
-
-        public static string FileExtension => ClientConfiguration.Instance.ReplayFileExtension;
-
-        private static string SearchPattern => "*." + FileExtension;
-
-        public static DirectoryInfo GetDirectory()
-            => SafePath.GetDirectory(ProgramConstants.GamePath, DirectoryName);
-
-        public static string GetFullPath(string fileName)
-            => SafePath.CombineFilePath(ProgramConstants.GamePath, DirectoryName, fileName);
-
-        /// <summary>
-        /// Adds the recording keys to a spawn.ini that already has EnableReplayRecording set. Does
-        /// nothing when the game is not recording, so it is safe to call unconditionally.
-        /// </summary>
-        /// <param name="spawnIni">The spawn.ini being written for this game.</param>
-        /// <param name="mapName">Untranslated map name, used to name the file.</param>
-        public static void PrepareRecording(IniFile spawnIni, string mapName)
+        get
         {
-            if (!IsSupported)
-                return;
+            string gameVersion = string.IsNullOrWhiteSpace(Updater.GameVersion) ? "Unknown" : Updater.GameVersion;
 
-            if (!spawnIni.GetBooleanValue("Settings", "EnableReplayRecording", false))
-                return;
+            return $"{ClientConfiguration.Instance.LocalGame} {gameVersion}".Trim();
+        }
+    }
 
-            // Deliberately relative: the spawner resolves it against the game directory, and this
-            // spawn.ini is embedded verbatim inside the replay, so an absolute path would put the
-            // recorder's Windows user name into every file they share.
-            spawnIni.SetStringValue("Settings", "ReplayFileOut", BuildRecordingPath(mapName));
+    public static DirectoryInfo GetDirectory()
+        => SafePath.GetDirectory(ProgramConstants.GamePath, DirectoryName);
 
-            ReplayFileHashes.Write(spawnIni);
+    public static FileInfo GetFile(string fileName)
+        => SafePath.GetFile(ProgramConstants.GamePath, DirectoryName, fileName);
+
+    /// <summary>
+    /// A game-directory-relative path for a replay, as written to spawn.ini. Kept relative so
+    /// shared files do not expose the recorder's machine path.
+    /// </summary>
+    public static string GetRelativePath(string fileName)
+        => SafePath.CombineFilePath(DirectoryName, fileName);
+
+    /// <summary>
+    /// Adds the recording keys to a spawn.ini that already has EnableReplayRecording set. Does
+    /// nothing when the game is not recording, so it is safe to call unconditionally.
+    /// </summary>
+    /// <param name="spawnIni">The spawn.ini being written for this game.</param>
+    /// <param name="mapName">Untranslated map name, used to name the file.</param>
+    public static void PrepareRecording(IniFile spawnIni, string mapName)
+    {
+        if (!IsSupported)
+            return;
+
+        if (!spawnIni.GetBooleanValue("Settings", "EnableReplayRecording", false))
+            return;
+
+        spawnIni.SetStringValue("Settings", "ReplayFileOut", BuildRecordingPath(mapName));
+
+        ReplayFileHashes.Write(spawnIni);
+    }
+
+    /// <summary>
+    /// A game-directory-relative path for a new recording, e.g.
+    /// "Replays\2026-08-20 19-30-05 Heck Freezes Over.yrrp".
+    /// </summary>
+    public static string BuildRecordingPath(string mapName)
+    {
+        string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
+        string safeMapName = SanitizeForFileName(mapName);
+
+        string baseName = string.IsNullOrWhiteSpace(safeMapName)
+            ? timestamp
+            : timestamp + " " + safeMapName;
+
+        if (baseName.Length > MaxRecordingBaseFileNameLength)
+            baseName = baseName.Substring(0, MaxRecordingBaseFileNameLength).TrimEnd();
+
+        string fileName = baseName + "." + FileExtension;
+
+        int counter = 1;
+        while (GetFile(fileName).Exists)
+        {
+            fileName = $"{baseName} ({counter})." + FileExtension;
+            counter++;
         }
 
-        /// <summary>
-        /// A game-directory-relative path for a new recording, e.g.
-        /// "Replays\2026-08-20 19-30-05 Heck Freezes Over.yrrp".
-        /// </summary>
-        public static string BuildRecordingPath(string mapName)
+        return GetRelativePath(fileName);
+    }
+
+    /// <summary>
+    /// Result of parsing one replay file, kept so that listing the directory again does not
+    /// re-read files that have not changed. Unparseable files are remembered too, so they are
+    /// not read and logged over and over.
+    /// </summary>
+    private readonly struct CachedReplay
+    {
+        public CachedReplay(FileInfo file, ReplayGame? replay)
         {
-            string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
-            string safeMapName = SanitizeForFileName(mapName);
+            length = file.Length;
+            lastWriteTicks = file.LastWriteTimeUtc.Ticks;
+            Replay = replay;
+        }
 
-            string baseName = string.IsNullOrWhiteSpace(safeMapName)
-                ? timestamp
-                : timestamp + " " + safeMapName;
+        private readonly long length;
+        private readonly long lastWriteTicks;
 
-            string fileName = baseName + "." + FileExtension;
+        /// <summary>Null when the file could not be parsed.</summary>
+        public ReplayGame? Replay { get; }
 
-            // Two games starting in the same second is far-fetched, but the spawner uses
-            // CREATE_ALWAYS and would silently overwrite, so make sure the name is free.
-            int counter = 1;
-            while (File.Exists(GetFullPath(fileName)))
+        public bool Matches(FileInfo file)
+            => length == file.Length && lastWriteTicks == file.LastWriteTimeUtc.Ticks;
+    }
+
+    /// <summary>
+    /// Only ever read by <see cref="List"/>, which drops entries for files that are gone.
+    /// </summary>
+    private static readonly Dictionary<string, CachedReplay> parsedReplays
+        = new Dictionary<string, CachedReplay>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// All parseable replays, newest first. Unreadable files are skipped and logged.
+    /// Files that have not changed since the last call are not read again.
+    /// </summary>
+    public static List<ReplayGame> List()
+    {
+        var replays = new List<ReplayGame>();
+
+        DirectoryInfo directory = GetDirectory();
+        if (!directory.Exists)
+        {
+            parsedReplays.Clear();
+            return replays;
+        }
+
+        var presentFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (FileInfo file in directory.EnumerateFiles(SearchPattern, SearchOption.TopDirectoryOnly))
+        {
+            presentFiles.Add(file.Name);
+
+            if (!parsedReplays.TryGetValue(file.Name, out CachedReplay cached) || !cached.Matches(file))
             {
-                fileName = $"{baseName} ({counter})." + FileExtension;
-                counter++;
+                var parsed = new ReplayGame(file.Name);
+                cached = new CachedReplay(file, parsed.ParseInfo() ? parsed : null);
+                parsedReplays[file.Name] = cached;
             }
 
-            return Path.Combine(DirectoryName, fileName);
+            if (cached.Replay != null)
+                replays.Add(cached.Replay);
         }
 
-        /// <summary>
-        /// All parseable replays, newest first. Unreadable files are skipped and logged.
-        /// </summary>
-        public static List<ReplayGame> List()
-        {
-            var replays = new List<ReplayGame>();
+        DropDeletedFromCache(presentFiles);
 
+        return replays.OrderByDescending(replay => replay.RecordedAt).ToList();
+    }
+
+    private static void DropDeletedFromCache(HashSet<string> presentFiles)
+    {
+        List<string> deleted = parsedReplays.Keys.Where(name => !presentFiles.Contains(name)).ToList();
+
+        foreach (string name in deleted)
+            parsedReplays.Remove(name);
+    }
+
+    public static void Delete(ReplayGame replay)
+    {
+        Logger.Log("Deleting replay " + replay.FileName);
+        SafePath.DeleteFileIfExists(ProgramConstants.GamePath, DirectoryName, replay.FileName);
+    }
+
+    /// <summary>
+    /// Deletes the oldest replays until both the count and the total size are within the
+    /// user's limits. Either limit set to 0 means "no limit".
+    /// </summary>
+    public static void Prune()
+    {
+        if (!IsSupported)
+            return;
+
+        int maxCount = UserINISettings.Instance.MaxKeptReplays;
+        int maxSizeMB = UserINISettings.Instance.MaxReplayFolderSizeMB;
+
+        if (maxCount <= 0 && maxSizeMB <= 0)
+            return;
+
+        try
+        {
             DirectoryInfo directory = GetDirectory();
             if (!directory.Exists)
-                return replays;
-
-            foreach (FileInfo file in directory.EnumerateFiles(SearchPattern, SearchOption.TopDirectoryOnly))
-            {
-                var replay = new ReplayGame(file.Name);
-                if (replay.ParseInfo())
-                    replays.Add(replay);
-            }
-
-            return replays.OrderByDescending(replay => replay.RecordedAt).ToList();
-        }
-
-        public static void Delete(ReplayGame replay)
-        {
-            Logger.Log("Deleting replay " + replay.FileName);
-            SafePath.DeleteFileIfExists(ProgramConstants.GamePath, DirectoryName, replay.FileName);
-        }
-
-        /// <summary>
-        /// Deletes the oldest replays until both the count and the total size are within the
-        /// user's limits. Either limit set to 0 means "no limit".
-        /// </summary>
-        public static void Prune()
-        {
-            if (!IsSupported)
                 return;
 
-            int maxCount = UserINISettings.Instance.MaxKeptReplays;
-            int maxSizeMB = UserINISettings.Instance.MaxReplayFolderSizeMB;
+            List<FileInfo> files = directory
+                .EnumerateFiles(SearchPattern, SearchOption.TopDirectoryOnly)
+                .OrderBy(file => file.LastWriteTime)
+                .ToList();
 
-            if (maxCount <= 0 && maxSizeMB <= 0)
-                return;
+            long maxSizeBytes = maxSizeMB > 0 ? maxSizeMB * 1024L * 1024L : long.MaxValue;
+            long totalBytes = files.Sum(file => file.Length);
+            int fileCount = files.Count;
 
-            try
+            foreach (FileInfo file in files)
             {
-                DirectoryInfo directory = GetDirectory();
-                if (!directory.Exists)
-                    return;
+                bool overCount = maxCount > 0 && fileCount > maxCount;
+                bool overSize = totalBytes > maxSizeBytes;
 
-                // Newest first, so the files that survive are the ones at the front.
-                List<FileInfo> files = directory
-                    .EnumerateFiles(SearchPattern, SearchOption.TopDirectoryOnly)
-                    .OrderByDescending(file => file.LastWriteTime)
-                    .ToList();
+                if (!overCount && !overSize)
+                    break;
 
-                long maxSizeBytes = maxSizeMB > 0 ? maxSizeMB * 1024L * 1024L : long.MaxValue;
-                long keptBytes = 0;
-                int keptCount = 0;
+                long fileBytes = file.Length;
 
-                foreach (FileInfo file in files)
+                try
                 {
-                    keptCount++;
-                    keptBytes += file.Length;
-
-                    bool overCount = maxCount > 0 && keptCount > maxCount;
-                    bool overSize = keptBytes > maxSizeBytes;
-
-                    if (!overCount && !overSize)
-                        continue;
-
-                    try
-                    {
-                        file.Delete();
-                        Logger.Log($"ReplayManager: pruned {file.Name} ({(overCount ? "count" : "size")} limit)");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log($"ReplayManager: could not delete {file.Name}: {ex.Message}");
-
-                        // It is still taking up space, so keep counting it.
-                        continue;
-                    }
-
-                    keptCount--;
-                    keptBytes -= file.Length;
+                    file.Delete();
+                    Logger.Log($"ReplayManager: pruned {file.Name} ({GetPruneReason(overCount, overSize)} limit)");
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("ReplayManager: pruning failed: " + ex.Message);
-            }
-        }
-
-        public static void OpenDirectory()
-        {
-            try
-            {
-                DirectoryInfo directory = GetDirectory();
-                if (!directory.Exists)
-                    directory.Create();
-
-                Process.Start(new ProcessStartInfo
+                catch (Exception ex)
                 {
-                    FileName = directory.FullName,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("ReplayManager: could not open the replay directory: " + ex.Message);
+                    Logger.Log($"ReplayManager: could not delete {file.Name}: {ex.Message}");
+                    continue;
+                }
+
+                fileCount--;
+                totalBytes -= fileBytes;
             }
         }
-
-        private static string SanitizeForFileName(string name)
+        catch (Exception ex)
         {
-            if (string.IsNullOrWhiteSpace(name))
-                return string.Empty;
-
-            var invalid = new HashSet<char>(Path.GetInvalidFileNameChars());
-            var builder = new System.Text.StringBuilder(name.Length);
-
-            foreach (char character in name)
-            {
-                if (!invalid.Contains(character))
-                    builder.Append(character);
-            }
-
-            return builder.ToString().Trim();
+            Logger.Log("ReplayManager: pruning failed: " + ex.Message);
         }
+    }
+
+    private static string GetPruneReason(bool overCount, bool overSize)
+    {
+        if (overCount && overSize)
+            return "count and size";
+
+        return overCount ? "count" : "size";
+    }
+
+    public static void OpenDirectory()
+    {
+        try
+        {
+            DirectoryInfo directory = GetDirectory();
+            if (!directory.Exists)
+                directory.Create();
+
+            ProcessLauncher.StartShellProcess(directory.FullName);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ReplayManager: could not open the replay directory: " + ex.Message);
+        }
+    }
+
+    private static string SanitizeForFileName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var invalid = new HashSet<char>(Path.GetInvalidFileNameChars());
+        foreach (char character in "<>:\"/\\|?*")
+            invalid.Add(character);
+        for (char character = '\0'; character < ' '; character++)
+            invalid.Add(character);
+
+        var builder = new StringBuilder(name.Length);
+
+        foreach (char character in name)
+        {
+            if (!invalid.Contains(character))
+                builder.Append(character);
+        }
+
+        return builder.ToString().Trim().TrimEnd('.');
     }
 }

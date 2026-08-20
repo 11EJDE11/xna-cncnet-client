@@ -22,7 +22,6 @@ using DTAClient.DXGUI.Generic;
 
 using TextCopy;
 using System.Diagnostics;
-using ClientUpdater;
 
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
@@ -54,7 +53,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         protected const int PLAYER_OPTION_HORIZONTAL_MARGIN = 3;
         protected const int PLAYER_OPTION_CAPTION_Y = 6;
         private const int DROP_DOWN_HEIGHT = 21;
-        private const string GAME_CLIENT_VERSION_SETTINGS_KEY = "GameClientVersion";
         protected readonly string BTN_LAUNCH_GAME = "Launch Game".L10N("Client:Main:ButtonLaunchGame");
         protected readonly string BTN_LAUNCH_READY = "I'm Ready".L10N("Client:Main:ButtonIAmReady");
         protected readonly string BTN_LAUNCH_NOT_READY = "Not Ready".L10N("Client:Main:ButtonNotReady");
@@ -97,10 +95,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public List<GameLobbyDropDown> DropDowns { get; } = new();
 
         /// <summary>
-        /// Lobby options that belong to this client alone - written to the local spawn.ini and
-        /// remembered in the user's settings, but never broadcast. Kept separate from
-        /// <see cref="CheckBoxes"/> on purpose: that list is serialised positionally into the game
-        /// options message, so anything added to it has to match on every client in the game.
+        /// Local-only lobby options, kept out of the broadcasted option list.
         /// </summary>
         public List<LocalGameLobbyCheckBox> LocalCheckBoxes { get; } = new();
 
@@ -400,8 +395,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         /// <summary>
-        /// Whether a local option is forcing the game into a multiplayer session. Recording a
-        /// replay needs this in skirmish, and it changes what the game speed indices mean.
+        /// Whether a local option forces spawn.ini into multiplayer mode.
         /// </summary>
         protected bool IsMultiplayerSessionForced
             => LocalCheckBoxes.Any(chkBox => chkBox.ForcesMultiplayerSession && chkBox.Checked);
@@ -413,9 +407,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         /// <summary>
-        /// Shows the right label set on any drop-down that declared one for a forced multiplayer
-        /// session. Only labels change - the selected index, and so the value the game receives,
-        /// stays exactly as the player left it.
+        /// Applies alternate labels for forced multiplayer mode without changing selected values.
         /// </summary>
         private void RefreshForcedMultiplayerLabels()
         {
@@ -818,7 +810,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 XNAListBoxItem rankItem = new XNAListBoxItem();
                 if (gameModeMap.IsCoop)
                 {
-                    // Note: StatisticsManager.Statistics must be initialized to call `HasBeatCoOpMap()`. This means StatisticsWindow must be initialized before any lobbies extending GameLobbyBase.
+                    // StatisticsManager must be initialized before lobbies call HasBeatCoOpMap().
                     if (StatisticsManager.Instance.HasBeatCoOpMap(gameModeMap.Map.UntranslatedName, gameModeMap.GameMode.UntranslatedUIName))
                         rankItem.Texture = RankTextures[Math.Abs(2 - gameModeMap.CoopDifficultyLevel) + 1];
                     else
@@ -1710,13 +1702,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 foreach (PlayerInfo pInfo in Players)
                 {
-                    Debug.Assert(pInfo.TeamId == 1, "Co-ops should always set TeamId to 1 before lanching the game");
+                    Debug.Assert(pInfo.TeamId == 1, "Co-ops should always set TeamId to 1 before launching the game");
                     pInfo.TeamId = 1;
                 }
 
                 foreach (PlayerInfo pInfo in AIPlayers)
                 {
-                    Debug.Assert(pInfo.TeamId == 1, "Co-ops should always set TeamId to 1 before lanching the game");
+                    Debug.Assert(pInfo.TeamId == 1, "Co-ops should always set TeamId to 1 before launching the game");
                     pInfo.TeamId = 1;
                 }
             }
@@ -1737,8 +1729,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             settings.SetStringValue("Scenario", ProgramConstants.SPAWNMAP_INI);
             settings.SetStringValue("UIGameMode", GameMode.UntranslatedUIName);
             settings.SetStringValue("UIMapName", Map.UntranslatedName);
-            string gameClientVersion = string.IsNullOrWhiteSpace(Updater.GameVersion) ? "Unknown" : Updater.GameVersion;
-            settings.SetStringValue(GAME_CLIENT_VERSION_SETTINGS_KEY, $"{ClientConfiguration.Instance.LocalGame} {gameClientVersion}".Trim());
+            settings.SetStringValue("GameClientVersion", ReplayManager.GameClientVersion);
 
             // needed for translation in game loading lobbies
             if (Map.Official)
@@ -1879,10 +1870,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             string packedGameOptionValues = GetPackedGameOptionValuesString();
             spawnIni.SetStringValue("Settings", "BroadcastedGameOptionValues", packedGameOptionValues);
 
-            // Names the file the spawner records into and, because the spawner embeds spawn.ini
-            // verbatim, stamps in the game file hashes that let playback detect the files having
-            // changed since. Does nothing unless this game is actually being recorded.
-            ReplayManager.PrepareRecording(spawnIni, Map?.UntranslatedName);
+            ReplayManager.PrepareRecording(spawnIni, Map.UntranslatedName);
 
             spawnIni.WriteIniFile();
 
@@ -2015,11 +2003,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
             else
             {
-                // Avoid writing the original filename to spawnmap.ini MP games, as it may vary between systems, e.g., when a host uploads a map while other players in game might download it with a diffrent filename.
-                // This inconsistency can result in differing spawnmap.ini files among players, causing desyncs in CnCNet YR games.
-                // Theoretically it can be useful for some singleplayer campaign tracking
-                // But it isn't currently used by any CnCNet game or mod
-                // The code below only applies to the single player case
                 string mapIniFileName = Path.GetFileName(mapIni.FileName);
                 mapIni.SetStringValue("Basic", "OriginalFilename", mapIniFileName);
             }

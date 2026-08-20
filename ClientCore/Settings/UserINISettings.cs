@@ -180,7 +180,6 @@ namespace ClientCore
             GenerateTranslationStub = new BoolSetting(iniFile, OPTIONS, nameof(GenerateTranslationStub), false);
             GenerateOnlyNewValuesInTranslationStub = new BoolSetting(iniFile, OPTIONS, nameof(GenerateOnlyNewValuesInTranslationStub), false);
 
-            RecordReplays = new BoolSetting(iniFile, REPLAYS, "RecordReplays", true);
             MaxKeptReplays = new IntSetting(iniFile, REPLAYS, "MaxKeptReplays", 50);
             MaxReplayFolderSizeMB = new IntSetting(iniFile, REPLAYS, "MaxReplayFolderSizeMB", 2048);
             ReplayPlaybackShroud = new BoolSetting(iniFile, REPLAYS, "PlaybackShroud", false);
@@ -373,8 +372,6 @@ namespace ClientCore
         /***********/
         /* REPLAYS */
         /***********/
-
-        public BoolSetting RecordReplays { get; private set; }
 
         /// <summary>Maximum number of replays to keep. 0 means unlimited.</summary>
         public IntSetting MaxKeptReplays { get; private set; }
