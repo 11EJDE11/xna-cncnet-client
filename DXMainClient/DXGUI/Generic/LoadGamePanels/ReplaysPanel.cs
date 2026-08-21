@@ -274,6 +274,16 @@ public class ReplaysPanel : LoadGamePanel
             replay.RecordedAt.ToString("f")));
         details.AppendLine();
 
+        // An incomplete recording has no frame count to show - the header still reads 0, which is
+        // how it was recognised as incomplete in the first place.
+        if (replay.IsComplete)
+        {
+            details.Append(string.Format("Length: {0} - {1} frames at {2} FPS"
+                .L10N("Client:Main:ReplayDetailLength"),
+                FormatDuration(replay), replay.TotalFrames.ToString("N0"), replay.FramesPerSecond));
+            details.AppendLine();
+        }
+
         details.Append(string.Format("Version: {0}".L10N("Client:Main:ReplayDetailVersion"),
             GetDisplayVersion(replay)));
 

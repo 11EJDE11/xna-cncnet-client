@@ -86,6 +86,17 @@ public class ReplayGame
     /// </summary>
     public TimeSpan Duration { get; private set; }
 
+    /// <summary>
+    /// Game frames the recording covers. Zero when <see cref="IsComplete"/> is false, because the
+    /// spawner never got to stamp the real count into the header.
+    /// </summary>
+    public uint TotalFrames { get; private set; }
+
+    /// <summary>
+    /// The rate the recorded game ticked at, which playback is pinned to.
+    /// </summary>
+    public int FramesPerSecond { get; private set; }
+
     private uint spawnIniSize;
     private uint spawnMapSize;
 
@@ -146,9 +157,11 @@ public class ReplayGame
             uint totalFrames = ReadUInt32(header, OFFSET_TOTAL_FRAMES);
             int gameSpeed = (int)Math.Min(ReadUInt32(header, OFFSET_RECORDED_GAME_SPEED), (uint)MAX_GAME_SPEED_INDEX);
 
+            TotalFrames = totalFrames;
+            FramesPerSecond = GetFramesPerSecond(gameSpeed);
             IsComplete = totalFrames > 0;
             Duration = IsComplete
-                ? TimeSpan.FromSeconds(totalFrames / (double)GetFramesPerSecond(gameSpeed))
+                ? TimeSpan.FromSeconds(totalFrames / (double)FramesPerSecond)
                 : TimeSpan.Zero;
 
             string? spawnIniContent = ReadText(stream, spawnIniSize);
