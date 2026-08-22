@@ -23,6 +23,8 @@ namespace ClientCore
         public const string GAME_FILTERS = "GameFilters";
         public const string GAME_OPTION_FILTERS = "GameOptionFilters";
         public const string REPLAYS = "Replays";
+        public const string LOCAL_GAME_OPTIONS = "LocalGameOptions";
+
         private const string FAVORITE_MAPS = "FavoriteMaps";
 
         private const bool DEFAULT_SHOW_FRIENDS_ONLY_GAMES = false;

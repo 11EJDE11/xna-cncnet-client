@@ -105,8 +105,8 @@ namespace DTAClient.Online
         }
 
         /// <summary>
-        /// Files covered by compatibility checks. Fixed-list entries are returned whether or not
-        /// they exist, so a caller can tell a tracked file from an untracked one.
+        /// Files covered by compatibility checks. Fixed-list entries are yielded whether or not
+        /// they exist on disk; callers decide what a missing tracked file means to them.
         /// </summary>
         public IEnumerable<TrackedFile> EnumerateTrackedFiles()
         {
@@ -180,7 +180,7 @@ namespace DTAClient.Online
             if (!string.IsNullOrEmpty(ClientConfiguration.Instance.GameLauncherExecutableName))
                 Logger.Log($"Hash for {ClientConfiguration.Instance.GameLauncherExecutableName}: {fh.LauncherExeHash}");
 
-            foreach (TrackedFile tracked in this.EnumerateTrackedFiles())
+            foreach (TrackedFile tracked in EnumerateTrackedFiles())
             {
                 string hash = fh.AddHashForFileIfExists(tracked.RelativePath, tracked.FullPath);
                 if (!string.IsNullOrEmpty(hash))
@@ -245,8 +245,9 @@ namespace DTAClient.Online
 
         /// <summary>
         /// Hashes one file. Text files are hashed with normalized line endings.
+        /// Shared with ReplayFileHashes, which must hash identically to be comparable.
         /// </summary>
-        public static string CalculateSHA1ForFile(string path)
+        internal static string CalculateSHA1ForFile(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
                 return string.Empty;

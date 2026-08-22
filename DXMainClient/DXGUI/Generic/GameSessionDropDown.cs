@@ -219,8 +219,7 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
 
         for (int i = 0; i < Items.Count; i++)
         {
-            Items[i].Text = Translation.Instance.LookUp(
-                this, $"ForcedMultiplayerItem{i}", forcedLabels[i], notify: false);
+            Items[i].Text = Translation.Instance.LookUp(this, $"ForcedMultiplayerItem{i}", forcedLabels[i]);
         }
     }
 

@@ -10,7 +10,7 @@ Breaking changes are not covered here; see [Migration.md](Migration.md) instead.
 
 - `GameSessionDropDown` now supports `ItemsWhenForcedMultiplayer`, an alternate set of display labels used while a lobby option forces the game into a multiplayer session. See [INISystem.md](INISystem.md).
 
-- `spawn.ini` now always contains a `GameClientVersion` key in `[Settings]`, naming the local game and its version, e.g. `YR 9.3.1`.
+- The `spawn.ini` written by the game lobbies (skirmish, LAN and CnCNet) now contains a `GameClientVersion` key in `[Settings]`, naming the local game and its version, e.g. `YR 9.3.1`. Campaign missions and loaded saved games write their own `spawn.ini` and are unaffected.
 
 ## 2.13.4
 

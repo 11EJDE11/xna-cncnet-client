@@ -19,6 +19,10 @@ namespace DTAClient.Domain;
 /// </summary>
 public static class ReplayManager
 {
+    /// <summary>
+    /// Cap on the timestamp-plus-map-name part of a recording's file name, leaving room in a
+    /// 260-character path for the game directory, the replay directory and the extension.
+    /// </summary>
     private const int MaxRecordingBaseFileNameLength = 180;
 
     /// <summary>
@@ -189,10 +193,27 @@ public static class ReplayManager
             parsedReplays.Remove(name);
     }
 
-    public static void Delete(ReplayGame replay)
+    /// <summary>
+    /// Deletes a replay.
+    /// </summary>
+    /// <returns>
+    /// False when the file could not be removed, which normally means the game or another client
+    /// instance still has it open.
+    /// </returns>
+    public static bool Delete(ReplayGame replay)
     {
         Logger.Log("Deleting replay " + replay.FileName);
-        SafePath.DeleteFileIfExists(ProgramConstants.GamePath, DirectoryName, replay.FileName);
+
+        try
+        {
+            SafePath.DeleteFileIfExists(ProgramConstants.GamePath, DirectoryName, replay.FileName);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"ReplayManager: could not delete {replay.FileName}: {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>

@@ -19,7 +19,7 @@ public class LocalGameLobbyCheckBox : GameSessionCheckBox
     public LocalGameLobbyCheckBox(WindowManager windowManager) : base(windowManager) { }
 
     /// <summary>
-    /// Key in the user's [Replays] settings that remembers this option.
+    /// Key in the user's [LocalGameOptions] settings that remembers this option.
     /// </summary>
     public string? UserSettingKey { get; private set; }
 
@@ -69,7 +69,7 @@ public class LocalGameLobbyCheckBox : GameSessionCheckBox
         if (string.IsNullOrWhiteSpace(UserSettingKey))
             return;
 
-        UserINISettings.Instance.SetValue(UserINISettings.REPLAYS, UserSettingKey, Checked);
+        UserINISettings.Instance.SetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, Checked);
 
         UserINISettings.Instance.SaveSettings();
     }
@@ -79,6 +79,6 @@ public class LocalGameLobbyCheckBox : GameSessionCheckBox
         if (string.IsNullOrWhiteSpace(UserSettingKey))
             return;
 
-        Checked = UserINISettings.Instance.GetValue(UserINISettings.REPLAYS, UserSettingKey, Checked);
+        Checked = UserINISettings.Instance.GetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, Checked);
     }
 }

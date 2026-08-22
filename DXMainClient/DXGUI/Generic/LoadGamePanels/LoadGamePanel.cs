@@ -38,7 +38,8 @@ public abstract class LoadGamePanel : XNAPanel
     public abstract bool CanDelete { get; }
 
     /// <summary>
-    /// Extra buttons shown while this panel is active.
+    /// Extra buttons shown while this panel is active. The window builds one button per action
+    /// once and then pairs them up by index, so this has to return the same actions every time.
     /// </summary>
     public virtual IReadOnlyList<LoadGamePanelAction> ExtraActions => Array.Empty<LoadGamePanelAction>();
 

@@ -426,8 +426,9 @@ A game lobby checkbox that only affects the local player. It is written to `spaw
 
 ```ini
 [SOMELOCALGAMELOBBYCHECKBOX]               ; LocalGameLobbyCheckBox
-UserSettingKey=                            ; string,  key in the `[Replays]` section of the user's settings INI that
-                                           ;          remembers this checkbox. Without it the value is not persisted.
+UserSettingKey=                            ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
+                                           ;          that remembers this checkbox. Without it the value is not
+                                           ;          persisted.
 ForcesMultiplayerSession=false             ; boolean, writes `ForceMultiplayer=true` to `spawn.ini` when checked, and
                                            ;          switches drop-downs over to their `ItemsWhenForcedMultiplayer`
                                            ;          labels.

@@ -220,10 +220,12 @@ public class ReplaysPanel : LoadGamePanel
     {
         int previouslySelected = lbReplayList.SelectedIndex;
 
-        replays = ReplayManager.List();
-
+        // Cleared before the new list is taken, so that the selection change this fires cannot
+        // resolve the old index against the new list.
         lbReplayList.ClearItems();
         lbReplayList.SelectedIndex = -1;
+
+        replays = ReplayManager.List();
 
         foreach (ReplayGame replay in replays)
         {
@@ -340,7 +342,7 @@ public class ReplaysPanel : LoadGamePanel
 
         if (fileMismatches.Count > MAX_LISTED_MISMATCHES)
         {
-            details += "\n  " + string.Format("...and {0} more".L10N("Client:Main:ReplayMoreMismatches"),
+            details += "\n\n" + string.Format("...and {0} more".L10N("Client:Main:ReplayMoreMismatches"),
                 fileMismatches.Count - MAX_LISTED_MISMATCHES);
         }
 
@@ -434,7 +436,15 @@ public class ReplaysPanel : LoadGamePanel
 
         msgBox.YesClickedAction = _ =>
         {
-            ReplayManager.Delete(replay);
+            if (!ReplayManager.Delete(replay))
+            {
+                XNAMessageBox.Show(WindowManager,
+                    "Deleting Replay Failed".L10N("Client:Main:ReplayDeleteFailedTitle"),
+                    string.Format(("The replay {0} could not be deleted. It may still be open in " +
+                        "the game or in another program.").L10N("Client:Main:ReplayDeleteFailedText"),
+                        SafeForDialog(replay.FileName)));
+            }
+
             Refresh();
         };
         msgBox.Show();
