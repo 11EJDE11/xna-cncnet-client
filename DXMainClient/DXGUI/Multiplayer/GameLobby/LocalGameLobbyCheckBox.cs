@@ -71,7 +71,6 @@ public class LocalGameLobbyCheckBox : GameSessionCheckBox
 
         UserINISettings.Instance.SetValue(UserINISettings.REPLAYS, UserSettingKey, Checked);
 
-        // The lobby has no Apply button, so write the settings out immediately.
         UserINISettings.Instance.SaveSettings();
     }
 
@@ -80,7 +79,6 @@ public class LocalGameLobbyCheckBox : GameSessionCheckBox
         if (string.IsNullOrWhiteSpace(UserSettingKey))
             return;
 
-        // The INI's Checked= is the default for a fresh install; the user's own choice wins.
         Checked = UserINISettings.Instance.GetValue(UserINISettings.REPLAYS, UserSettingKey, Checked);
     }
 }

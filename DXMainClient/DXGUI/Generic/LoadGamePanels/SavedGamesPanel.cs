@@ -168,7 +168,7 @@ public class SavedGamesPanel : LoadGamePanel
         WindowManager.AddCallback(new Action(GameProcessExited), null);
     }
 
-    private void GameProcessExited()
+    protected virtual void GameProcessExited()
     {
         GameProcessLogic.GameProcessExited -= GameProcessExited_Callback;
 

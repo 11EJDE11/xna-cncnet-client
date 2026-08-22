@@ -38,7 +38,9 @@ namespace DTAClient.DXGUI.Generic
         private readonly CampaignTagSelector campaignTagSelector;
 
         private XNAClientTabControl? tabControl;
-        private LoadGamePanel[] panels = null!;
+
+        // Empty until Initialize builds them - OnEnabledChanged can fire before it runs.
+        private LoadGamePanel[] panels = Array.Empty<LoadGamePanel>();
         private SavedGamesPanel savedGamesPanel = null!;
 
         private XNAClientButton btnLaunch = null!;
@@ -48,7 +50,7 @@ namespace DTAClient.DXGUI.Generic
         /// <summary>
         /// Extra action buttons keyed by the panel that owns them.
         /// </summary>
-        private Dictionary<LoadGamePanel, XNAClientButton[]> extraButtons = null!;
+        private readonly Dictionary<LoadGamePanel, XNAClientButton[]> extraButtons = new();
 
         private LoadGamePanel ActivePanel => panels[tabControl == null ? 0 : tabControl.SelectedTab];
 
@@ -147,7 +149,7 @@ namespace DTAClient.DXGUI.Generic
         /// </summary>
         private void CreateExtraButtons()
         {
-            extraButtons = new Dictionary<LoadGamePanel, XNAClientButton[]>();
+            extraButtons.Clear();
 
             foreach (LoadGamePanel panel in panels)
             {
@@ -245,8 +247,8 @@ namespace DTAClient.DXGUI.Generic
         {
             base.OnEnabledChanged(sender, args);
 
-            // Files can change while the window is closed.
-            if (Enabled && extraButtons != null)
+            // Files can change while the window is closed. Nothing to refresh before Initialize.
+            if (Enabled && panels.Length > 0)
                 RefreshActivePanel();
         }
 

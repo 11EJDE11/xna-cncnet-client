@@ -70,9 +70,7 @@ public class ReplaysPanel : LoadGamePanel
     public override IReadOnlyList<LoadGamePanelAction> ExtraActions => extraActions ??= new[]
     {
         new LoadGamePanelAction("btnOpenReplayFolder",
-            "Open Folder".L10N("Client:Main:ReplayOpenFolder"), ReplayManager.OpenDirectory),
-        new LoadGamePanelAction("btnDeleteAllReplays",
-            "Delete All".L10N("Client:Main:ReplayDeleteAll"), DeleteAll, () => replays.Count > 0)
+            "Open Folder".L10N("Client:Main:ReplayOpenFolder"), ReplayManager.OpenDirectory)
     };
 
     private ReplayGame? SelectedReplay
@@ -112,14 +110,13 @@ public class ReplaysPanel : LoadGamePanel
 
         chkSpectator = CreateCheckBox(nameof(chkSpectator), 0, firstRowY, 160,
             "Spectator view".L10N("Client:Main:ReplaySpectator"),
-            ("Watch as an observer: reveals the whole map and shows cloaked and disguised " +
-             "units. Leave off to watch from the recording player's point of view.")
+            ("Watch as an observer with the spectator sidebar.")
                 .L10N("Client:Main:ReplaySpectatorTooltip"),
             UserINISettings.Instance.ReplayPlaybackSpectator);
 
         chkShroudEnabled = CreateCheckBox(nameof(chkShroudEnabled), 170, firstRowY, 150,
             "Enable shroud".L10N("Client:Main:ReplayShroud"),
-            "Fog of war will be enabled for the recording player.".L10N("Client:Main:ReplayShroudTooltip"),
+            "Fog of war will be enabled for the player.".L10N("Client:Main:ReplayShroudTooltip"),
             UserINISettings.Instance.ReplayPlaybackShroud);
 
         chkLockedViewport = CreateCheckBox(nameof(chkLockedViewport), 330, firstRowY, 150,
@@ -210,7 +207,6 @@ public class ReplaysPanel : LoadGamePanel
         UserINISettings.Instance.ReplayPlaybackShowChatAndBeacons.Value = chkShowChatAndBeacons.Checked;
         UserINISettings.Instance.ReplayPlaybackGameSpeed.Value = ddGameSpeed.SelectedIndex;
 
-        // Persist immediately; this panel has no Apply button.
         UserINISettings.Instance.SaveSettings();
     }
 
@@ -258,15 +254,15 @@ public class ReplaysPanel : LoadGamePanel
 
         var details = new StringBuilder();
 
-        details.Append(replay.GUIName);
+        details.Append(SafeForDetails(replay.GUIName));
         if (!string.IsNullOrWhiteSpace(replay.UIGameMode))
-            details.Append(" - ").Append(replay.UIGameMode);
+            details.Append(" - ").Append(SafeForDetails(replay.UIGameMode));
         details.AppendLine();
 
         if (replay.PlayerNames.Count > 0)
         {
             details.Append(string.Format("Players: {0}".L10N("Client:Main:ReplayDetailPlayers"),
-                string.Join(", ", replay.PlayerNames)));
+                SafeForDetails(string.Join(", ", replay.PlayerNames))));
             details.AppendLine();
         }
 
@@ -285,7 +281,7 @@ public class ReplaysPanel : LoadGamePanel
         }
 
         details.Append(string.Format("Version: {0}".L10N("Client:Main:ReplayDetailVersion"),
-            GetDisplayVersion(replay)));
+            SafeForDetails(GetDisplayVersion(replay))));
 
         if (!replay.IsComplete)
         {
@@ -357,7 +353,8 @@ public class ReplaysPanel : LoadGamePanel
                 "You have: {1}\n\n" +
                 "{2}\n\n" +
                 "Play it anyway?").L10N("Client:Main:ReplayFileMismatchText"),
-                GetDisplayVersion(replay), ReplayManager.GameClientVersion, details),
+                SafeForDialog(GetDisplayVersion(replay)), ReplayManager.GameClientVersion,
+                SafeForDialog(details)),
             XNAMessageBoxButtons.YesNo);
 
         msgBox.YesClickedAction = _ => StartPlayback(replay, spawnIni, spawnMapContent);
@@ -378,6 +375,9 @@ public class ReplaysPanel : LoadGamePanel
 
         // Watching a replay must never produce another one.
         spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
+
+        // Already consumed by FindMismatches above; the spawner has no use for it.
+        spawnIni.RemoveSection(ReplayFileHashes.SECTION);
 
         FileInfo spawnerSettingsFile = SafePath.GetFile(ProgramConstants.GamePath, ProgramConstants.SPAWNER_SETTINGS);
         if (spawnerSettingsFile.Exists)
@@ -408,7 +408,7 @@ public class ReplaysPanel : LoadGamePanel
         WindowManager.AddCallback(new Action(GameProcessExited), null);
     }
 
-    private void GameProcessExited()
+    protected virtual void GameProcessExited()
     {
         GameProcessLogic.GameProcessExited -= GameProcessExited_Callback;
 
@@ -428,7 +428,7 @@ public class ReplaysPanel : LoadGamePanel
                 "Replay: {1}\n" +
                 "Date and time: {2}\n\n" +
                 "Are you sure you want to proceed?").L10N("Client:Main:DeleteReplayConfirmationText"),
-                replay.FileName, Renderer.GetSafeString(replay.GUIName, lbReplayList.FontIndex),
+                SafeForDialog(replay.FileName), SafeForDialog(replay.GUIName),
                 replay.RecordedAt.ToString()),
             XNAMessageBoxButtons.YesNo);
 
@@ -440,26 +440,17 @@ public class ReplaysPanel : LoadGamePanel
         msgBox.Show();
     }
 
-    private void DeleteAll()
-    {
-        if (replays.Count == 0)
-            return;
+    /// <summary>
+    /// Everything shown about a replay comes out of a file another player produced, so none of it
+    /// is guaranteed to be renderable by the current font.
+    /// </summary>
+    private string SafeForDetails(string text) => Renderer.GetSafeString(text, tbDetails.FontIndex);
 
-        var msgBox = new XNAMessageBox(WindowManager, "Delete Confirmation".L10N("Client:Main:DeleteConfirmationTitle"),
-            string.Format(("All {0} replays will be deleted permanently.\n\n" +
-                "Are you sure you want to proceed?").L10N("Client:Main:DeleteAllReplaysConfirmationText"),
-                replays.Count),
-            XNAMessageBoxButtons.YesNo);
-
-        msgBox.YesClickedAction = _ =>
-        {
-            foreach (ReplayGame replay in replays)
-                ReplayManager.Delete(replay);
-
-            Refresh();
-        };
-        msgBox.Show();
-    }
+    /// <summary>
+    /// As <see cref="SafeForDetails"/>, for message boxes. XNAMessageBox sanitizes only in its
+    /// static Show helpers, not when constructed directly as it is here.
+    /// </summary>
+    private static string SafeForDialog(string text) => Renderer.GetSafeString(text, 0);
 
     /// <summary>
     /// The game package a replay was recorded with, for display.

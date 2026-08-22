@@ -40,9 +40,8 @@ namespace DTAClient.DXGUI.Generic
         {
             Name = "OptionsWindow";
 
-            // The storage tab only exists for games that accumulate files worth capping, which
-            // today means replays. Its tab does not fit in the original width, so the window grows
-            // by exactly one tab rather than squeezing all seven.
+            // Storage only exists for games that accumulate files worth capping - today, replays.
+            // The extra tab does not fit the original width, so the window grows by one tab.
             bool showStorageTab = ReplayManager.IsSupported;
 
             ClientRectangle = new Rectangle(0, 0,

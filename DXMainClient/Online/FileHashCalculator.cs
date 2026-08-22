@@ -22,9 +22,10 @@ namespace DTAClient.Online
         private static readonly IReadOnlyList<string> knownTextFileExtensions = [".txt", ".ini", ".json", ".xml"];
 
         /// <summary>
-        /// Used when the package's FHCConfig.ini does not supply a [FilenameList] of its own.
+        /// Built-in defaults, replaced by ParseConfigFile when the package's FHCConfig.ini
+        /// supplies a [FilenameList] of its own.
         /// </summary>
-        private static readonly string[] DefaultFileNamesToCheck = ClientConfiguration.Instance.ClientGameType switch
+        private string[] fileNamesToCheck = ClientConfiguration.Instance.ClientGameType switch
         {
             ClientType.TS => new string[]
             {
@@ -104,12 +105,12 @@ namespace DTAClient.Online
         }
 
         /// <summary>
-        /// Files covered by compatibility checks.
-        /// Missing fixed-list files are returned so callers can record absence.
+        /// Files covered by compatibility checks. Fixed-list entries are returned whether or not
+        /// they exist, so a caller can tell a tracked file from an untracked one.
         /// </summary>
-        public static IEnumerable<TrackedFile> EnumerateTrackedFiles()
+        public IEnumerable<TrackedFile> EnumerateTrackedFiles()
         {
-            foreach (string relativePath in GetFileNamesToCheck())
+            foreach (string relativePath in fileNamesToCheck)
             {
                 yield return new TrackedFile(relativePath,
                     SafePath.CombineFilePath(ProgramConstants.GamePath, relativePath));
@@ -136,34 +137,6 @@ namespace DTAClient.Online
                     yield return new TrackedFile(SafePath.CombineFilePath(path.Name, filename), fileFullPath);
                 }
             }
-        }
-
-        /// <summary>
-        /// The package's FHCConfig.ini. Read once; it cannot change without a client restart.
-        /// </summary>
-        private static IniFile ConfigFile
-            => configFile ??= new IniFile(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), CONFIGNAME));
-
-        private static IniFile configFile;
-
-        private static string[] GetFileNamesToCheck() => fileNamesToCheck ??= ReadFileNamesToCheck();
-
-        private static string[] fileNamesToCheck;
-
-        private static string[] ReadFileNamesToCheck()
-        {
-            List<string> keys = ConfigFile.GetSectionKeys("FilenameList");
-            if (keys == null || keys.Count < 1)
-                return DefaultFileNamesToCheck;
-
-            var filenames = new List<string>();
-            foreach (string key in keys)
-            {
-                string value = ConfigFile.GetStringValue("FilenameList", key, string.Empty);
-                filenames.Add(value == string.Empty ? key : value);
-            }
-
-            return filenames.ToArray();
         }
 
         private string finalHash = string.Empty;
@@ -207,7 +180,7 @@ namespace DTAClient.Online
             if (!string.IsNullOrEmpty(ClientConfiguration.Instance.GameLauncherExecutableName))
                 Logger.Log($"Hash for {ClientConfiguration.Instance.GameLauncherExecutableName}: {fh.LauncherExeHash}");
 
-            foreach (TrackedFile tracked in EnumerateTrackedFiles())
+            foreach (TrackedFile tracked in this.EnumerateTrackedFiles())
             {
                 string hash = fh.AddHashForFileIfExists(tracked.RelativePath, tracked.FullPath);
                 if (!string.IsNullOrEmpty(hash))
@@ -244,9 +217,31 @@ namespace DTAClient.Online
         public string GetCompleteHash() => finalHash;
 
         private void ParseConfigFile()
-            => calculateGameExeHash = ConfigFile.GetBooleanValue("Settings", "CalculateGameExeHash", true);
+        {
+            // Read per instance, not cached: callers construct a new FileHashCalculator every time
+            // precisely so the check reflects the files as they are now.
+            IniFile config = new IniFile(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), CONFIGNAME));
+            calculateGameExeHash = config.GetBooleanValue("Settings", "CalculateGameExeHash", true);
 
-        private static string NormalizePath(string path) => path.Replace('\\', '/');
+            List<string> keys = config.GetSectionKeys("FilenameList");
+            if (keys == null || keys.Count < 1)
+                return;
+
+            List<string> filenames = new List<string>();
+            foreach (string key in keys)
+            {
+                string value = config.GetStringValue("FilenameList", key, string.Empty);
+                filenames.Add(value == string.Empty ? key : value);
+            }
+
+            fileNamesToCheck = filenames.ToArray();
+        }
+
+        /// <summary>
+        /// Relative paths are hash identities, so every builder of one must normalize it the same
+        /// way. Shared with ReplayFileHashes for that reason.
+        /// </summary>
+        internal static string NormalizePath(string path) => path.Replace('\\', '/');
 
         /// <summary>
         /// Hashes one file. Text files are hashed with normalized line endings.

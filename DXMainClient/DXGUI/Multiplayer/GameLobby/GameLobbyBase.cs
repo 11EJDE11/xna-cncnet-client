@@ -810,7 +810,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 XNAListBoxItem rankItem = new XNAListBoxItem();
                 if (gameModeMap.IsCoop)
                 {
-                    // StatisticsManager must be initialized before lobbies call HasBeatCoOpMap().
+                    // Note: StatisticsManager.Statistics must be initialized to call `HasBeatCoOpMap()`. This means StatisticsWindow must be initialized before any lobbies extending GameLobbyBase.
                     if (StatisticsManager.Instance.HasBeatCoOpMap(gameModeMap.Map.UntranslatedName, gameModeMap.GameMode.UntranslatedUIName))
                         rankItem.Texture = RankTextures[Math.Abs(2 - gameModeMap.CoopDifficultyLevel) + 1];
                     else
@@ -2003,6 +2003,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
             else
             {
+                // Avoid writing the original filename to spawnmap.ini MP games, as it may vary between systems, e.g., when a host uploads a map while other players in game might download it with a diffrent filename.
+                // This inconsistency can result in differing spawnmap.ini files among players, causing desyncs in CnCNet YR games.
+                // Theoretically it can be useful for some singleplayer campaign tracking
+                // But it isn't currently used by any CnCNet game or mod
+                // The code below only applies to the single player case
                 string mapIniFileName = Path.GetFileName(mapIni.FileName);
                 mapIni.SetStringValue("Basic", "OriginalFilename", mapIniFileName);
             }

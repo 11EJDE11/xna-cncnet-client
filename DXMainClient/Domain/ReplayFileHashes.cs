@@ -2,9 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
-
-using ClientCore;
 
 using DTAClient.Online;
 
@@ -13,41 +10,16 @@ using Rampastring.Tools;
 namespace DTAClient.Domain;
 
 /// <summary>
-/// Records per-file hashes for replay compatibility checks.
-/// Uses the same tracked file list as the multiplayer hash check.
+/// Per-file hashes of the game files a replay was recorded against, written into its spawn.ini
+/// and compared before playback.
+///
+/// Deliberately not <see cref="FileHashCalculator.GetCompleteHash"/>: that folds in the client
+/// binaries and MPMaps.ini, so every client update or added map would invalidate every replay.
+/// Per-file rather than one hash, so a mismatch can name what differs.
 /// </summary>
 public static class ReplayFileHashes
 {
     public const string SECTION = "ReplayFileHashes";
-
-    /// <summary>
-    /// Recorded for tracked files that do not exist locally.
-    /// </summary>
-    private const string MISSING_MARKER = "MISSING";
-
-    /// <summary>
-    /// Caches hashes by file length and write time to avoid repeated full-file reads.
-    /// </summary>
-    private const string CACHE_FILE = "ReplayFileHashes.cache.ini";
-    private const string CACHE_SECTION = "Hashes";
-    private const string CACHE_FORMAT_VERSION_KEY = "FormatVersion";
-
-    /// <summary>
-    /// Bump when hashing rules change.
-    /// </summary>
-    private const int CACHE_FORMAT_VERSION = 1;
-
-    private static Dictionary<string, CachedHash>? hashCache;
-    private static bool hashCacheDirty;
-
-    private static Dictionary<string, CachedHash> HashCache => hashCache ??= LoadHashCache();
-
-    private struct CachedHash
-    {
-        public long Length;
-        public long LastWriteTicks;
-        public string Hash;
-    }
 
     /// <summary>
     /// Writes replay compatibility hashes into spawn.ini.
@@ -61,7 +33,7 @@ public static class ReplayFileHashes
 
         var section = new IniSection(SECTION);
 
-        // Value is "<relative path>|<sha1>".
+        // Value is "<relative path>|<sha1>"; a relative path can contain '=' so cannot be the key.
         int index = 0;
         foreach (KeyValuePair<string, string> entry in hashes)
         {
@@ -101,12 +73,10 @@ public static class ReplayFileHashes
             if (separator <= 0)
                 continue;
 
-            string relativePath = NormalizeRelativePath(value.Substring(0, separator));
+            string relativePath = FileHashCalculator.NormalizePath(value.Substring(0, separator));
             string recordedHash = value.Substring(separator + 1);
             recordedPaths.Add(relativePath);
 
-            // Every file on the fixed list is collected either way, so a miss here means the
-            // recording had a file in one of the scanned INI directories that we do not.
             if (!local.TryGetValue(relativePath, out string? localHash))
             {
                 mismatches.Add($"{relativePath} is missing locally");
@@ -116,184 +86,35 @@ public static class ReplayFileHashes
             if (string.Equals(localHash, recordedHash, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            if (recordedHash == MISSING_MARKER)
-                mismatches.Add($"{relativePath} exists locally but did not when this replay was recorded");
-            else if (localHash == MISSING_MARKER)
-                mismatches.Add($"{relativePath} is missing locally");
-            else
-                mismatches.Add($"{relativePath}\n    replay: {recordedHash}\n    yours:  {localHash}");
+            mismatches.Add($"{relativePath}\n    replay: {recordedHash}\n    yours:  {localHash}");
         }
 
+        // Absence is recorded by omission. The file need not have appeared since - the recording
+        // client may just have tracked a shorter list - hence the non-committal wording.
         foreach (string relativePath in local.Keys)
         {
             if (!recordedPaths.Contains(relativePath))
-                mismatches.Add($"{relativePath} exists locally but did not when this replay was recorded");
+                mismatches.Add($"{relativePath} was not recorded with this replay");
         }
 
         return mismatches;
     }
 
+    /// <summary>
+    /// Hashes every tracked file that exists, keyed by relative path. Missing files are omitted,
+    /// as <see cref="FileHashCalculator"/> does - a one-sided path still shows up as a difference.
+    /// </summary>
     private static SortedDictionary<string, string> Collect()
     {
         var hashes = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var hashedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (FileHashCalculator.TrackedFile tracked in FileHashCalculator.EnumerateTrackedFiles())
+        foreach (FileHashCalculator.TrackedFile tracked in new FileHashCalculator().EnumerateTrackedFiles())
         {
-            string relativePath = NormalizeRelativePath(tracked.RelativePath);
-
-            if (!File.Exists(tracked.FullPath))
-            {
-                hashes[relativePath] = MISSING_MARKER;
-                continue;
-            }
-
-            string? hash = HashFile(tracked.FullPath);
-            if (hash != null)
-            {
-                hashes[relativePath] = hash;
-                hashedPaths.Add(tracked.FullPath);
-            }
+            string hash = FileHashCalculator.CalculateSHA1ForFile(tracked.FullPath);
+            if (!string.IsNullOrEmpty(hash))
+                hashes[FileHashCalculator.NormalizePath(tracked.RelativePath)] = hash;
         }
-
-        DropStaleCacheEntries(hashedPaths);
-        SaveHashCache();
 
         return hashes;
-    }
-
-    private static string NormalizeRelativePath(string path) => path.Replace('\\', '/');
-
-    /// <summary>
-    /// Forgets cached hashes for files that are no longer tracked, so the cache does not grow
-    /// without bound as the game's files change.
-    /// </summary>
-    private static void DropStaleCacheEntries(HashSet<string> hashedPaths)
-    {
-        var stalePaths = new List<string>();
-
-        foreach (string path in HashCache.Keys)
-        {
-            if (!hashedPaths.Contains(path))
-                stalePaths.Add(path);
-        }
-
-        foreach (string path in stalePaths)
-        {
-            HashCache.Remove(path);
-            hashCacheDirty = true;
-        }
-    }
-
-    private static Dictionary<string, CachedHash> LoadHashCache()
-    {
-        var cache = new Dictionary<string, CachedHash>(StringComparer.OrdinalIgnoreCase);
-
-        FileInfo cacheFile = SafePath.GetFile(ProgramConstants.ClientUserFilesPath, CACHE_FILE);
-        if (!cacheFile.Exists)
-            return cache;
-
-        try
-        {
-            var cacheIni = new IniFile(cacheFile.FullName);
-
-            if (cacheIni.GetIntValue(CACHE_SECTION, CACHE_FORMAT_VERSION_KEY, 0) != CACHE_FORMAT_VERSION)
-                return cache;
-
-            List<string> keys = cacheIni.GetSectionKeys(CACHE_SECTION);
-            if (keys == null)
-                return cache;
-
-            foreach (string key in keys)
-            {
-                if (key == CACHE_FORMAT_VERSION_KEY)
-                    continue;
-
-                // Value is "<full path>|<length>|<lastWriteTicks>|<sha1>".
-                string value = cacheIni.GetStringValue(CACHE_SECTION, key, string.Empty);
-                string[] parts = value.Split('|');
-                if (parts.Length != 4)
-                    continue;
-
-                if (!long.TryParse(parts[1], out long length) || !long.TryParse(parts[2], out long ticks))
-                    continue;
-
-                cache[parts[0]] = new CachedHash { Length = length, LastWriteTicks = ticks, Hash = parts[3] };
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Log($"ReplayFileHashes: could not read the hash cache: {ex.Message}");
-            cache.Clear();
-        }
-
-        return cache;
-    }
-
-    private static void SaveHashCache()
-    {
-        if (!hashCacheDirty)
-            return;
-
-        hashCacheDirty = false;
-
-        try
-        {
-            DirectoryInfo userFilesDirectory = SafePath.GetDirectory(ProgramConstants.ClientUserFilesPath);
-            if (!userFilesDirectory.Exists)
-                userFilesDirectory.Create();
-
-            var cacheIni = new IniFile();
-            var section = new IniSection(CACHE_SECTION);
-            section.SetIntValue(CACHE_FORMAT_VERSION_KEY, CACHE_FORMAT_VERSION);
-
-            int index = 0;
-            foreach (KeyValuePair<string, CachedHash> entry in HashCache)
-            {
-                section.SetStringValue(index.ToString(),
-                    $"{entry.Key}|{entry.Value.Length}|{entry.Value.LastWriteTicks}|{entry.Value.Hash}");
-                index++;
-            }
-
-            cacheIni.AddSection(section);
-            cacheIni.WriteIniFile(SafePath.CombineFilePath(ProgramConstants.ClientUserFilesPath, CACHE_FILE));
-        }
-        catch (Exception ex)
-        {
-            Logger.Log($"ReplayFileHashes: could not write the hash cache: {ex.Message}");
-        }
-    }
-
-    private static string? HashFile(string path)
-    {
-        try
-        {
-            var fileInfo = new FileInfo(path);
-            long length = fileInfo.Length;
-            long lastWriteTicks = fileInfo.LastWriteTimeUtc.Ticks;
-
-            if (HashCache.TryGetValue(path, out CachedHash cached)
-                && cached.Length == length
-                && cached.LastWriteTicks == lastWriteTicks)
-            {
-                return cached.Hash;
-            }
-
-            // Same routine as the lobby check, so an INI that only differs by line endings
-            // does not read as a modified file here either.
-            string hash = FileHashCalculator.CalculateSHA1ForFile(path);
-            if (string.IsNullOrEmpty(hash))
-                return null;
-
-            HashCache[path] = new CachedHash { Length = length, LastWriteTicks = lastWriteTicks, Hash = hash };
-            hashCacheDirty = true;
-
-            return hash;
-        }
-        catch (Exception ex)
-        {
-            Logger.Log($"ReplayFileHashes: could not hash {path}: {ex.Message}");
-            return null;
-        }
     }
 }

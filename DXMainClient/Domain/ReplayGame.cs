@@ -13,7 +13,7 @@ namespace DTAClient.Domain;
 
 /// <summary>
 /// A replay file. Listing only reads the header and the embedded spawn.ini; the spawn files
-/// themselves are re-read on demand so a long replay list does not hold them all in memory.
+/// themselves are re-read on demand.
 /// </summary>
 public class ReplayGame
 {
@@ -30,9 +30,7 @@ public class ReplayGame
     /// </summary>
     private const uint MAX_EMBEDDED_FILE_SIZE = 32 * 1024 * 1024;
 
-    // Replay header layout, written by the spawner. Documented in the spawner repository as
-    // docs/replay-format.md; both sides have to change together. Fields the client does not use
-    // are not listed here.
+    // Replay header layout, written by the spawner. Both sides have to change together.
     private const int HEADER_SIZE = 1416;
     private const int OFFSET_MAGIC = 0;
     private const int OFFSET_FORMAT_VERSION = 4;
@@ -70,8 +68,7 @@ public class ReplayGame
     private readonly List<string> playerNames = new List<string>();
 
     /// <summary>
-    /// When the recording started, from the replay header. Preferred over the file's timestamp,
-    /// which does not survive copying the file elsewhere.
+    /// When the recording started, from the replay header.
     /// </summary>
     public DateTime RecordedAt { get; private set; }
 
@@ -141,8 +138,6 @@ public class ReplayGame
             spawnIniSize = ReadUInt32(header, OFFSET_SPAWN_INI_SIZE);
             spawnMapSize = ReadUInt32(header, OFFSET_SPAWN_MAP_SIZE);
 
-            // The sizes come straight off disk, so check them against what is actually
-            // there before using them to size a read.
             if (!AreEmbeddedSizesValid(stream.Length))
             {
                 Logger.Log($"Replay {FileName} declares embedded file sizes that do not fit the file");

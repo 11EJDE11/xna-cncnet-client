@@ -54,8 +54,7 @@ public static class ReplayManager
         => SafePath.GetFile(ProgramConstants.GamePath, DirectoryName, fileName);
 
     /// <summary>
-    /// A game-directory-relative path for a replay, as written to spawn.ini. Kept relative so
-    /// shared files do not expose the recorder's machine path.
+    /// A game-directory-relative path for a replay, as written to spawn.ini.
     /// </summary>
     public static string GetRelativePath(string fileName)
         => SafePath.CombineFilePath(DirectoryName, fileName);
@@ -93,7 +92,15 @@ public static class ReplayManager
             : timestamp + " " + safeMapName;
 
         if (baseName.Length > MaxRecordingBaseFileNameLength)
-            baseName = baseName.Substring(0, MaxRecordingBaseFileNameLength).TrimEnd();
+        {
+            int length = MaxRecordingBaseFileNameLength;
+
+            // Do not cut a surrogate pair in half; the orphaned half is not a renderable character.
+            if (char.IsHighSurrogate(baseName[length - 1]))
+                length--;
+
+            baseName = baseName.Substring(0, length).TrimEnd();
+        }
 
         string fileName = baseName + "." + FileExtension;
 
@@ -273,22 +280,32 @@ public static class ReplayManager
         }
     }
 
-    private static string SanitizeForFileName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return string.Empty;
+    /// <summary>Characters a replay file name may not contain. Built once.</summary>
+    private static readonly HashSet<char> InvalidFileNameChars = BuildInvalidFileNameChars();
 
+    private static HashSet<char> BuildInvalidFileNameChars()
+    {
         var invalid = new HashSet<char>(Path.GetInvalidFileNameChars());
+
+        // Explicit: the framework's list is platform-dependent, and replays get shared.
         foreach (char character in "<>:\"/\\|?*")
             invalid.Add(character);
         for (char character = '\0'; character < ' '; character++)
             invalid.Add(character);
 
+        return invalid;
+    }
+
+    private static string SanitizeForFileName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
         var builder = new StringBuilder(name.Length);
 
         foreach (char character in name)
         {
-            if (!invalid.Contains(character))
+            if (!InvalidFileNameChars.Contains(character))
                 builder.Append(character);
         }
 
