@@ -30,19 +30,24 @@ public class ReplayGame
     /// </summary>
     private const uint MAX_EMBEDDED_FILE_SIZE = 32 * 1024 * 1024;
 
-    // Replay header layout, written by the spawner. Both sides have to change together.
-    private const int HEADER_SIZE = 1416;
+    // Replay header layout, written by the spawner. Both sides have to change together; see
+    // docs/replay-format.md in the spawner repository.
+    private const int HEADER_SIZE = 1384;
     private const int OFFSET_MAGIC = 0;
     private const int OFFSET_FORMAT_VERSION = 4;
     private const int OFFSET_MAP_NAME = 8;
     private const int LENGTH_MAP_NAME = 260;
-    private const int OFFSET_GAME_CLIENT_VERSION = 308;
+    private const int OFFSET_GAME_CLIENT_VERSION = 272;
     private const int LENGTH_GAME_CLIENT_VERSION = 64;
-    private const int OFFSET_SPAWN_INI_SIZE = 1392;
-    private const int OFFSET_SPAWN_MAP_SIZE = 1396;
-    private const int OFFSET_RECORDED_GAME_SPEED = 1400;
-    private const int OFFSET_RECORDED_UNIX_TIME = 1404;
-    private const int OFFSET_TOTAL_FRAMES = 1412;
+    private const int OFFSET_SPAWN_INI_SIZE = 1356;
+    private const int OFFSET_SPAWN_MAP_SIZE = 1360;
+    private const int OFFSET_RECORDED_GAME_SPEED = 1364;
+    private const int OFFSET_RECORDED_UNIX_TIME = 1368;
+    private const int OFFSET_TOTAL_FRAMES = 1376;
+    private const int OFFSET_FLAGS = 1380;
+
+    /// <summary>Set by the spawner only once a recording has been closed cleanly.</summary>
+    private const uint HEADER_FLAG_CLEAN_SHUTDOWN = 1;
 
     public ReplayGame(string fileName)
     {
@@ -73,8 +78,8 @@ public class ReplayGame
     public DateTime RecordedAt { get; private set; }
 
     /// <summary>
-    /// False when the spawner never got to stamp a frame count into the header, meaning the
-    /// game crashed or was killed while recording and the frame stream is cut short.
+    /// False when the spawner never got to close the recording, meaning the game crashed or was
+    /// killed while recording and the frame stream is cut short.
     /// </summary>
     public bool IsComplete { get; private set; }
 
@@ -152,11 +157,14 @@ public class ReplayGame
             uint totalFrames = ReadUInt32(header, OFFSET_TOTAL_FRAMES);
             int gameSpeed = (int)Math.Min(ReadUInt32(header, OFFSET_RECORDED_GAME_SPEED), (uint)MAX_GAME_SPEED_INDEX);
 
-            TotalFrames = totalFrames;
+            // A recording that died with the game never gets the flag stamped, which is the only
+            // way to tell it apart from one that was quit immediately.
+            IsComplete = (ReadUInt32(header, OFFSET_FLAGS) & HEADER_FLAG_CLEAN_SHUTDOWN) != 0;
+
+            TotalFrames = IsComplete ? totalFrames : 0;
             FramesPerSecond = GetFramesPerSecond(gameSpeed);
-            IsComplete = totalFrames > 0;
             Duration = IsComplete
-                ? TimeSpan.FromSeconds(totalFrames / (double)FramesPerSecond)
+                ? TimeSpan.FromSeconds(TotalFrames / (double)FramesPerSecond)
                 : TimeSpan.Zero;
 
             string? spawnIniContent = ReadText(stream, spawnIniSize);

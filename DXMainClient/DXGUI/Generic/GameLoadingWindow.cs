@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 using ClientCore.Extensions;
 
@@ -52,12 +51,6 @@ namespace DTAClient.DXGUI.Generic
         /// Extra action buttons keyed by the panel that owns them.
         /// </summary>
         private readonly Dictionary<LoadGamePanel, XNAClientButton[]> extraButtons = new();
-
-        // Cleared in Initialize for whatever the theme INI laid out itself, so that laying the
-        // same controls out from code does not silently undo the package's own positioning.
-        private bool layOutPanelsFromCode = true;
-        private bool layOutButtonRowFromCode = true;
-        private bool setLaunchButtonTextFromCode = true;
 
         private LoadGamePanel ActivePanel => panels[tabControl == null ? 0 : tabControl.SelectedTab];
 
@@ -140,27 +133,15 @@ namespace DTAClient.DXGUI.Generic
                 panel.LaunchRequested += (_, _) => Disable();
             }
 
-            // Lay out for the size set above before the theme INI is read, so that the INI - which
-            // base.Initialize() applies on top of this
-            UpdateExtraButtonVisibility();
+            // Laid out once, for the size set above. A theme INI is applied on top by
+            // base.Initialize() and wins for every control it names, as in the other windows.
             LayOutPanels();
             LayOutButtonRow();
-
-            Rectangle[] panelRectangles = GetPanelRectangles();
-            Rectangle[] buttonRectangles = GetButtonRectangles();
-            string launchButtonText = btnLaunch.Text;
+            UpdateExtraButtonVisibility();
 
             base.Initialize();
 
             CenterOnParent();
-
-            // Hand over to the theme INI whatever it laid out itself.
-            layOutPanelsFromCode = GetPanelRectangles().SequenceEqual(panelRectangles);
-            layOutButtonRowFromCode = GetButtonRectangles().SequenceEqual(buttonRectangles);
-            setLaunchButtonTextFromCode = btnLaunch.Text == launchButtonText;
-
-            LayOutPanels();
-            LayOutButtonRow();
 
             RefreshActivePanel();
         }
@@ -206,35 +187,10 @@ namespace DTAClient.DXGUI.Generic
         }
 
         /// <summary>
-        /// Every button the automatic layout owns, in a stable order.
-        /// </summary>
-        private IEnumerable<XNAClientButton> EnumerateButtons()
-        {
-            yield return btnLaunch;
-            yield return btnDelete;
-            yield return btnCancel;
-
-            foreach (LoadGamePanel panel in panels)
-            {
-                foreach (XNAClientButton button in extraButtons[panel])
-                    yield return button;
-            }
-        }
-
-        private Rectangle[] GetPanelRectangles()
-            => panels.Select(panel => panel.ClientRectangle).ToArray();
-
-        private Rectangle[] GetButtonRectangles()
-            => EnumerateButtons().Select(button => button.ClientRectangle).ToArray();
-
-        /// <summary>
         /// Sizes the panels to fit the window.
         /// </summary>
         private void LayOutPanels()
         {
-            if (!layOutPanelsFromCode)
-                return;
-
             Rectangle panelRectangle = GetPanelRectangle();
 
             foreach (LoadGamePanel panel in panels)
@@ -269,18 +225,15 @@ namespace DTAClient.DXGUI.Generic
         }
 
         /// <summary>
-        /// Centers the active panel's button row, which is as wide as that panel has buttons.
+        /// Centers the three buttons every panel has. Their positions do not depend on which panel
+        /// is active, so switching tabs never moves them and a theme INI that places them keeps
+        /// working. Panel-specific buttons are laid out separately, on the left of the same row.
         /// </summary>
         private void LayOutButtonRow()
         {
-            if (!layOutButtonRowFromCode)
-                return;
+            var row = new[] { btnLaunch, btnDelete, btnCancel };
 
-            var row = new List<XNAClientButton> { btnLaunch, btnDelete };
-            row.AddRange(extraButtons[ActivePanel]);
-            row.Add(btnCancel);
-
-            int rowWidth = (BUTTON_WIDTH * row.Count) + (BUTTON_SPACING * (row.Count - 1));
+            int rowWidth = (BUTTON_WIDTH * row.Length) + (BUTTON_SPACING * (row.Length - 1));
             int x = (Width - rowWidth) / 2;
             int y = Height - BUTTON_HEIGHT - MARGIN;
 
@@ -288,6 +241,17 @@ namespace DTAClient.DXGUI.Generic
             {
                 button.ClientRectangle = new Rectangle(x, y, BUTTON_WIDTH, BUTTON_HEIGHT);
                 x += BUTTON_WIDTH + BUTTON_SPACING;
+            }
+
+            foreach (XNAClientButton[] buttons in extraButtons.Values)
+            {
+                int extraX = MARGIN;
+
+                foreach (XNAClientButton button in buttons)
+                {
+                    button.ClientRectangle = new Rectangle(extraX, y, BUTTON_WIDTH, BUTTON_HEIGHT);
+                    extraX += BUTTON_WIDTH + BUTTON_SPACING;
+                }
             }
         }
 
@@ -315,7 +279,6 @@ namespace DTAClient.DXGUI.Generic
             ActivePanel.Enable();
 
             UpdateExtraButtonVisibility();
-            LayOutButtonRow();
             RefreshActivePanel();
         }
 
@@ -329,9 +292,7 @@ namespace DTAClient.DXGUI.Generic
         {
             LoadGamePanel panel = ActivePanel;
 
-            if (setLaunchButtonTextFromCode)
-                btnLaunch.Text = panel.LaunchButtonText;
-
+            btnLaunch.Text = panel.LaunchButtonText;
             btnLaunch.AllowClick = panel.CanLaunch;
             btnDelete.AllowClick = panel.CanDelete;
 

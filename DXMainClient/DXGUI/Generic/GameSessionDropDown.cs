@@ -48,6 +48,13 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
     private string[] defaultItemLabels;
 
     /// <summary>
+    /// ItemsWhenForcedMultiplayer split and localized, resolved on first use. Cached because the
+    /// swap happens every time the owning check box is toggled, and neither the split nor the
+    /// translation lookup can change in between.
+    /// </summary>
+    private string[] forcedItemLabels;
+
+    /// <summary>
     /// Whether this dropdown should be included in the GAME broadcast.
     /// </summary>
     public bool BroadcastToLobby { get; private set; }
@@ -174,10 +181,7 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
         set => SelectedIndex = value;
     }
 
-    /// <summary>
-    /// Whether this drop-down has an alternate label set for a forced multiplayer session.
-    /// </summary>
-    public bool HasForcedMultiplayerLabels => !string.IsNullOrWhiteSpace(forcedMultiplayerItemsValue);
+    private bool HasForcedMultiplayerLabels => !string.IsNullOrWhiteSpace(forcedMultiplayerItemsValue);
 
     /// <summary>
     /// Swaps the visible labels when a lobby option forces the game into a multiplayer session.
@@ -207,20 +211,34 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
             return;
         }
 
-        string[] forcedLabels = forcedMultiplayerItemsValue.SplitWithCleanup();
-
-        if (forcedLabels.Length != Items.Count)
-        {
-            Logger.Log($"{Name}: ItemsWhenForcedMultiplayer has {forcedLabels.Length} entries but " +
-                $"Items has {Items.Count}; ignoring it. The two lists have to line up, because the " +
-                "selected index is what gets written to spawn.ini.");
+        if (forcedItemLabels == null && !TryResolveForcedItemLabels())
             return;
-        }
 
         for (int i = 0; i < Items.Count; i++)
+            Items[i].Text = forcedItemLabels[i];
+    }
+
+    /// <summary>
+    /// Splits and localizes ItemsWhenForcedMultiplayer. Returns false, having logged why, when it
+    /// does not line up with Items.
+    /// </summary>
+    private bool TryResolveForcedItemLabels()
+    {
+        string[] labels = forcedMultiplayerItemsValue.SplitWithCleanup();
+
+        if (labels.Length != Items.Count)
         {
-            Items[i].Text = Translation.Instance.LookUp(this, $"ForcedMultiplayerItem{i}", forcedLabels[i]);
+            Logger.Log($"{Name}: ItemsWhenForcedMultiplayer has {labels.Length} entries but " +
+                $"Items has {Items.Count}; ignoring it. The two lists have to line up, because the " +
+                "selected index is what gets written to spawn.ini.");
+            return false;
         }
+
+        for (int i = 0; i < labels.Length; i++)
+            labels[i] = Translation.Instance.LookUp(this, $"ForcedMultiplayerItem{i}", labels[i]);
+
+        forcedItemLabels = labels;
+        return true;
     }
 
     public void ApplySpawnIniCode(IniFile spawnIni)

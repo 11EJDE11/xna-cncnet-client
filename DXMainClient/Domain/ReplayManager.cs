@@ -302,7 +302,7 @@ public static class ReplayManager
     }
 
     /// <summary>Characters a replay file name may not contain. Built once.</summary>
-    private static readonly HashSet<char> InvalidFileNameChars = BuildInvalidFileNameChars();
+    private static readonly HashSet<char> invalidFileNameChars = BuildInvalidFileNameChars();
 
     private static HashSet<char> BuildInvalidFileNameChars()
     {
@@ -326,7 +326,7 @@ public static class ReplayManager
 
         foreach (char character in name)
         {
-            if (!InvalidFileNameChars.Contains(character))
+            if (!invalidFileNameChars.Contains(character))
                 builder.Append(character);
         }
 

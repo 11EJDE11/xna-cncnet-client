@@ -110,8 +110,7 @@ public class ReplaysPanel : LoadGamePanel
 
         chkSpectator = CreateCheckBox(nameof(chkSpectator), 0, firstRowY, 160,
             "Spectator view".L10N("Client:Main:ReplaySpectator"),
-            ("Watch as an observer with the spectator sidebar.")
-                .L10N("Client:Main:ReplaySpectatorTooltip"),
+            "Watch as an observer with the spectator sidebar.".L10N("Client:Main:ReplaySpectatorTooltip"),
             UserINISettings.Instance.ReplayPlaybackSpectator);
 
         chkShroudEnabled = CreateCheckBox(nameof(chkShroudEnabled), 170, firstRowY, 150,
@@ -191,7 +190,10 @@ public class ReplaysPanel : LoadGamePanel
     private void PopulateGameSpeedDropDown()
     {
         for (int i = 0; i <= ReplayGame.MAX_GAME_SPEED_INDEX; i++)
-            ddGameSpeed.AddItem($"{ReplayGame.GetFramesPerSecond(i)} FPS");
+        {
+            ddGameSpeed.AddItem(string.Format("{0} FPS".L10N("Client:Main:ReplayPlaybackSpeedItem"),
+                ReplayGame.GetFramesPerSecond(i)));
+        }
 
         int stored = UserINISettings.Instance.ReplayPlaybackGameSpeed;
         ddGameSpeed.SelectedIndex = stored >= 0 && stored <= ReplayGame.MAX_GAME_SPEED_INDEX ? stored : 0;
@@ -218,7 +220,10 @@ public class ReplaysPanel : LoadGamePanel
 
     public override void Refresh()
     {
-        int previouslySelected = lbReplayList.SelectedIndex;
+        // By name rather than by index: deleting a replay shifts every index after it, and
+        // silently selecting a different replay than the one next to the deleted one is worse
+        // than selecting nothing.
+        string? previouslySelected = SelectedReplay?.FileName;
 
         // Cleared before the new list is taken, so that the selection change this fires cannot
         // resolve the old index against the new list.
@@ -239,7 +244,14 @@ public class ReplaysPanel : LoadGamePanel
         }
 
         if (replays.Count > 0)
-            lbReplayList.SelectedIndex = Math.Min(Math.Max(previouslySelected, 0), replays.Count - 1);
+        {
+            int restored = previouslySelected == null
+                ? 0
+                : replays.FindIndex(replay =>
+                    string.Equals(replay.FileName, previouslySelected, StringComparison.OrdinalIgnoreCase));
+
+            lbReplayList.SelectedIndex = restored < 0 ? 0 : restored;
+        }
 
         UpdateDetails();
     }
@@ -355,7 +367,7 @@ public class ReplaysPanel : LoadGamePanel
                 "You have: {1}\n\n" +
                 "{2}\n\n" +
                 "Play it anyway?").L10N("Client:Main:ReplayFileMismatchText"),
-                SafeForDialog(GetDisplayVersion(replay)), ReplayManager.GameClientVersion,
+                SafeForDialog(GetDisplayVersion(replay)), SafeForDialog(ReplayManager.GameClientVersion),
                 SafeForDialog(details)),
             XNAMessageBoxButtons.YesNo);
 
@@ -367,7 +379,9 @@ public class ReplaysPanel : LoadGamePanel
     {
         spawnIni.SetStringValue("Settings", "ReplayFile", ReplayManager.GetRelativePath(replay.FileName));
 
-        spawnIni.SetIntValue("Settings", "GameSpeed", ddGameSpeed.SelectedIndex);
+        // Its own key rather than GameSpeed: the spawner pins the simulation to the speed the game
+        // was recorded at, and this only controls how fast playback is paced.
+        spawnIni.SetIntValue("Settings", "ReplayPlaybackSpeed", ddGameSpeed.SelectedIndex);
 
         spawnIni.SetBooleanValue("Settings", "ReplayShroudEnabled", chkShroudEnabled.Checked);
         spawnIni.SetBooleanValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked);

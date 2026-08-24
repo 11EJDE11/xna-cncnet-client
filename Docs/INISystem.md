@@ -887,6 +887,12 @@ With `ReplaySupport=true` the client also gains a `Storage` tab in the options w
 player caps how many replays are kept and how large the replay directory may grow. See
 [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for the lobby option that turns recording on.
 
+> [!NOTE]
+> The extra tab does not fit the options window's default width, so the window is widened by one
+> tab's worth when `ReplaySupport=true`. If your package sets `$Width` for `[OptionsWindow]` in its
+> theme INI, that value wins and the `Storage` tab will be clipped - widen it there by
+> `BUTTON_WIDTH_92` (92) plus the tab spacing as well.
+
 ## Game Modes
 
 Game modes are defined in the `[GameModes]` section of `MPMaps.ini`. Each game mode can have its own configuration section with the same name.
