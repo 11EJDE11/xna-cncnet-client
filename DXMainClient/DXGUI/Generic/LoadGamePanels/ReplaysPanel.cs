@@ -163,14 +163,6 @@ public class ReplaysPanel : LoadGamePanel
         base.Initialize();
     }
 
-    public override void LayOutControls()
-    {
-        lbReplayList.ClientRectangle = new Rectangle(0, 0, Width, LIST_HEIGHT);
-        lbReplayList.ChangeColumnWidth(0, Width - FIXED_COLUMNS_WIDTH);
-
-        tbDetails.ClientRectangle = new Rectangle(0, lbReplayList.Bottom + 6, Width, DETAILS_HEIGHT);
-    }
-
     private XNAClientCheckBox CreateCheckBox(string name, int x, int y, int width, string text,
         string toolTip, bool isChecked)
     {
@@ -315,7 +307,7 @@ public class ReplaysPanel : LoadGamePanel
 
         Logger.Log("Loading replay " + replay.FileName);
 
-        if (!replay.TryReadSpawnFiles(out string spawnIniContent, out string spawnMapContent))
+        if (!replay.TryReadSpawnFiles(out string spawnIniContent, out byte[] spawnMapContent))
         {
             Logger.Log("Replay file is missing spawn file data: " + replay.FileName);
             XNAMessageBox.Show(WindowManager,
@@ -344,7 +336,7 @@ public class ReplaysPanel : LoadGamePanel
         return new IniFile(stream, EncodingExt.UTF8NoBOM, applyBaseIni: false);
     }
 
-    private void ShowMismatchPrompt(ReplayGame replay, IniFile spawnIni, string spawnMapContent,
+    private void ShowMismatchPrompt(ReplayGame replay, IniFile spawnIni, byte[] spawnMapContent,
         List<string> fileMismatches)
     {
         foreach (string mismatch in fileMismatches)
@@ -375,7 +367,7 @@ public class ReplaysPanel : LoadGamePanel
         msgBox.Show();
     }
 
-    private void StartPlayback(ReplayGame replay, IniFile spawnIni, string spawnMapContent)
+    private void StartPlayback(ReplayGame replay, IniFile spawnIni, byte[] spawnMapContent)
     {
         spawnIni.SetStringValue("Settings", "ReplayFile", ReplayManager.GetRelativePath(replay.FileName));
 
@@ -407,7 +399,7 @@ public class ReplaysPanel : LoadGamePanel
         if (spawnMapIniFile.Exists)
             spawnMapIniFile.Delete();
 
-        File.WriteAllText(spawnMapIniFile.FullName, spawnMapContent, EncodingExt.UTF8NoBOM);
+        File.WriteAllBytes(spawnMapIniFile.FullName, spawnMapContent);
 
         Logger.Log("Extracted spawn files from replay successfully");
 

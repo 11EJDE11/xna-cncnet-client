@@ -92,7 +92,6 @@ namespace DTAClient.DXGUI.Generic
 
             foreach (LoadGamePanel panel in panels)
             {
-                // Sized before AddChild so the panel's own controls initialize at a sane size.
                 panel.ClientRectangle = GetPanelRectangle();
 
                 AddChild(panel);
@@ -135,7 +134,6 @@ namespace DTAClient.DXGUI.Generic
 
             // Laid out once, for the size set above. A theme INI is applied on top by
             // base.Initialize() and wins for every control it names, as in the other windows.
-            LayOutPanels();
             LayOutButtonRow();
             UpdateExtraButtonVisibility();
 
@@ -184,23 +182,6 @@ namespace DTAClient.DXGUI.Generic
             int panelHeight = Height - BUTTON_HEIGHT - (MARGIN * 2) - panelTop;
 
             return new Rectangle(MARGIN, panelTop, Width - (MARGIN * 2), panelHeight);
-        }
-
-        /// <summary>
-        /// Sizes the panels to fit the window.
-        /// </summary>
-        private void LayOutPanels()
-        {
-            Rectangle panelRectangle = GetPanelRectangle();
-
-            foreach (LoadGamePanel panel in panels)
-            {
-                if (panel.ClientRectangle == panelRectangle)
-                    continue;
-
-                panel.ClientRectangle = panelRectangle;
-                panel.LayOutControls();
-            }
         }
 
         /// <summary>

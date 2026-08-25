@@ -52,12 +52,6 @@ public abstract class LoadGamePanel : XNAPanel
     /// <summary>Re-reads whatever this panel lists. Called whenever the panel becomes visible.</summary>
     public abstract void Refresh();
 
-    /// <summary>
-    /// Positions this panel's controls for its current size. Called by the window once the
-    /// final size is known, which is only after the theme INI has been applied.
-    /// </summary>
-    public abstract void LayOutControls();
-
     protected void OnSelectionChanged() => SelectionChanged?.Invoke(this, EventArgs.Empty);
 
     protected void OnLaunchRequested() => LaunchRequested?.Invoke(this, EventArgs.Empty);

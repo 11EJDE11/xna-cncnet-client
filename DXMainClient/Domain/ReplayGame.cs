@@ -195,10 +195,10 @@ public class ReplayGame
     /// Re-reads the spawn.ini and spawnmap.ini embedded in the replay.
     /// </summary>
     /// <returns>False when either file is absent or the replay can no longer be read.</returns>
-    public bool TryReadSpawnFiles(out string spawnIni, out string spawnMap)
+    public bool TryReadSpawnFiles(out string spawnIni, out byte[] spawnMap)
     {
         spawnIni = string.Empty;
-        spawnMap = string.Empty;
+        spawnMap = Array.Empty<byte>();
 
         if (spawnIniSize == 0 || spawnMapSize == 0)
             return false;
@@ -209,7 +209,7 @@ public class ReplayGame
             stream.Seek(HEADER_SIZE, SeekOrigin.Begin);
 
             string? readSpawnIni = ReadText(stream, spawnIniSize);
-            string? readSpawnMap = ReadText(stream, spawnMapSize);
+            byte[]? readSpawnMap = ReadBytes(stream, spawnMapSize);
 
             if (readSpawnIni == null || readSpawnMap == null)
             {
@@ -226,7 +226,7 @@ public class ReplayGame
         {
             Logger.Log("An error occurred while reading the spawn files of " + FileName + ": " + ex.ToString());
             spawnIni = string.Empty;
-            spawnMap = string.Empty;
+            spawnMap = Array.Empty<byte>();
             return false;
         }
     }
@@ -292,13 +292,19 @@ public class ReplayGame
         => !string.IsNullOrWhiteSpace(content) && content.TrimStart().StartsWith("[", StringComparison.Ordinal);
 
     /// <summary>Returns null when the file ends before <paramref name="size"/> bytes are read.</summary>
-    private static string? ReadText(Stream stream, uint size)
+    private static byte[]? ReadBytes(Stream stream, uint size)
     {
         byte[] buffer = new byte[size];
-        if (!TryReadExactly(stream, buffer, (int)size))
-            return null;
 
-        return EncodingExt.UTF8NoBOM.GetString(buffer);
+        return TryReadExactly(stream, buffer, (int)size) ? buffer : null;
+    }
+
+    /// <summary>Returns null when the file ends before <paramref name="size"/> bytes are read.</summary>
+    private static string? ReadText(Stream stream, uint size)
+    {
+        byte[]? buffer = ReadBytes(stream, size);
+
+        return buffer == null ? null : EncodingExt.UTF8NoBOM.GetString(buffer);
     }
 
     private static bool TryReadExactly(Stream stream, byte[] buffer, int count)

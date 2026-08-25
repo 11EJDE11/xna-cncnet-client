@@ -69,12 +69,6 @@ public class SavedGamesPanel : LoadGamePanel
         base.Initialize();
     }
 
-    public override void LayOutControls()
-    {
-        lbSaveGameList.ClientRectangle = new Rectangle(0, 0, Width, Height);
-        lbSaveGameList.ChangeColumnWidth(0, Width - DATE_COLUMN_WIDTH);
-    }
-
     public override void Refresh() => ListSaves();
 
     public override void Launch()
