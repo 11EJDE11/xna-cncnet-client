@@ -67,10 +67,10 @@ public class ReplayGame
     /// <summary>The lobby's game mode name, e.g. "Battle".</summary>
     public string UIGameMode { get; private set; } = string.Empty;
 
-    /// <summary>Human players, in spawn.ini order, the local recorder first.</summary>
-    public IReadOnlyList<string> PlayerNames => playerNames;
+    /// <summary>Human players, in spawn.ini order, the recording player first.</summary>
+    public IReadOnlyList<ReplayPlayer> Players => players;
 
-    private readonly List<string> playerNames = new List<string>();
+    private readonly List<ReplayPlayer> players = new List<ReplayPlayer>();
 
     /// <summary>
     /// When the recording started, from the replay header.
@@ -261,19 +261,35 @@ public class ReplayGame
 
         UIGameMode = spawnIni.GetStringValue("Settings", "UIGameMode", string.Empty);
 
-        // The recording player is always [Settings] Name; everyone else is [OtherN].
-        string localPlayer = spawnIni.GetStringValue("Settings", "Name", string.Empty);
-        if (!string.IsNullOrWhiteSpace(localPlayer))
-            playerNames.Add(localPlayer);
+        // The recording player is always [Settings]; everyone else is [OtherN], in the order the
+        // recording client wrote them. That order is the spawner's player slot order, which is what
+        // a perspective choice is expressed in, so the indices have to be kept as they are found.
+        AddPlayer(spawnIni, "Settings", 0);
 
         for (int otherId = 1; ; otherId++)
         {
-            string otherName = spawnIni.GetStringValue("Other" + otherId, "Name", string.Empty);
-            if (string.IsNullOrWhiteSpace(otherName))
+            if (!AddPlayer(spawnIni, "Other" + otherId, otherId))
                 break;
-
-            playerNames.Add(otherName);
         }
+    }
+
+    /// <summary>
+    /// Adds the player in <paramref name="sectionName"/>, if there is one.
+    /// </summary>
+    /// <returns>False when the section names no player, which ends the run of [OtherN] sections.</returns>
+    private bool AddPlayer(IniFile spawnIni, string sectionName, int spawnIniIndex)
+    {
+        string name = spawnIni.GetStringValue(sectionName, "Name", string.Empty);
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        players.Add(new ReplayPlayer(
+            spawnIniIndex,
+            name,
+            spawnIni.GetIntValue(sectionName, "Side", -1),
+            spawnIni.GetBooleanValue(sectionName, "IsSpectator", false)));
+
+        return true;
     }
 
     private bool AreEmbeddedSizesValid(long fileLength)

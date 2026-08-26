@@ -35,6 +35,10 @@ public class ReplaysPanel : LoadGamePanel
     private const int ROW_SPACING = 24;
     private const int CHECK_BOX_HEIGHT = 20;
 
+    /// <summary>Left edge of the perspective picker, clear of the playback speed drop-down.</summary>
+    private const int PERSPECTIVE_X = 350;
+    private const int PERSPECTIVE_WIDTH = 200;
+
     /// <summary>Combined width of the fixed-width columns; the replay name gets the rest.</summary>
     private const int FIXED_COLUMNS_WIDTH = 320;
 
@@ -54,10 +58,14 @@ public class ReplaysPanel : LoadGamePanel
     private XNAClientCheckBox chkSelectUnits = null!;
     private XNAClientCheckBox chkShowChatAndBeacons = null!;
     private XNAClientDropDown ddGameSpeed = null!;
+    private XNAClientDropDown ddPerspective = null!;
 
     private LoadGamePanelAction[]? extraActions;
 
     private List<ReplayGame> replays = new List<ReplayGame>();
+
+    /// <summary>Backs <see cref="ddPerspective"/>; its items are these players, in order.</summary>
+    private IReadOnlyList<ReplayPlayer> perspectivePlayers = Array.Empty<ReplayPlayer>();
 
     public override string TabTitle => "Replays".L10N("Client:Main:TabReplays");
 
@@ -76,6 +84,12 @@ public class ReplaysPanel : LoadGamePanel
     private ReplayGame? SelectedReplay
         => lbReplayList.SelectedIndex > -1 && lbReplayList.SelectedIndex < replays.Count
             ? replays[lbReplayList.SelectedIndex]
+            : null;
+
+    /// <summary>The player whose screen playback will reproduce, or null when nothing is selected.</summary>
+    private ReplayPlayer? SelectedPerspective
+        => ddPerspective.SelectedIndex > -1 && ddPerspective.SelectedIndex < perspectivePlayers.Count
+            ? perspectivePlayers[ddPerspective.SelectedIndex]
             : null;
 
     public override void Initialize()
@@ -149,6 +163,21 @@ public class ReplaysPanel : LoadGamePanel
             "speed is unaffected.").L10N("Client:Main:ReplayPlaybackSpeedTooltip");
         PopulateGameSpeedDropDown();
 
+        var lblPerspective = new XNALabel(WindowManager);
+        lblPerspective.Name = nameof(lblPerspective);
+        lblPerspective.Text = "Watch as:".L10N("Client:Main:ReplayPerspective");
+        lblPerspective.ClientRectangle = new Rectangle(PERSPECTIVE_X, secondRowY + 3,
+            lblPerspective.Width, lblPerspective.Height);
+
+        ddPerspective = new XNAClientDropDown(WindowManager);
+        ddPerspective.Name = nameof(ddPerspective);
+        ddPerspective.ClientRectangle = new Rectangle(lblPerspective.Right + 8, secondRowY,
+            PERSPECTIVE_WIDTH, 21);
+        ddPerspective.ToolTipText = ("Whose screen the replay is watched from - their fog of war, " +
+            "sidebar, beacons and starting view, but no team chat messages.")
+            .L10N("Client:Main:ReplayPerspectiveTooltip");
+        ddPerspective.SelectedIndexChanged += DdPerspective_SelectedIndexChanged;
+
         AddChild(lbReplayList);
         AddChild(tbDetails);
         AddChild(lblPlayback);
@@ -159,6 +188,8 @@ public class ReplaysPanel : LoadGamePanel
         AddChild(chkShowChatAndBeacons);
         AddChild(lblGameSpeed);
         AddChild(ddGameSpeed);
+        AddChild(lblPerspective);
+        AddChild(ddPerspective);
 
         base.Initialize();
     }
@@ -204,10 +235,82 @@ public class ReplaysPanel : LoadGamePanel
         UserINISettings.Instance.SaveSettings();
     }
 
+    private void DdPerspective_SelectedIndexChanged(object? sender, EventArgs e)
+        => UpdatePerspectiveDependentOptions();
+
     private void LbReplayList_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        UpdateDetails();
+        UpdateForSelection();
         OnSelectionChanged();
+    }
+
+    private void UpdateForSelection()
+    {
+        UpdateDetails();
+        UpdatePerspectiveDropDown();
+    }
+
+    /// <summary>
+    /// Rebuilds the perspective list for the selected replay. The choice is not carried over
+    /// between replays - a slot index names a different player in each - so it always lands back
+    /// on the player who made the recording.
+    /// </summary>
+    private void UpdatePerspectiveDropDown()
+    {
+        // Detached while the list is rebuilt: the intermediate selections it would report are not
+        // choices, and one of them is the empty list.
+        ddPerspective.SelectedIndexChanged -= DdPerspective_SelectedIndexChanged;
+
+        perspectivePlayers = SelectedReplay?.Players ?? (IReadOnlyList<ReplayPlayer>)Array.Empty<ReplayPlayer>();
+
+        ddPerspective.Items.Clear();
+        ddPerspective.SelectedIndex = -1;
+
+        foreach (ReplayPlayer player in perspectivePlayers)
+        {
+            ddPerspective.AddItem(Renderer.GetSafeString(DescribePerspective(player),
+                ddPerspective.FontIndex));
+        }
+
+        if (perspectivePlayers.Count > 0)
+            ddPerspective.SelectedIndex = 0;
+
+        // A one-player recording, or none selected: nothing to choose between.
+        ddPerspective.AllowDropDown = perspectivePlayers.Count > 1;
+
+        ddPerspective.SelectedIndexChanged += DdPerspective_SelectedIndexChanged;
+
+        UpdatePerspectiveDependentOptions();
+    }
+
+    /// <summary>
+    /// Both of these reproduce the recording player's own screen - their camera and their
+    /// selection - so the spawner ignores them from anyone else's seat. Grey them out rather than
+    /// leaving ticked boxes that do nothing.
+    /// </summary>
+    private void UpdatePerspectiveDependentOptions()
+    {
+        bool watchingRecordingPlayer = SelectedPerspective?.IsRecorder != false;
+
+        chkLockedViewport.AllowChecking = watchingRecordingPlayer;
+        chkSelectUnits.AllowChecking = watchingRecordingPlayer;
+    }
+
+    /// <summary>
+    /// How a player reads in the perspective list. Names come out of a file someone else produced,
+    /// so the caller still has to make the result renderable.
+    /// </summary>
+    private static string DescribePerspective(ReplayPlayer player)
+    {
+        if (player.IsRecorder)
+        {
+            return string.Format("{0} (recorded)".L10N("Client:Main:ReplayPerspectiveRecorder"),
+                player.Name);
+        }
+
+        return player.IsSpectator
+            ? string.Format("{0} (spectator)".L10N("Client:Main:ReplayPerspectiveSpectator"), player.Name)
+            : player.Name;
     }
 
     public override void Refresh()
@@ -231,7 +334,7 @@ public class ReplaysPanel : LoadGamePanel
                 Renderer.GetSafeString(replay.GUIName, lbReplayList.FontIndex),
                 replay.RecordedAt.ToString("g"),
                 FormatDuration(replay),
-                replay.PlayerNames.Count.ToString()
+                replay.Players.Count.ToString()
             }, true);
         }
 
@@ -245,7 +348,7 @@ public class ReplaysPanel : LoadGamePanel
             lbReplayList.SelectedIndex = restored < 0 ? 0 : restored;
         }
 
-        UpdateDetails();
+        UpdateForSelection();
     }
 
     private void UpdateDetails()
@@ -265,10 +368,10 @@ public class ReplaysPanel : LoadGamePanel
             details.Append(" - ").Append(SafeForDetails(replay.UIGameMode));
         details.AppendLine();
 
-        if (replay.PlayerNames.Count > 0)
+        if (replay.Players.Count > 0)
         {
             details.Append(string.Format("Players: {0}".L10N("Client:Main:ReplayDetailPlayers"),
-                SafeForDetails(string.Join(", ", replay.PlayerNames))));
+                SafeForDetails(string.Join(", ", replay.Players.Select(player => player.Name)))));
             details.AppendLine();
         }
 
@@ -323,11 +426,11 @@ public class ReplaysPanel : LoadGamePanel
         List<string> fileMismatches = ReplayFileHashes.FindMismatches(spawnIni);
         if (fileMismatches.Count > 0)
         {
-            ShowMismatchPrompt(replay, spawnIni, spawnMapContent, fileMismatches);
+            ShowMismatchPrompt(replay, spawnIni, spawnMapContent, SelectedPerspective, fileMismatches);
             return;
         }
 
-        StartPlayback(replay, spawnIni, spawnMapContent);
+        StartPlayback(replay, spawnIni, spawnMapContent, SelectedPerspective);
     }
 
     private static IniFile ReadReplaySpawnIni(string spawnIniContent)
@@ -337,7 +440,7 @@ public class ReplaysPanel : LoadGamePanel
     }
 
     private void ShowMismatchPrompt(ReplayGame replay, IniFile spawnIni, byte[] spawnMapContent,
-        List<string> fileMismatches)
+        ReplayPlayer? perspective, List<string> fileMismatches)
     {
         foreach (string mismatch in fileMismatches)
             Logger.Log("Replay file mismatch: " + mismatch);
@@ -363,13 +466,29 @@ public class ReplaysPanel : LoadGamePanel
                 SafeForDialog(details)),
             XNAMessageBoxButtons.YesNo);
 
-        msgBox.YesClickedAction = _ => StartPlayback(replay, spawnIni, spawnMapContent);
+        msgBox.YesClickedAction = _ => StartPlayback(replay, spawnIni, spawnMapContent, perspective);
         msgBox.Show();
     }
 
-    private void StartPlayback(ReplayGame replay, IniFile spawnIni, byte[] spawnMapContent)
+    private void StartPlayback(ReplayGame replay, IniFile spawnIni, byte[] spawnMapContent,
+        ReplayPlayer? perspective)
     {
         spawnIni.SetStringValue("Settings", "ReplayFile", ReplayManager.GetRelativePath(replay.FileName));
+
+        // The spawner takes the spawn.ini player slot, which is what ReplayPlayer carries. Slot 0
+        // is the recording player and is also the spawner's default; it is still written, so the
+        // launch never depends on the key's absence. The spawner is what actually decides that
+        // LockedViewport and SelectUnits do not apply to another player's seat - the panel only
+        // greys them out - so nothing here has to compensate for the choice.
+        spawnIni.SetIntValue("Settings", "ReplayViewPlayer", perspective?.SpawnIniIndex ?? 0);
+
+        // The load screen the recording embedded is the recording player's. Point it at whoever is
+        // being watched instead. A spectator has no side of their own, so theirs is left alone.
+        if (perspective != null && !perspective.IsRecorder && perspective.SideIndex >= 0)
+        {
+            spawnIni.SetStringValue("Settings", "CustomLoadScreen",
+                LoadingScreenController.GetLoadScreenName(perspective.SideIndex.ToString()));
+        }
 
         // Its own key rather than GameSpeed: the spawner pins the simulation to the speed the game
         // was recorded at, and this only controls how fast playback is paced.
