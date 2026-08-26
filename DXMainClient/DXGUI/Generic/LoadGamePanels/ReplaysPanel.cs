@@ -71,7 +71,7 @@ public class ReplaysPanel : LoadGamePanel
 
     public override string LaunchButtonText => "Watch".L10N("Client:Main:ButtonWatchReplay");
 
-    public override bool CanLaunch => lbReplayList.SelectedIndex > -1;
+    public override bool CanLaunch => SelectedReplay?.IsPlayable == true;
 
     public override bool CanDelete => lbReplayList.SelectedIndex > -1;
 
@@ -329,13 +329,24 @@ public class ReplaysPanel : LoadGamePanel
 
         foreach (ReplayGame replay in replays)
         {
-            lbReplayList.AddItem(new[]
+            string[] columns =
             {
                 Renderer.GetSafeString(replay.GUIName, lbReplayList.FontIndex),
                 replay.RecordedAt.ToString("g"),
                 FormatDuration(replay),
-                replay.Players.Count.ToString()
-            }, true);
+                replay.IsPlayable ? replay.Players.Count.ToString() : "-"
+            };
+
+            if (replay.IsPlayable)
+            {
+                lbReplayList.AddItem(columns, true);
+                continue;
+            }
+
+            // Selectable but greyed: the row has to stay reachable for the details pane to say why
+            // it cannot be watched, and unreadable at a glance for the player not to try.
+            lbReplayList.AddItem(Array.ConvertAll(columns,
+                text => new XNAListBoxItem(text, UISettings.ActiveSettings.DisabledItemColor)));
         }
 
         if (replays.Count > 0)
@@ -358,6 +369,12 @@ public class ReplaysPanel : LoadGamePanel
         if (replay == null)
         {
             tbDetails.Text = "Select a replay to see its details.".L10N("Client:Main:ReplayNoSelection");
+            return;
+        }
+
+        if (!replay.IsPlayable)
+        {
+            tbDetails.Text = DescribeUnplayable(replay);
             return;
         }
 
@@ -392,6 +409,14 @@ public class ReplaysPanel : LoadGamePanel
         details.Append(string.Format("Version: {0}".L10N("Client:Main:ReplayDetailVersion"),
             SafeForDetails(GetDisplayVersion(replay))));
 
+        // Which spawner build wrote the file. Worth having in front of anyone reporting a replay
+        // that will not play, and it costs a few characters on a line that is already there.
+        if (!string.IsNullOrWhiteSpace(replay.SpawnerVersion))
+        {
+            details.Append(string.Format(" - spawner {0}".L10N("Client:Main:ReplayDetailSpawnerVersion"),
+                SafeForDetails(replay.SpawnerVersion)));
+        }
+
         if (!replay.IsComplete)
         {
             details.AppendLine();
@@ -405,7 +430,10 @@ public class ReplaysPanel : LoadGamePanel
     public override void Launch()
     {
         ReplayGame? replay = SelectedReplay;
-        if (replay == null)
+
+        // CanLaunch already keeps the button disabled for these; the guard is here because Launch
+        // is also reachable by double-clicking the row.
+        if (replay == null || !replay.IsPlayable)
             return;
 
         Logger.Log("Loading replay " + replay.FileName);
@@ -588,6 +616,27 @@ public class ReplaysPanel : LoadGamePanel
     private static string SafeForDialog(string text) => Renderer.GetSafeString(text, 0);
 
     /// <summary>
+    /// What the details pane shows for a replay this build cannot play. It is deliberately about
+    /// the game being out of date rather than about the file being wrong - the file is fine, and
+    /// telling someone their own recording is broken would send them to delete it.
+    /// </summary>
+    private string DescribeUnplayable(ReplayGame replay)
+    {
+        var details = new StringBuilder();
+
+        details.Append(SafeForDetails(replay.GUIName));
+        details.AppendLine();
+        details.Append(string.Format("Recorded {0}".L10N("Client:Main:ReplayDetailRecorded"),
+            replay.RecordedAt.ToString("f")));
+        details.AppendLine();
+
+        details.Append(("This replay was recorded in a newer format than this version of the game " +
+            "can read. Update the game to watch it.").L10N("Client:Main:ReplayUnsupportedVersion"));
+
+        return details.ToString();
+    }
+
+    /// <summary>
     /// The game package a replay was recorded with, for display.
     /// </summary>
     private static string GetDisplayVersion(ReplayGame replay)
@@ -597,7 +646,9 @@ public class ReplaysPanel : LoadGamePanel
 
     private static string FormatDuration(ReplayGame replay)
     {
-        if (!replay.IsComplete)
+        // An unplayable replay has no trustworthy frame count: the header fields it would come from
+        // are only where this build expects them for a layout generation it knows.
+        if (!replay.IsPlayable || !replay.IsComplete)
             return "?";
 
         TimeSpan duration = replay.Duration;

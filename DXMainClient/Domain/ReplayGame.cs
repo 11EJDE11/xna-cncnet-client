@@ -12,6 +12,21 @@ using Rampastring.Tools;
 namespace DTAClient.Domain;
 
 /// <summary>
+/// Whether a listed replay can be played by this build.
+/// </summary>
+public enum ReplayStatus
+{
+    Playable,
+
+    /// <summary>
+    /// A valid replay whose layout generation this build does not know - almost always a recording
+    /// from a newer version of the game. Listed rather than hidden: the file is real, the player
+    /// knows they recorded it, and silently omitting it reads as the update having deleted it.
+    /// </summary>
+    UnsupportedVersion
+}
+
+/// <summary>
 /// A replay file. Listing only reads the header and the embedded spawn.ini; the spawn files
 /// themselves are re-read on demand.
 /// </summary>
@@ -21,7 +36,19 @@ public class ReplayGame
     public const int MAX_GAME_SPEED_INDEX = 6;
 
     private const uint REPLAY_MAGIC = 0x4A455259;
-    private const uint SUPPORTED_REPLAY_FORMAT_VERSION = 1;
+
+    /// <summary>
+    /// Range of layout generations this build can read. Both ends are 1 because there has only
+    /// ever been one, and they are separate constants because the day the spawner bumps its
+    /// REPLAY_VERSION for an incompatible change, leaving the minimum behind is what keeps every
+    /// replay recorded before that break in the list instead of silently dropping it.
+    ///
+    /// This says nothing about whether a replay will play back <em>correctly</em>. That depends on
+    /// the game files matching, which is <see cref="ReplayFileHashes"/>'s job, and a replay can be
+    /// a perfectly readable version 1 file and still diverge because the rules moved.
+    /// </summary>
+    private const uint MIN_SUPPORTED_REPLAY_FORMAT_VERSION = 1;
+    private const uint MAX_SUPPORTED_REPLAY_FORMAT_VERSION = 1;
 
     /// <summary>
     /// The spawner embeds spawn.ini and spawnmap.ini whole, so these are bounded by the size of
@@ -31,20 +58,41 @@ public class ReplayGame
     private const uint MAX_EMBEDDED_FILE_SIZE = 32 * 1024 * 1024;
 
     // Replay header layout, written by the spawner. Both sides have to change together; see
-    // docs/replay-format.md in the spawner repository.
-    private const int HEADER_SIZE = 1384;
+    // docs/replay-format.md in the spawner repository, where every offset below is also pinned by
+    // a static_assert in ReplayFormat.h.
+
+    /// <summary>
+    /// Magic, format version and header size. The only part of the file whose meaning is fixed
+    /// across every version there will ever be, so it is read and checked before anything else is
+    /// assumed to be where this build thinks it is.
+    /// </summary>
+    private const int STABLE_PREFIX_SIZE = 12;
+
+    /// <summary>
+    /// Size of the header as this build knows it. The file's own header may be longer, if it was
+    /// written by a build that appended fields; everything below is still at these offsets, and
+    /// the extra bytes are skipped by seeking to the header size the file declares.
+    /// </summary>
+    private const int KNOWN_HEADER_SIZE = 1452;
+
+    /// <summary>Refuses an absurd declared header size before it becomes an allocation.</summary>
+    private const uint MAX_HEADER_SIZE = 64 * 1024;
+
     private const int OFFSET_MAGIC = 0;
     private const int OFFSET_FORMAT_VERSION = 4;
-    private const int OFFSET_MAP_NAME = 8;
+    private const int OFFSET_HEADER_SIZE = 8;
+    private const int OFFSET_MAP_NAME = 12;
     private const int LENGTH_MAP_NAME = 260;
-    private const int OFFSET_GAME_CLIENT_VERSION = 272;
+    private const int OFFSET_SPAWNER_VERSION = 272;
+    private const int LENGTH_SPAWNER_VERSION = 4;
+    private const int OFFSET_GAME_CLIENT_VERSION = 276;
     private const int LENGTH_GAME_CLIENT_VERSION = 64;
-    private const int OFFSET_SPAWN_INI_SIZE = 1356;
-    private const int OFFSET_SPAWN_MAP_SIZE = 1360;
-    private const int OFFSET_RECORDED_GAME_SPEED = 1364;
-    private const int OFFSET_RECORDED_UNIX_TIME = 1368;
-    private const int OFFSET_TOTAL_FRAMES = 1376;
-    private const int OFFSET_FLAGS = 1380;
+    private const int OFFSET_SPAWN_INI_SIZE = 1360;
+    private const int OFFSET_SPAWN_MAP_SIZE = 1364;
+    private const int OFFSET_RECORDED_GAME_SPEED = 1368;
+    private const int OFFSET_RECORDED_UNIX_TIME = 1372;
+    private const int OFFSET_TOTAL_FRAMES = 1380;
+    private const int OFFSET_FLAGS = 1384;
 
     /// <summary>Set by the spawner only once a recording has been closed cleanly.</summary>
     private const uint HEADER_FLAG_CLEAN_SHUTDOWN = 1;
@@ -59,10 +107,29 @@ public class ReplayGame
     public string GUIName { get; private set; } = string.Empty;
 
     /// <summary>
+    /// Whether this build can play the replay at all. Anything other than
+    /// <see cref="ReplayStatus.Playable"/> leaves most of the metadata below unset, because the
+    /// offsets it lives at are only meaningful for a known layout generation.
+    /// </summary>
+    public ReplayStatus Status { get; private set; } = ReplayStatus.Playable;
+
+    public bool IsPlayable => Status == ReplayStatus.Playable;
+
+    /// <summary>The replay's on-disk layout generation, from the header.</summary>
+    public uint FormatVersion { get; private set; }
+
+    /// <summary>
     /// The game package the recording player was running, e.g. "YR 9.3.1". Empty when the
     /// recording client did not report one.
     /// </summary>
     public string GameClientVersion { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Build of the spawner that recorded this replay, e.g. "0.0.0.16". The spawner stamps its own
+    /// compiled-in version unless spawn.ini overrides it, so this identifies the DLL that produced
+    /// the file - which is the first thing worth knowing when a replay will not play.
+    /// </summary>
+    public string SpawnerVersion { get; private set; } = string.Empty;
 
     /// <summary>The lobby's game mode name, e.g. "Battle".</summary>
     public string UIGameMode { get; private set; } = string.Empty;
@@ -103,6 +170,13 @@ public class ReplayGame
     private uint spawnMapSize;
 
     /// <summary>
+    /// Header size as the file declares it, which is where the embedded spawn.ini starts. Equal to
+    /// <see cref="KNOWN_HEADER_SIZE"/> for anything this build recorded, and larger for a recording
+    /// from a build that appended header fields.
+    /// </summary>
+    private uint headerSize;
+
+    /// <summary>
     /// Reads and sets the replay's metadata and returns true if successful.
     /// </summary>
     public bool ParseInfo()
@@ -119,24 +193,55 @@ public class ReplayGame
 
             using FileStream stream = replayFileInfo.Open(FileMode.Open, FileAccess.Read);
 
-            byte[] header = new byte[HEADER_SIZE];
-            if (stream.Length < HEADER_SIZE || !TryReadExactly(stream, header, HEADER_SIZE))
+            // The stable prefix first, and nothing beyond it assumed until the version it carries
+            // has been checked. A newer replay may lay the rest of its header out differently.
+            byte[] prefix = new byte[STABLE_PREFIX_SIZE];
+            if (stream.Length < STABLE_PREFIX_SIZE || !TryReadExactly(stream, prefix, STABLE_PREFIX_SIZE))
             {
                 Logger.Log("Replay file is too small to contain a header: " + FileName);
                 return false;
             }
 
-            uint magic = ReadUInt32(header, OFFSET_MAGIC);
+            uint magic = ReadUInt32(prefix, OFFSET_MAGIC);
             if (magic != REPLAY_MAGIC)
             {
                 Logger.Log($"Invalid replay file magic number: 0x{magic:X8} (expected 0x{REPLAY_MAGIC:X8})");
                 return false;
             }
 
-            uint formatVersion = ReadUInt32(header, OFFSET_FORMAT_VERSION);
-            if (formatVersion != SUPPORTED_REPLAY_FORMAT_VERSION)
+            FormatVersion = ReadUInt32(prefix, OFFSET_FORMAT_VERSION);
+            headerSize = ReadUInt32(prefix, OFFSET_HEADER_SIZE);
+
+            if (FormatVersion < MIN_SUPPORTED_REPLAY_FORMAT_VERSION
+                || FormatVersion > MAX_SUPPORTED_REPLAY_FORMAT_VERSION)
             {
-                Logger.Log("Unsupported replay version: " + formatVersion);
+                Logger.Log($"Replay {FileName} is format version {FormatVersion}; this build reads " +
+                    $"{MIN_SUPPORTED_REPLAY_FORMAT_VERSION} to {MAX_SUPPORTED_REPLAY_FORMAT_VERSION}.");
+
+                // Listed, not dropped. Nothing past the prefix can be trusted at an unknown
+                // version, so it is described by the only things that do not depend on the layout.
+                Status = ReplayStatus.UnsupportedVersion;
+                GUIName = Path.GetFileNameWithoutExtension(FileName);
+                RecordedAt = replayFileInfo.LastWriteTime;
+                return true;
+            }
+
+            // Shorter than this build's header means fields it reads are absent. Longer is the case
+            // HeaderSize exists for: a later build appended to the header, everything this one knows
+            // is still at the offsets below, and the seek past it lands on the spawn.ini regardless.
+            if (headerSize < KNOWN_HEADER_SIZE || headerSize > MAX_HEADER_SIZE)
+            {
+                Logger.Log($"Replay {FileName} declares an unusable header size of {headerSize}.");
+                return false;
+            }
+
+            byte[] header = new byte[KNOWN_HEADER_SIZE];
+            Array.Copy(prefix, header, STABLE_PREFIX_SIZE);
+
+            if (stream.Length < KNOWN_HEADER_SIZE
+                || !TryReadExactly(stream, header, KNOWN_HEADER_SIZE - STABLE_PREFIX_SIZE, STABLE_PREFIX_SIZE))
+            {
+                Logger.Log("Replay file is too small to contain a header: " + FileName);
                 return false;
             }
 
@@ -151,6 +256,7 @@ public class ReplayGame
 
             string mapName = DecodeCString(header, OFFSET_MAP_NAME, LENGTH_MAP_NAME);
             GameClientVersion = DecodeCString(header, OFFSET_GAME_CLIENT_VERSION, LENGTH_GAME_CLIENT_VERSION);
+            SpawnerVersion = DecodeVersion(header, OFFSET_SPAWNER_VERSION, LENGTH_SPAWNER_VERSION);
 
             RecordedAt = FromUnixTime(ReadUInt64(header, OFFSET_RECORDED_UNIX_TIME), replayFileInfo.LastWriteTime);
 
@@ -166,6 +272,10 @@ public class ReplayGame
             Duration = IsComplete
                 ? TimeSpan.FromSeconds(TotalFrames / (double)FramesPerSecond)
                 : TimeSpan.Zero;
+
+            // By the header's declared size rather than this build's, so a header that grew in a
+            // later version is stepped over instead of being read as the start of the spawn.ini.
+            stream.Seek(headerSize, SeekOrigin.Begin);
 
             string? spawnIniContent = ReadText(stream, spawnIniSize);
 
@@ -200,13 +310,13 @@ public class ReplayGame
         spawnIni = string.Empty;
         spawnMap = Array.Empty<byte>();
 
-        if (spawnIniSize == 0 || spawnMapSize == 0)
+        if (!IsPlayable || spawnIniSize == 0 || spawnMapSize == 0)
             return false;
 
         try
         {
             using FileStream stream = ReplayManager.GetFile(FileName).Open(FileMode.Open, FileAccess.Read);
-            stream.Seek(HEADER_SIZE, SeekOrigin.Begin);
+            stream.Seek(headerSize, SeekOrigin.Begin);
 
             string? readSpawnIni = ReadText(stream, spawnIniSize);
             byte[]? readSpawnMap = ReadBytes(stream, spawnMapSize);
@@ -297,7 +407,7 @@ public class ReplayGame
         if (spawnIniSize > MAX_EMBEDDED_FILE_SIZE || spawnMapSize > MAX_EMBEDDED_FILE_SIZE)
             return false;
 
-        return HEADER_SIZE + (long)spawnIniSize + spawnMapSize <= fileLength;
+        return headerSize + (long)spawnIniSize + spawnMapSize <= fileLength;
     }
 
     /// <summary>
@@ -324,11 +434,18 @@ public class ReplayGame
     }
 
     private static bool TryReadExactly(Stream stream, byte[] buffer, int count)
+        => TryReadExactly(stream, buffer, count, 0);
+
+    /// <summary>
+    /// Reads <paramref name="count"/> bytes into <paramref name="buffer"/> starting at
+    /// <paramref name="bufferOffset"/>, so a partly filled buffer can be topped up.
+    /// </summary>
+    private static bool TryReadExactly(Stream stream, byte[] buffer, int count, int bufferOffset)
     {
         int offset = 0;
         while (offset < count)
         {
-            int read = stream.Read(buffer, offset, count - offset);
+            int read = stream.Read(buffer, bufferOffset + offset, count - offset);
             if (read <= 0)
                 return false;
 
@@ -357,6 +474,26 @@ public class ReplayGame
         {
             return fallback;
         }
+    }
+
+    /// <summary>
+    /// Reads a run of version bytes as a dotted string, e.g. "0.0.0.16". All-zero reads as empty:
+    /// the spawner writes its compiled-in version, so zero means the field was never filled in
+    /// rather than that the version really is 0.0.0.0.
+    /// </summary>
+    private static string DecodeVersion(byte[] bytes, int offset, int length)
+    {
+        var parts = new string[length];
+        bool anyNonZero = false;
+
+        for (int i = 0; i < length; i++)
+        {
+            byte value = bytes[offset + i];
+            anyNonZero |= value != 0;
+            parts[i] = value.ToString();
+        }
+
+        return anyNonZero ? string.Join(".", parts) : string.Empty;
     }
 
     private static string DecodeCString(byte[] bytes, int offset, int length)
