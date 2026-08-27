@@ -23,11 +23,6 @@ public class LocalGameLobbyCheckBox : GameSessionCheckBox
     /// </summary>
     public string? UserSettingKey { get; private set; }
 
-    /// <summary>
-    /// When checked, writes ForceMultiplayer=true and switches compatible drop-down labels.
-    /// </summary>
-    public bool ForcesMultiplayerSession { get; private set; }
-
     public override void Initialize()
     {
         // Register with the game lobby that owns us, so local options stay out of
@@ -55,9 +50,6 @@ public class LocalGameLobbyCheckBox : GameSessionCheckBox
         {
             case "UserSettingKey":
                 UserSettingKey = value;
-                return;
-            case "ForcesMultiplayerSession":
-                ForcesMultiplayerSession = Conversions.BooleanFromString(value, false);
                 return;
         }
 

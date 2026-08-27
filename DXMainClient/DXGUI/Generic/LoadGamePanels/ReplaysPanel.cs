@@ -208,19 +208,41 @@ public class ReplaysPanel : LoadGamePanel
     }
 
     /// <summary>
-    /// Adds the playback speed values accepted by the spawner.
+    /// Adds the playback rates the spawner's speed controls step through, plus the default of
+    /// watching at whatever speed the game was recorded at. The same list either way: how fast the
+    /// viewer watches has nothing to do with whether the recording was a skirmish or a multiplayer
+    /// game, which is what the old skirmish-only MAX entry was really about.
     /// </summary>
     private void PopulateGameSpeedDropDown()
     {
-        for (int i = 0; i <= ReplayGame.MAX_GAME_SPEED_INDEX; i++)
+        ddGameSpeed.AddItem("As recorded".L10N("Client:Main:ReplayPlaybackSpeedAsRecorded"));
+
+        foreach (int fps in ReplayGame.PlaybackSpeedLadder)
         {
-            ddGameSpeed.AddItem(string.Format("{0} FPS".L10N("Client:Main:ReplayPlaybackSpeedItem"),
-                ReplayGame.GetFramesPerSecond(i)));
+            ddGameSpeed.AddItem(string.Format(
+                "{0} FPS".L10N("Client:Main:ReplayPlaybackSpeedItem"), fps));
         }
 
-        int stored = UserINISettings.Instance.ReplayPlaybackGameSpeed;
-        ddGameSpeed.SelectedIndex = stored >= 0 && stored <= ReplayGame.MAX_GAME_SPEED_INDEX ? stored : 0;
+        // Stored as the rate itself rather than a position in the list, so a ladder that grows a
+        // rung later does not silently change what a returning user had selected.
+        int storedFPS = UserINISettings.Instance.ReplayPlaybackGameSpeed;
+        int ladderIndex = Array.IndexOf(ReplayGame.PlaybackSpeedLadder, storedFPS);
+        ddGameSpeed.SelectedIndex = ladderIndex >= 0 ? ladderIndex + 1 : 0;
         ddGameSpeed.SelectedIndexChanged += PlaybackSetting_Changed;
+    }
+
+    /// <summary>
+    /// The selected playback rate in frames per second, or 0 for "as recorded".
+    /// </summary>
+    private int SelectedPlaybackFPS
+    {
+        get
+        {
+            int index = ddGameSpeed.SelectedIndex - 1;
+            return index >= 0 && index < ReplayGame.PlaybackSpeedLadder.Length
+                ? ReplayGame.PlaybackSpeedLadder[index]
+                : 0;
+        }
     }
 
     private void PlaybackSetting_Changed(object? sender, EventArgs e)
@@ -230,7 +252,7 @@ public class ReplaysPanel : LoadGamePanel
         UserINISettings.Instance.ReplayPlaybackLockedViewport.Value = chkLockedViewport.Checked;
         UserINISettings.Instance.ReplayPlaybackSelectUnits.Value = chkSelectUnits.Checked;
         UserINISettings.Instance.ReplayPlaybackShowChatAndBeacons.Value = chkShowChatAndBeacons.Checked;
-        UserINISettings.Instance.ReplayPlaybackGameSpeed.Value = ddGameSpeed.SelectedIndex;
+        UserINISettings.Instance.ReplayPlaybackGameSpeed.Value = SelectedPlaybackFPS;
 
         UserINISettings.Instance.SaveSettings();
     }
@@ -520,7 +542,7 @@ public class ReplaysPanel : LoadGamePanel
 
         // Its own key rather than GameSpeed: the spawner pins the simulation to the speed the game
         // was recorded at, and this only controls how fast playback is paced.
-        spawnIni.SetIntValue("Settings", "ReplayPlaybackSpeed", ddGameSpeed.SelectedIndex);
+        spawnIni.SetIntValue("Settings", "ReplayPlaybackSpeed", SelectedPlaybackFPS);
 
         spawnIni.SetBooleanValue("Settings", "ReplayShroudEnabled", chkShroudEnabled.Checked);
         spawnIni.SetBooleanValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked);
@@ -546,7 +568,11 @@ public class ReplaysPanel : LoadGamePanel
         if (spawnMapIniFile.Exists)
             spawnMapIniFile.Delete();
 
-        File.WriteAllBytes(spawnMapIniFile.FullName, spawnMapContent);
+        // A campaign recorded without CopyMissionsToSpawnmapINI has no embedded map - the mission
+        // is loaded by name out of the game's own mixes instead - so leave the file deleted
+        // rather than writing a zero byte one for the spawner to trip over.
+        if (spawnMapContent.Length > 0)
+            File.WriteAllBytes(spawnMapIniFile.FullName, spawnMapContent);
 
         Logger.Log("Extracted spawn files from replay successfully");
 

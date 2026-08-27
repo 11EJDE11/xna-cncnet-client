@@ -16,6 +16,13 @@ public class CampaignCheckBox : GameSessionCheckBox
     
     public bool ResetToDefaultOnGameExit { get; private set; }
 
+    /// <summary>
+    /// Key in the user's [LocalGameOptions] settings that remembers this option across
+    /// sessions. Deliberately the same store the game lobbies' LocalGameLobbyCheckBox uses, so
+    /// an option offered in both - Record Replay - stays in step wherever it is toggled.
+    /// </summary>
+    public string UserSettingKey { get; private set; }
+
     public override void Initialize()
     {
         // Find the campaign selector that this control belongs to and register ourselves as a game option.
@@ -37,12 +44,36 @@ public class CampaignCheckBox : GameSessionCheckBox
         }
 
         base.Initialize();
+
+        LoadPersistedValue();
+        CheckedChanged += (_, _) => PersistValue();
+    }
+
+    private void PersistValue()
+    {
+        if (string.IsNullOrWhiteSpace(UserSettingKey))
+            return;
+
+        UserINISettings.Instance.SetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, Checked);
+        UserINISettings.Instance.SaveSettings();
+    }
+
+    private void LoadPersistedValue()
+    {
+        if (string.IsNullOrWhiteSpace(UserSettingKey))
+            return;
+
+        Checked = UserINISettings.Instance.GetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, Checked);
     }
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
         switch (key)
         {
+            case "UserSettingKey":
+                UserSettingKey = value;
+                return;
+
             case "ResetToDefaultOnGameExit":
                 ResetToDefaultOnGameExit = Conversions.BooleanFromString(value, false);
                 return;

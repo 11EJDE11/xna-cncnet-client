@@ -389,33 +389,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             DropDowns.ForEach(dd => dd.SelectedIndexChanged += Dropdown_SelectedIndexChanged);
 
             LocalCheckBoxes.ForEach(chk => chk.CheckedChanged += LocalCheckBox_CheckedChanged);
-            RefreshForcedMultiplayerLabels();
 
             InitializeGameOptionPresetUI();
         }
 
-        /// <summary>
-        /// Whether a local option forces spawn.ini into multiplayer mode.
-        /// </summary>
-        protected bool IsMultiplayerSessionForced
-            => LocalCheckBoxes.Any(chkBox => chkBox.ForcesMultiplayerSession && chkBox.Checked);
-
         private void LocalCheckBox_CheckedChanged(object sender, EventArgs e)
-        {
-            ((LocalGameLobbyCheckBox)sender).PersistValue();
-            RefreshForcedMultiplayerLabels();
-        }
-
-        /// <summary>
-        /// Applies alternate labels for forced multiplayer mode without changing selected values.
-        /// </summary>
-        private void RefreshForcedMultiplayerLabels()
-        {
-            bool forced = IsMultiplayerSessionForced;
-
-            foreach (GameLobbyDropDown dropDown in DropDowns)
-                dropDown.ApplyForcedMultiplayerLabels(forced);
-        }
+            => ((LocalGameLobbyCheckBox)sender).PersistValue();
 
         /// <summary>
         /// Until the GUICreator can handle typed classes, this must remain manually done.
@@ -1755,9 +1734,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             foreach (LocalGameLobbyCheckBox chkBox in LocalCheckBoxes)
                 chkBox.ApplySpawnIniCode(spawnIni);
-
-            if (IsMultiplayerSessionForced)
-                spawnIni.SetBooleanValue("Settings", "ForceMultiplayer", true);
 
             foreach (GameLobbyDropDown dd in DropDowns)
                 dd.ApplySpawnIniCode(spawnIni);

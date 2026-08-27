@@ -482,6 +482,10 @@ namespace DTAClient.DXGUI.Campaign
             spawnIniSettings.AddKey("CustomLoadScreen", LoadingScreenController.GetLoadScreenName(mission.Side.ToString()));
 
             spawnIniSettings.AddKey("IsSinglePlayer", "Yes");
+            // The mission map carries no [Basic] Name, so without this the only name a replay
+            // of a campaign could show is the scenario file - "ALL02S.MAP". Written under the
+            // same key the game lobbies use for a map name.
+            spawnIniSettings.AddKey("UIMapName", mission.UntranslatedGUIName);
             spawnIniSettings.AddKey("SidebarHack", ClientConfiguration.Instance.SidebarHack.ToString(CultureInfo.InvariantCulture));
             spawnIniSettings.AddKey("Side", mission.Side.ToString(CultureInfo.InvariantCulture));
             spawnIniSettings.AddKey("BuildOffAlly", mission.BuildOffAlly.ToString(CultureInfo.InvariantCulture));
@@ -517,6 +521,11 @@ namespace DTAClient.DXGUI.Campaign
                         gameOptionsIni.GetStringValue("CampaignForcedSpawnIniOptions", key, String.Empty));
                 }
             }
+
+            // EnableReplayRecording is written by the Record Replay check box above, the same
+            // way the game lobbies write it. This fills in the rest, and does nothing when the
+            // key is absent or false.
+            ReplayManager.PrepareRecording(spawnIni, mission.UntranslatedGUIName);
 
             spawnIni.WriteIniFile();
 
