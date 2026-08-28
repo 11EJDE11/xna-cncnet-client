@@ -6,7 +6,7 @@ Breaking changes are not covered here; see [Migration.md](Migration.md) instead.
 
 ## 2.13.5
 
-- Replay recording and playback are now supported for games whose spawner can record them. Set `ReplaySupport=true` in `ClientDefinitions.ini` to add a `Replays` tab to the Load Game window and a `Storage` tab to the options window, and add a `LocalGameLobbyCheckBox` to `GameLobbyBase.ini` to let players turn recording on. See `ReplaySupport` and `LocalGameLobbyCheckBox` in [INISystem.md](INISystem.md).
+- Replay recording and playback are now supported for games whose spawner can record them. Set `ReplaySupport=true` in `ClientDefinitions.ini` to add a `Replays` tab to the Load Game window and a `Storage` tab to the options window, and add a `LocalGameLobbyCheckBox` to `GameLobbyBase.ini` to let players turn recording on. See `ReplaySupport` and `LocalGameLobbyCheckBox` in [INISystem.md](INISystem.md). A campaign recording covers the mission that was launched and stops there: the game chains straight into `[Basic] NextScenario` when a mission is won, and that next mission is played out of the game's own mixes without the client writing a spawn.ini for it, so it cannot be recorded into the same file. Worth saying so wherever the campaign screen's recording check box gets its tooltip.
 
 - `GameSessionDropDown` now supports `ItemsWhenForcedMultiplayer`, an alternate set of display labels used while a lobby option forces the game into a multiplayer session. See [INISystem.md](INISystem.md).
 

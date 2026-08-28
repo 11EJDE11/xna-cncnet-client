@@ -124,12 +124,14 @@ public class ReplaysPanel : LoadGamePanel
 
         chkSpectator = CreateCheckBox(nameof(chkSpectator), 0, firstRowY, 160,
             "Spectator view".L10N("Client:Main:ReplaySpectator"),
-            "Watch as an observer with the spectator sidebar.".L10N("Client:Main:ReplaySpectatorTooltip"),
+            ("Watch from an observer's seat instead of a player's: the whole map is visible, " +
+             "the scoreboard replaces the sidebar, and EVA stays quiet.")
+                .L10N("Client:Main:ReplaySpectatorTooltip"),
             UserINISettings.Instance.ReplayPlaybackSpectator);
 
         chkShroudEnabled = CreateCheckBox(nameof(chkShroudEnabled), 170, firstRowY, 150,
             "Enable shroud".L10N("Client:Main:ReplayShroud"),
-            "Fog of war will be enabled for the player.".L10N("Client:Main:ReplayShroudTooltip"),
+            "Enables or disables the fog of war shrouding.".L10N("Client:Main:ReplayShroudTooltip"),
             UserINISettings.Instance.ReplayPlaybackShroud);
 
         chkLockedViewport = CreateCheckBox(nameof(chkLockedViewport), 330, firstRowY, 150,
@@ -159,8 +161,7 @@ public class ReplaysPanel : LoadGamePanel
         ddGameSpeed = new XNAClientDropDown(WindowManager);
         ddGameSpeed.Name = nameof(ddGameSpeed);
         ddGameSpeed.ClientRectangle = new Rectangle(lblGameSpeed.Right + 8, secondRowY, 110, 21);
-        ddGameSpeed.ToolTipText = ("How fast the replay is played back. The recorded game's own " +
-            "speed is unaffected.").L10N("Client:Main:ReplayPlaybackSpeedTooltip");
+        ddGameSpeed.ToolTipText = ("How fast the replay is played back.").L10N("Client:Main:ReplayPlaybackSpeedTooltip");
         PopulateGameSpeedDropDown();
 
         var lblPerspective = new XNALabel(WindowManager);
@@ -255,10 +256,12 @@ public class ReplaysPanel : LoadGamePanel
         UserINISettings.Instance.ReplayPlaybackGameSpeed.Value = SelectedPlaybackFPS;
 
         UserINISettings.Instance.SaveSettings();
+
+        UpdatePlaybackOptionAvailability();
     }
 
     private void DdPerspective_SelectedIndexChanged(object? sender, EventArgs e)
-        => UpdatePerspectiveDependentOptions();
+        => UpdatePlaybackOptionAvailability();
 
     private void LbReplayList_SelectedIndexChanged(object? sender, EventArgs e)
     {
@@ -297,22 +300,27 @@ public class ReplaysPanel : LoadGamePanel
         if (perspectivePlayers.Count > 0)
             ddPerspective.SelectedIndex = 0;
 
-        // A one-player recording, or none selected: nothing to choose between.
-        ddPerspective.AllowDropDown = perspectivePlayers.Count > 1;
-
         ddPerspective.SelectedIndexChanged += DdPerspective_SelectedIndexChanged;
 
-        UpdatePerspectiveDependentOptions();
+        // Also decides whether there is anything to choose between: a one-player recording, or none
+        // selected, leaves the drop-down closed.
+        UpdatePlaybackOptionAvailability();
     }
 
     /// <summary>
-    /// Both of these reproduce the recording player's own screen - their camera and their
-    /// selection - so the spawner ignores them from anyone else's seat. Grey them out rather than
-    /// leaving ticked boxes that do nothing.
+    /// Greys out the options the spawner is going to ignore, rather than leaving ticked boxes that
+    /// do nothing. Spectating watches from no player's seat at all, which settles the shroud and
+    /// the perspective; watching from someone else's seat settles the camera and the selection,
+    /// since both reproduce the recording player's own screen.
     /// </summary>
-    private void UpdatePerspectiveDependentOptions()
+    private void UpdatePlaybackOptionAvailability()
     {
-        bool watchingRecordingPlayer = SelectedPerspective?.IsRecorder != false;
+        bool spectating = chkSpectator.Checked;
+        bool watchingRecordingPlayer = spectating || SelectedPerspective?.IsRecorder != false;
+
+        // An observer sees the whole map by definition, so the shroud option has nothing to act on.
+        chkShroudEnabled.AllowChecking = !spectating;
+        ddPerspective.AllowDropDown = !spectating && perspectivePlayers.Count > 1;
 
         chkLockedViewport.AllowChecking = watchingRecordingPlayer;
         chkSelectUnits.AllowChecking = watchingRecordingPlayer;
@@ -449,6 +457,12 @@ public class ReplaysPanel : LoadGamePanel
         tbDetails.Text = details.ToString();
     }
 
+    /// <summary>
+    /// The perspective the replay is launched with. Spectating watches from no player's seat, so it
+    /// drops the perspective rather than sitting in someone's chair with an observer's view.
+    /// </summary>
+    private ReplayPlayer? LaunchPerspective => chkSpectator.Checked ? null : SelectedPerspective;
+
     public override void Launch()
     {
         ReplayGame? replay = SelectedReplay;
@@ -476,11 +490,11 @@ public class ReplaysPanel : LoadGamePanel
         List<string> fileMismatches = ReplayFileHashes.FindMismatches(spawnIni);
         if (fileMismatches.Count > 0)
         {
-            ShowMismatchPrompt(replay, spawnIni, spawnMapContent, SelectedPerspective, fileMismatches);
+            ShowMismatchPrompt(replay, spawnIni, spawnMapContent, LaunchPerspective, fileMismatches);
             return;
         }
 
-        StartPlayback(replay, spawnIni, spawnMapContent, SelectedPerspective);
+        StartPlayback(replay, spawnIni, spawnMapContent, LaunchPerspective);
     }
 
     private static IniFile ReadReplaySpawnIni(string spawnIniContent)
