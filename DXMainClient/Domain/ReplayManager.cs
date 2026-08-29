@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -19,15 +20,9 @@ namespace DTAClient.Domain;
 /// </summary>
 public static class ReplayManager
 {
-    /// <summary>
-    /// Cap on the timestamp-plus-map-name part of a recording's file name, leaving room in a
-    /// 260-character path for the game directory, the replay directory and the extension.
-    /// </summary>
+    /// <summary>Maximum timestamp and map name length.</summary>
     private const int MaxRecordingBaseFileNameLength = 180;
 
-    /// <summary>
-    /// Whether the current game package enables replay support.
-    /// </summary>
     public static bool IsSupported => ClientConfiguration.Instance.ReplaySupport;
 
     public static string DirectoryName => ClientConfiguration.Instance.ReplaysDirectory;
@@ -36,11 +31,7 @@ public static class ReplayManager
 
     public static string SearchPattern => "*." + FileExtension;
 
-    /// <summary>
-    /// Identifies the installed game package, e.g. "YR 9.3.1". Written to spawn.ini as
-    /// GameClientVersion so a replay records the version it needs to play back against.
-    /// Not localized - it is recorded into the replay file, not just displayed.
-    /// </summary>
+    /// <summary>Installed game package and version written to replay metadata.</summary>
     public static string GameClientVersion
     {
         get
@@ -57,18 +48,10 @@ public static class ReplayManager
     public static FileInfo GetFile(string fileName)
         => SafePath.GetFile(ProgramConstants.GamePath, DirectoryName, fileName);
 
-    /// <summary>
-    /// A game-directory-relative path for a replay, as written to spawn.ini.
-    /// </summary>
     public static string GetRelativePath(string fileName)
         => SafePath.CombineFilePath(DirectoryName, fileName);
 
-    /// <summary>
-    /// Adds the recording keys to a spawn.ini that already has EnableReplayRecording set. Does
-    /// nothing when the game is not recording, so it is safe to call unconditionally.
-    /// </summary>
-    /// <param name="spawnIni">The spawn.ini being written for this game.</param>
-    /// <param name="mapName">Untranslated map name, used to name the file.</param>
+    /// <summary>Adds replay metadata when recording is enabled in spawn.ini.</summary>
     public static void PrepareRecording(IniFile spawnIni, string mapName)
     {
         if (!IsSupported)
@@ -77,18 +60,15 @@ public static class ReplayManager
         if (!spawnIni.GetBooleanValue("Settings", "EnableReplayRecording", false))
             return;
 
+        spawnIni.SetStringValue("Settings", "GameClientVersion", GameClientVersion);
         spawnIni.SetStringValue("Settings", "ReplayFileOut", BuildRecordingPath(mapName));
 
         ReplayFileHashes.Write(spawnIni);
     }
 
-    /// <summary>
-    /// A game-directory-relative path for a new recording, e.g.
-    /// "Replays\2026-08-20 19-30-05 Heck Freezes Over.yrrp".
-    /// </summary>
     public static string BuildRecordingPath(string mapName)
     {
-        string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
+        string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture);
         string safeMapName = SanitizeForFileName(mapName);
 
         string baseName = string.IsNullOrWhiteSpace(safeMapName)
@@ -99,7 +79,7 @@ public static class ReplayManager
         {
             int length = MaxRecordingBaseFileNameLength;
 
-            // Do not cut a surrogate pair in half; the orphaned half is not a renderable character.
+            // Keep UTF-16 surrogate pairs intact.
             if (char.IsHighSurrogate(baseName[length - 1]))
                 length--;
 
@@ -118,11 +98,7 @@ public static class ReplayManager
         return GetRelativePath(fileName);
     }
 
-    /// <summary>
-    /// Result of parsing one replay file, kept so that listing the directory again does not
-    /// re-read files that have not changed. Unparseable files are remembered too, so they are
-    /// not read and logged over and over.
-    /// </summary>
+    /// <summary>Cached result for a replay file at a specific size and timestamp.</summary>
     private readonly struct CachedReplay
     {
         public CachedReplay(FileInfo file, ReplayGame? replay)
@@ -142,16 +118,10 @@ public static class ReplayManager
             => length == file.Length && lastWriteTicks == file.LastWriteTimeUtc.Ticks;
     }
 
-    /// <summary>
-    /// Only ever read by <see cref="List"/>, which drops entries for files that are gone.
-    /// </summary>
     private static readonly Dictionary<string, CachedReplay> parsedReplays
         = new Dictionary<string, CachedReplay>(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// All parseable replays, newest first. Unreadable files are skipped and logged.
-    /// Files that have not changed since the last call are not read again.
-    /// </summary>
+    /// <summary>Lists parseable replays newest first.</summary>
     public static List<ReplayGame> List()
     {
         var replays = new List<ReplayGame>();
@@ -193,13 +163,6 @@ public static class ReplayManager
             parsedReplays.Remove(name);
     }
 
-    /// <summary>
-    /// Deletes a replay.
-    /// </summary>
-    /// <returns>
-    /// False when the file could not be removed, which normally means the game or another client
-    /// instance still has it open.
-    /// </returns>
     public static bool Delete(ReplayGame replay)
     {
         Logger.Log("Deleting replay " + replay.FileName);
@@ -216,10 +179,7 @@ public static class ReplayManager
         }
     }
 
-    /// <summary>
-    /// Deletes the oldest replays until both the count and the total size are within the
-    /// user's limits. Either limit set to 0 means "no limit".
-    /// </summary>
+    /// <summary>Applies replay count and size limits. Zero means unlimited.</summary>
     public static void Prune()
     {
         if (!IsSupported)
@@ -301,14 +261,13 @@ public static class ReplayManager
         }
     }
 
-    /// <summary>Characters a replay file name may not contain. Built once.</summary>
     private static readonly HashSet<char> invalidFileNameChars = BuildInvalidFileNameChars();
 
     private static HashSet<char> BuildInvalidFileNameChars()
     {
         var invalid = new HashSet<char>(Path.GetInvalidFileNameChars());
 
-        // Explicit: the framework's list is platform-dependent, and replays get shared.
+        // Use Windows restrictions on every platform because replay files are shared.
         foreach (char character in "<>:\"/\\|?*")
             invalid.Add(character);
         for (char character = '\0'; character < ' '; character++)

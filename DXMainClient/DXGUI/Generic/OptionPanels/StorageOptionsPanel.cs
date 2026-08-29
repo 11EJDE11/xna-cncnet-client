@@ -18,10 +18,7 @@ using Rampastring.XNAUI.XNAControls;
 
 namespace DTAClient.DXGUI.Generic.OptionPanels;
 
-/// <summary>
-/// Disk usage limits for client-managed files. Only created when the game supports replays,
-/// which is the only thing this tab caps today.
-/// </summary>
+/// <summary>Configures replay retention limits.</summary>
 class StorageOptionsPanel : XNAOptionsPanel
 {
     private const int TEXT_BOX_WIDTH = 70;
@@ -126,7 +123,6 @@ class StorageOptionsPanel : XNAOptionsPanel
         IniSettings.MaxReplayFolderSizeMB.Value =
             ParseLimit(tbMaxReplayFolderSize.Text, IniSettings.MaxReplayFolderSizeMB.Value, MAX_FOLDER_SIZE_LIMIT_MB);
 
-        // Apply the new limits straight away rather than waiting for the next game to end.
         ReplayManager.Prune();
 
         return restartRequired;
@@ -168,9 +164,6 @@ class StorageOptionsPanel : XNAOptionsPanel
             count, bytes / (1024.0 * 1024.0));
     }
 
-    /// <summary>
-    /// Keeps the previous value when input is invalid.
-    /// </summary>
     private static int ParseLimit(string? text, int previousValue, int maximum)
     {
         if (!int.TryParse(text?.Trim(), out int value) || value < 0)

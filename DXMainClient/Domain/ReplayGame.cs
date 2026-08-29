@@ -18,11 +18,7 @@ public enum ReplayStatus
 {
     Playable,
 
-    /// <summary>
-    /// A valid replay whose layout generation this build does not know - almost always a recording
-    /// from a newer version of the game. Listed rather than hidden: the file is real, the player
-    /// knows they recorded it, and silently omitting it reads as the update having deleted it.
-    /// </summary>
+    /// <summary>A valid replay with an unsupported format version.</summary>
     UnsupportedVersion
 }
 
@@ -32,50 +28,26 @@ public enum ReplayStatus
 /// </summary>
 public class ReplayGame
 {
-    /// <summary>Highest game speed index the engine accepts.</summary>
     public const int MAX_GAME_SPEED_INDEX = 6;
 
-    private const uint REPLAY_MAGIC = 0x4A455259;
+    // 'YRRP' in file order.
+    private const uint REPLAY_MAGIC = 0x50525259;
 
-    /// <summary>
-    /// Range of layout generations this build can read. Both ends are 1 because there has only
-    /// ever been one, and they are separate constants because the day the spawner bumps its
-    /// REPLAY_VERSION for an incompatible change, leaving the minimum behind is what keeps every
-    /// replay recorded before that break in the list instead of silently dropping it.
-    ///
-    /// This says nothing about whether a replay will play back <em>correctly</em>. That depends on
-    /// the game files matching, which is <see cref="ReplayFileHashes"/>'s job, and a replay can be
-    /// a perfectly readable version 1 file and still diverge because the rules moved.
-    /// </summary>
+    // Keep both bounds so future formats can retain support for older replays.
     private const uint MIN_SUPPORTED_REPLAY_FORMAT_VERSION = 1;
     private const uint MAX_SUPPORTED_REPLAY_FORMAT_VERSION = 1;
 
-    /// <summary>
-    /// The spawner embeds spawn.ini and spawnmap.ini whole, so these are bounded by the size of
-    /// two text files. The cap only exists so a corrupt header cannot make us try to allocate
-    /// two gigabytes.
-    /// </summary>
+    // Prevent corrupt headers from causing excessive allocations.
     private const uint MAX_EMBEDDED_FILE_SIZE = 32 * 1024 * 1024;
 
-    // Replay header layout, written by the spawner. Both sides have to change together; see
-    // docs/replay-format.md in the spawner repository, where every offset below is also pinned by
-    // a static_assert in ReplayFormat.h.
+    // Keep this layout in sync with ReplayFormat.h in the spawner repository.
 
-    /// <summary>
-    /// Magic, format version and header size. The only part of the file whose meaning is fixed
-    /// across every version there will ever be, so it is read and checked before anything else is
-    /// assumed to be where this build thinks it is.
-    /// </summary>
+    /// <summary>Size of the version-independent header prefix.</summary>
     private const int STABLE_PREFIX_SIZE = 12;
 
-    /// <summary>
-    /// Size of the header as this build knows it. The file's own header may be longer, if it was
-    /// written by a build that appended fields; everything below is still at these offsets, and
-    /// the extra bytes are skipped by seeking to the header size the file declares.
-    /// </summary>
+    /// <summary>Size of the replay header understood by this build.</summary>
     private const int KNOWN_HEADER_SIZE = 1452;
 
-    /// <summary>Refuses an absurd declared header size before it becomes an allocation.</summary>
     private const uint MAX_HEADER_SIZE = 64 * 1024;
 
     private const int OFFSET_MAGIC = 0;
@@ -94,7 +66,6 @@ public class ReplayGame
     private const int OFFSET_TOTAL_FRAMES = 1380;
     private const int OFFSET_FLAGS = 1384;
 
-    /// <summary>Set by the spawner only once a recording has been closed cleanly.</summary>
     private const uint HEADER_FLAG_CLEAN_SHUTDOWN = 1;
 
     public ReplayGame(string fileName)
@@ -106,29 +77,17 @@ public class ReplayGame
 
     public string GUIName { get; private set; } = string.Empty;
 
-    /// <summary>
-    /// Whether this build can play the replay at all. Anything other than
-    /// <see cref="ReplayStatus.Playable"/> leaves most of the metadata below unset, because the
-    /// offsets it lives at are only meaningful for a known layout generation.
-    /// </summary>
+    /// <summary>Whether this build understands the replay format.</summary>
     public ReplayStatus Status { get; private set; } = ReplayStatus.Playable;
 
     public bool IsPlayable => Status == ReplayStatus.Playable;
 
-    /// <summary>The replay's on-disk layout generation, from the header.</summary>
     public uint FormatVersion { get; private set; }
 
-    /// <summary>
-    /// The game package the recording player was running, e.g. "YR 9.3.1". Empty when the
-    /// recording client did not report one.
-    /// </summary>
+    /// <summary>Game package version recorded in the replay.</summary>
     public string GameClientVersion { get; private set; } = string.Empty;
 
-    /// <summary>
-    /// Build of the spawner that recorded this replay, e.g. "0.0.0.16". The spawner stamps its own
-    /// compiled-in version unless spawn.ini overrides it, so this identifies the DLL that produced
-    /// the file - which is the first thing worth knowing when a replay will not play.
-    /// </summary>
+    /// <summary>Spawner build that created the replay.</summary>
     public string SpawnerVersion { get; private set; } = string.Empty;
 
     /// <summary>The lobby's game mode name, e.g. "Battle".</summary>
@@ -139,15 +98,9 @@ public class ReplayGame
 
     private readonly List<ReplayPlayer> players = new List<ReplayPlayer>();
 
-    /// <summary>
-    /// When the recording started, from the replay header.
-    /// </summary>
     public DateTime RecordedAt { get; private set; }
 
-    /// <summary>
-    /// False when the spawner never got to close the recording, meaning the game crashed or was
-    /// killed while recording and the frame stream is cut short.
-    /// </summary>
+    /// <summary>Whether the spawner closed the recording cleanly.</summary>
     public bool IsComplete { get; private set; }
 
     /// <summary>
@@ -155,30 +108,17 @@ public class ReplayGame
     /// </summary>
     public TimeSpan Duration { get; private set; }
 
-    /// <summary>
-    /// Game frames the recording covers. Zero when <see cref="IsComplete"/> is false, because the
-    /// spawner never got to stamp the real count into the header.
-    /// </summary>
+    /// <summary>Recorded frame count, or zero for an incomplete replay.</summary>
     public uint TotalFrames { get; private set; }
 
-    /// <summary>
-    /// The rate the recorded game ticked at, which playback is pinned to.
-    /// </summary>
     public int FramesPerSecond { get; private set; }
 
     private uint spawnIniSize;
     private uint spawnMapSize;
 
-    /// <summary>
-    /// Header size as the file declares it, which is where the embedded spawn.ini starts. Equal to
-    /// <see cref="KNOWN_HEADER_SIZE"/> for anything this build recorded, and larger for a recording
-    /// from a build that appended header fields.
-    /// </summary>
+    /// <summary>Header size declared by the replay file.</summary>
     private uint headerSize;
 
-    /// <summary>
-    /// Reads and sets the replay's metadata and returns true if successful.
-    /// </summary>
     public bool ParseInfo()
     {
         try
@@ -193,8 +133,7 @@ public class ReplayGame
 
             using FileStream stream = replayFileInfo.Open(FileMode.Open, FileAccess.Read);
 
-            // The stable prefix first, and nothing beyond it assumed until the version it carries
-            // has been checked. A newer replay may lay the rest of its header out differently.
+            // Only the first 12 bytes have a stable layout across format versions.
             byte[] prefix = new byte[STABLE_PREFIX_SIZE];
             if (stream.Length < STABLE_PREFIX_SIZE || !TryReadExactly(stream, prefix, STABLE_PREFIX_SIZE))
             {
@@ -218,17 +157,13 @@ public class ReplayGame
                 Logger.Log($"Replay {FileName} is format version {FormatVersion}; this build reads " +
                     $"{MIN_SUPPORTED_REPLAY_FORMAT_VERSION} to {MAX_SUPPORTED_REPLAY_FORMAT_VERSION}.");
 
-                // Listed, not dropped. Nothing past the prefix can be trusted at an unknown
-                // version, so it is described by the only things that do not depend on the layout.
+                // Keep unsupported replays visible without parsing versioned fields.
                 Status = ReplayStatus.UnsupportedVersion;
                 GUIName = Path.GetFileNameWithoutExtension(FileName);
                 RecordedAt = replayFileInfo.LastWriteTime;
                 return true;
             }
 
-            // Shorter than this build's header means fields it reads are absent. Longer is the case
-            // HeaderSize exists for: a later build appended to the header, everything this one knows
-            // is still at the offsets below, and the seek past it lands on the spawn.ini regardless.
             if (headerSize < KNOWN_HEADER_SIZE || headerSize > MAX_HEADER_SIZE)
             {
                 Logger.Log($"Replay {FileName} declares an unusable header size of {headerSize}.");
@@ -263,8 +198,6 @@ public class ReplayGame
             uint totalFrames = ReadUInt32(header, OFFSET_TOTAL_FRAMES);
             int gameSpeed = (int)Math.Min(ReadUInt32(header, OFFSET_RECORDED_GAME_SPEED), (uint)MAX_GAME_SPEED_INDEX);
 
-            // A recording that died with the game never gets the flag stamped, which is the only
-            // way to tell it apart from one that was quit immediately.
             IsComplete = (ReadUInt32(header, OFFSET_FLAGS) & HEADER_FLAG_CLEAN_SHUTDOWN) != 0;
 
             TotalFrames = IsComplete ? totalFrames : 0;
@@ -273,8 +206,7 @@ public class ReplayGame
                 ? TimeSpan.FromSeconds(TotalFrames / (double)FramesPerSecond)
                 : TimeSpan.Zero;
 
-            // By the header's declared size rather than this build's, so a header that grew in a
-            // later version is stepped over instead of being read as the start of the spawn.ini.
+            // Use the declared size so additive header fields are skipped.
             stream.Seek(headerSize, SeekOrigin.Begin);
 
             string? spawnIniContent = ReadText(stream, spawnIniSize);
@@ -310,8 +242,7 @@ public class ReplayGame
         spawnIni = string.Empty;
         spawnMap = Array.Empty<byte>();
 
-        // spawnMapSize is allowed to be zero: a campaign mission is loaded by name out of the
-        // game's own mixes, so there is no map to embed and none is needed.
+        // Campaign replays can load their map from mix files.
         if (!IsPlayable || spawnIniSize == 0)
             return false;
 
@@ -343,22 +274,11 @@ public class ReplayGame
         }
     }
 
-    /// <summary>
-    /// The playback rates the in-game speed controls step through, in frames per second.
-    /// <para>
-    /// Mirrored by hand from SPEED_LADDER in the spawner's Replay/ReplayControls.h. The two lists
-    /// have to agree: a value picked here is written to spawn.ini as ReplayPlaybackSpeed and used
-    /// as a rate directly, and the in-game speed keys step through the spawner's copy from
-    /// whichever rung it lands on.
-    /// </para>
-    /// </summary>
+    /// <summary>Must match SpeedLadder in the spawner's ReplayControls.h.</summary>
     public static readonly int[] PlaybackSpeedLadder =
         { 10, 12, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 500, 1000, 2000 };
 
-    /// <summary>
-    /// The rate the game ticks at for a given game speed index, matching the spawner's
-    /// GetReplayFPSFromGameSpeed. Used to turn a frame count into a duration.
-    /// </summary>
+    /// <summary>Matches GetReplayFPSFromGameSpeed in the spawner.</summary>
     public static int GetFramesPerSecond(int gameSpeed)
     {
         gameSpeed = Math.Max(0, Math.Min(MAX_GAME_SPEED_INDEX, gameSpeed));
@@ -372,9 +292,6 @@ public class ReplayGame
         return Math.Max(1, 60 / gameSpeed);
     }
 
-    /// <summary>
-    /// Pulls display metadata from the embedded spawn.ini.
-    /// </summary>
     private void ReadEmbeddedSpawnIni(string spawnIniContent)
     {
         using MemoryStream spawnIniStream = new MemoryStream(EncodingExt.UTF8NoBOM.GetBytes(spawnIniContent));
@@ -385,9 +302,7 @@ public class ReplayGame
 
         UIGameMode = spawnIni.GetStringValue("Settings", "UIGameMode", string.Empty);
 
-        // The recording player is always [Settings]; everyone else is [OtherN], in the order the
-        // recording client wrote them. That order is the spawner's player slot order, which is what
-        // a perspective choice is expressed in, so the indices have to be kept as they are found.
+        // Preserve spawn.ini order because ReplayViewPlayer uses these slot indices.
         AddPlayer(spawnIni, "Settings", 0);
 
         for (int otherId = 1; ; otherId++)
@@ -397,10 +312,6 @@ public class ReplayGame
         }
     }
 
-    /// <summary>
-    /// Adds the player in <paramref name="sectionName"/>, if there is one.
-    /// </summary>
-    /// <returns>False when the section names no player, which ends the run of [OtherN] sections.</returns>
     private bool AddPlayer(IniFile spawnIni, string sectionName, int spawnIniIndex)
     {
         string name = spawnIni.GetStringValue(sectionName, "Name", string.Empty);
@@ -424,16 +335,7 @@ public class ReplayGame
         return headerSize + (long)spawnIniSize + spawnMapSize <= fileLength;
     }
 
-    /// <summary>
-    /// Cheap check that the bytes following the header really are the embedded spawn.ini,
-    /// which is the only way to notice that a replay's header layout differs from ours.
-    /// </summary>
-    /// <summary>
-    /// Whether the text looks like an INI file: its first line that is neither blank nor a
-    /// comment opens a section. The leading comment matters - the campaign selector writes a
-    /// "; Generated by CnCNet Client" banner above its first section where the game lobbies do
-    /// not, so requiring a section on the very first line rejected every campaign replay.
-    /// </summary>
+    /// <summary>Checks that the first non-comment line opens an INI section.</summary>
     private static bool StartsWithIniSection(string content)
     {
         if (string.IsNullOrWhiteSpace(content))
@@ -471,10 +373,6 @@ public class ReplayGame
     private static bool TryReadExactly(Stream stream, byte[] buffer, int count)
         => TryReadExactly(stream, buffer, count, 0);
 
-    /// <summary>
-    /// Reads <paramref name="count"/> bytes into <paramref name="buffer"/> starting at
-    /// <paramref name="bufferOffset"/>, so a partly filled buffer can be topped up.
-    /// </summary>
     private static bool TryReadExactly(Stream stream, byte[] buffer, int count, int bufferOffset)
     {
         int offset = 0;
@@ -511,11 +409,7 @@ public class ReplayGame
         }
     }
 
-    /// <summary>
-    /// Reads a run of version bytes as a dotted string, e.g. "0.0.0.16". All-zero reads as empty:
-    /// the spawner writes its compiled-in version, so zero means the field was never filled in
-    /// rather than that the version really is 0.0.0.0.
-    /// </summary>
+    /// <summary>Reads version bytes as a dotted string; all-zero means unspecified.</summary>
     private static string DecodeVersion(byte[] bytes, int offset, int length)
     {
         var parts = new string[length];

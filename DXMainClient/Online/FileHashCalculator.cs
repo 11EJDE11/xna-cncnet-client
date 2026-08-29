@@ -21,10 +21,7 @@ namespace DTAClient.Online
 
         private static readonly IReadOnlyList<string> knownTextFileExtensions = [".txt", ".ini", ".json", ".xml"];
 
-        /// <summary>
-        /// Built-in defaults, replaced by ParseConfigFile when the package's FHCConfig.ini
-        /// supplies a [FilenameList] of its own.
-        /// </summary>
+        /// <summary>Default files used when FHCConfig.ini has no [FilenameList].</summary>
         private string[] fileNamesToCheck = ClientConfiguration.Instance.ClientGameType switch
         {
             ClientType.TS => new string[]
@@ -87,9 +84,7 @@ namespace DTAClient.Online
 
         public FileHashCalculator() => ParseConfigFile();
 
-        /// <summary>
-        /// One file covered by compatibility hashing.
-        /// </summary>
+        /// <summary>A file covered by compatibility hashing.</summary>
         public readonly struct TrackedFile
         {
             public TrackedFile(string relativePath, string fullPath)
@@ -98,16 +93,12 @@ namespace DTAClient.Online
                 FullPath = fullPath;
             }
 
-            /// <summary>Relative path used as the hash identity.</summary>
             public string RelativePath { get; }
 
             public string FullPath { get; }
         }
 
-        /// <summary>
-        /// Files covered by compatibility checks. Fixed-list entries are yielded whether or not
-        /// they exist on disk; callers decide what a missing tracked file means to them.
-        /// </summary>
+        /// <summary>Enumerates configured files and INI directories used by compatibility checks.</summary>
         public IEnumerable<TrackedFile> EnumerateTrackedFiles()
         {
             foreach (string relativePath in fileNamesToCheck)
@@ -218,8 +209,6 @@ namespace DTAClient.Online
 
         private void ParseConfigFile()
         {
-            // Read per instance, not cached: callers construct a new FileHashCalculator every time
-            // precisely so the check reflects the files as they are now.
             IniFile config = new IniFile(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), CONFIGNAME));
             calculateGameExeHash = config.GetBooleanValue("Settings", "CalculateGameExeHash", true);
 
@@ -237,16 +226,9 @@ namespace DTAClient.Online
             fileNamesToCheck = filenames.ToArray();
         }
 
-        /// <summary>
-        /// Relative paths are hash identities, so every builder of one must normalize it the same
-        /// way. Shared with ReplayFileHashes for that reason.
-        /// </summary>
         internal static string NormalizePath(string path) => path.Replace('\\', '/');
 
-        /// <summary>
-        /// Hashes one file. Text files are hashed with normalized line endings.
-        /// Shared with ReplayFileHashes, which must hash identically to be comparable.
-        /// </summary>
+        /// <summary>Hashes a file, normalizing text line endings.</summary>
         internal static string CalculateSHA1ForFile(string path)
         {
             if (string.IsNullOrWhiteSpace(path))

@@ -9,21 +9,11 @@ using Rampastring.Tools;
 
 namespace DTAClient.Domain;
 
-/// <summary>
-/// Per-file hashes of the game files a replay was recorded against, written into its spawn.ini
-/// and compared before playback.
-///
-/// Deliberately not <see cref="FileHashCalculator.GetCompleteHash"/>: that folds in the client
-/// binaries and MPMaps.ini, so every client update or added map would invalidate every replay.
-/// Per-file rather than one hash, so a mismatch can name what differs.
-/// </summary>
+/// <summary>Per-file compatibility hashes stored with a replay.</summary>
 public static class ReplayFileHashes
 {
     public const string SECTION = "ReplayFileHashes";
 
-    /// <summary>
-    /// Writes replay compatibility hashes into spawn.ini.
-    /// </summary>
     public static void Write(IniFile spawnIni)
     {
         SortedDictionary<string, string> hashes = Collect();
@@ -33,7 +23,7 @@ public static class ReplayFileHashes
 
         var section = new IniSection(SECTION);
 
-        // Value is "<relative path>|<sha1>"; a relative path can contain '=' so cannot be the key.
+        // Paths are values because INI keys cannot safely contain '='.
         int index = 0;
         foreach (KeyValuePair<string, string> entry in hashes)
         {
@@ -46,13 +36,7 @@ public static class ReplayFileHashes
         Logger.Log($"ReplayFileHashes: wrote {hashes.Count} file hashes to spawn.ini");
     }
 
-    /// <summary>
-    /// Compares the hashes recorded in a replay's spawn.ini against the local game files.
-    /// Returns a human readable description of each difference, empty when everything matches.
-    ///
-    /// A replay with no [ReplayFileHashes] section cannot be checked, so it returns no
-    /// differences rather than blocking it.
-    /// </summary>
+    /// <summary>Returns differences between recorded and local game files.</summary>
     public static List<string> FindMismatches(IniFile replaySpawnIni)
     {
         var mismatches = new List<string>();
@@ -68,7 +52,7 @@ public static class ReplayFileHashes
         {
             string value = replaySpawnIni.GetStringValue(SECTION, key, string.Empty);
 
-            // Split on the last separator so a path containing '|' cannot corrupt the parse.
+            // Use the last separator so paths can contain '|'.
             int separator = value.LastIndexOf('|');
             if (separator <= 0)
                 continue;
@@ -89,8 +73,6 @@ public static class ReplayFileHashes
             mismatches.Add($"{relativePath}\n    replay: {recordedHash}\n    yours:  {localHash}");
         }
 
-        // Absence is recorded by omission. The file need not have appeared since - the recording
-        // client may just have tracked a shorter list - hence the non-committal wording.
         foreach (string relativePath in local.Keys)
         {
             if (!recordedPaths.Contains(relativePath))
@@ -100,10 +82,6 @@ public static class ReplayFileHashes
         return mismatches;
     }
 
-    /// <summary>
-    /// Hashes every tracked file that exists, keyed by relative path. Missing files are omitted,
-    /// as <see cref="FileHashCalculator"/> does - a one-sided path still shows up as a difference.
-    /// </summary>
     private static SortedDictionary<string, string> Collect()
     {
         var hashes = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);

@@ -40,8 +40,6 @@ namespace DTAClient.DXGUI.Generic
         {
             Name = "OptionsWindow";
 
-            // Storage only exists for games that accumulate files worth capping - today, replays.
-            // The extra tab does not fit the original width, so the window grows by one tab.
             bool showStorageTab = ReplayManager.IsSupported;
 
             ClientRectangle = new Rectangle(0, 0,
@@ -93,7 +91,7 @@ namespace DTAClient.DXGUI.Generic
                 componentsPanel
             };
 
-            // Appended last so the Updater and Components tab indices below stay put.
+            // Keep the existing tab indices unchanged.
             if (showStorageTab)
                 panels.Add(new StorageOptionsPanel(WindowManager, UserINISettings.Instance));
 

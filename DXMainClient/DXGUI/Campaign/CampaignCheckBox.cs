@@ -12,16 +12,12 @@ namespace DTAClient.DXGUI.Campaign;
 
 public class CampaignCheckBox : GameSessionCheckBox
 {
-    public CampaignCheckBox(WindowManager windowManager) : base (windowManager) { }
-    
+    public CampaignCheckBox(WindowManager windowManager) : base(windowManager) { }
+
     public bool ResetToDefaultOnGameExit { get; private set; }
 
-    /// <summary>
-    /// Key in the user's [LocalGameOptions] settings that remembers this option across
-    /// sessions. Deliberately the same store the game lobbies' LocalGameLobbyCheckBox uses, so
-    /// an option offered in both - Record Replay - stays in step wherever it is toggled.
-    /// </summary>
-    public string UserSettingKey { get; private set; }
+    /// <summary>Optional key used to persist this option in [LocalGameOptions].</summary>
+    public string UserSettingKey { get; private set; } = string.Empty;
 
     public override void Initialize()
     {
@@ -82,7 +78,7 @@ public class CampaignCheckBox : GameSessionCheckBox
                 throw new Exception($"Campaign settings can't affect map code if {nameof(ClientConfiguration.Instance.CopyMissionsToSpawnmapINI)} is disabled!\n\n"
                     + $"Offending setting control: {Name}");
         }
-        
+
         base.ParseControlINIAttribute(iniFile, key, value);
     }
 }

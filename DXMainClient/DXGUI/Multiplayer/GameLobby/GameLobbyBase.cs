@@ -94,9 +94,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public List<GameLobbyCheckBox> CheckBoxes { get; } = new();
         public List<GameLobbyDropDown> DropDowns { get; } = new();
 
-        /// <summary>
-        /// Local-only lobby options, kept out of the broadcasted option list.
-        /// </summary>
+        /// <summary>Lobby options that are not broadcast to other players.</summary>
         public List<LocalGameLobbyCheckBox> LocalCheckBoxes { get; } = new();
 
         public List<IGameSessionSetting> GetBroadcastableSettings()
@@ -388,13 +386,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             CheckBoxes.ForEach(chk => chk.CheckedChanged += ChkBox_CheckedChanged);
             DropDowns.ForEach(dd => dd.SelectedIndexChanged += Dropdown_SelectedIndexChanged);
 
-            LocalCheckBoxes.ForEach(chk => chk.CheckedChanged += LocalCheckBox_CheckedChanged);
-
             InitializeGameOptionPresetUI();
         }
-
-        private void LocalCheckBox_CheckedChanged(object sender, EventArgs e)
-            => ((LocalGameLobbyCheckBox)sender).PersistValue();
 
         /// <summary>
         /// Until the GUICreator can handle typed classes, this must remain manually done.
@@ -1681,13 +1674,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 foreach (PlayerInfo pInfo in Players)
                 {
-                    Debug.Assert(pInfo.TeamId == 1, "Co-ops should always set TeamId to 1 before launching the game");
+                    Debug.Assert(pInfo.TeamId == 1, "Co-ops should always set TeamId to 1 before lanching the game");
                     pInfo.TeamId = 1;
                 }
 
                 foreach (PlayerInfo pInfo in AIPlayers)
                 {
-                    Debug.Assert(pInfo.TeamId == 1, "Co-ops should always set TeamId to 1 before launching the game");
+                    Debug.Assert(pInfo.TeamId == 1, "Co-ops should always set TeamId to 1 before lanching the game");
                     pInfo.TeamId = 1;
                 }
             }
@@ -2724,7 +2717,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 if (checkBox.AllowScoring)
                     return Rank.None;
             }
-            
+
             foreach (GameLobbyDropDown dropDown in DropDowns)
             {
                 if (dropDown.AllowScoring)

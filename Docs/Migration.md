@@ -5,12 +5,6 @@ This document lists all the breaking changes and how to address them. Each secti
 > [!NOTE]
 > You should always delete the `Binaries` and `BinariesNET8` folders when updating. See [How to update to latest client version](HowToUpdate.md) guide for a step-by-step process of updating the client binaries in your mod/game package.
 
-## 2.13.5
-
-- The Load Game window's saved game list has moved into a panel. `lbSaveGameList` is no longer a direct child of `GameLoadingWindow`: it now lives inside a `SavedGamesPanel` that fills the window between the tab strip and the button row. The `[lbSaveGameList]` section in `GameLoadingWindow.ini` is still read, but its `$X` and `$Y` are now relative to that panel rather than to the window, so a package that positions the list must subtract the panel's origin - or, better, drop the section and let the panel size the list itself. Position `[SavedGamesPanel]` instead if you need to move the list as a whole.
-
-- With no replay support enabled the window keeps its previous size and its buttons keep their previous positions, but the saved game list is laid out by the panel and lands at `12, 12` sized `Width - 24` by `Height - 59` rather than the previous hardcoded `13, 13, 574, 317`.
-
 ## 2.13.0
 
 - `PlayerExtraOptionsPanel` control in `GameLobbyBase` has been changed from `XNAWindow` to `XNAPanel`. INI file `PlayerExtraOptionsPanel.ini` is no longer parsed for control attributes, and therefore all contents in this file should be appended to `GameLobbyBase.ini`. In addition, the control `chkBoxForceRandomTeams` has been renamed to `chkBoxForceNoTeams`, so please rename the `[chkBoxForceRandomTeams]` section to `[chkBoxForceNoTeams]`.

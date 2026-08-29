@@ -410,6 +410,8 @@ Use this control type for campaign checkboxes in `CampaignSelector.ini`. Inherit
 ```ini
 [SOMECAMPAIGNCHECKBOX]                  ; CampaignCheckBox
 ResetToDefaultOnGameExit=false          ; boolean, reset the checkbox to default value when the game exits.
+UserSettingKey=                         ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
+                                        ;          that remembers this checkbox. Without it the value is not persisted.
 ```
 
 ##### [GameLobbyCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Multiplayer/GameLobby/GameLobbyCheckBox.cs)
@@ -429,9 +431,6 @@ A game lobby checkbox that only affects the local player. It is written to `spaw
 UserSettingKey=                            ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
                                            ;          that remembers this checkbox. Without it the value is not
                                            ;          persisted.
-ForcesMultiplayerSession=false             ; boolean, writes `ForceMultiplayer=true` to `spawn.ini` when checked, and
-                                           ;          switches drop-downs over to their `ItemsWhenForcedMultiplayer`
-                                           ;          labels.
 ```
 
 `Checked` is the default for a fresh install; once the player has changed the checkbox, their own choice is used instead.
@@ -448,13 +447,6 @@ Items=                                     ; comma-separated strings,
                                            ;          comma-separated list of item values for the dropdown.
 ItemLabels=                                ; comma-separated strings,
                                            ;          optional comma-separated list of display labels for items.
-ItemsWhenForcedMultiplayer=                ; comma-separated strings,
-                                           ;          optional alternate display labels, shown while a
-                                           ;          `LocalGameLobbyCheckBox` with `ForcesMultiplayerSession=true` is
-                                           ;          checked. Must have exactly as many entries as `Items`; only the
-                                           ;          text changes, the selected index written to `spawn.ini` does not.
-                                           ;          Use it where the same index means different things in a skirmish
-                                           ;          and in a multiplayer session, such as game speed.
 SpawnIniOption=                            ; string,  spawn INI option to set based on selected item.
 DefaultIndex=0                             ; integer, default selected item index.
 DataWriteMode=STRING                       ; enum (STRING | INDEX | BOOLEAN | MAPCODE),
@@ -876,22 +868,27 @@ AllowedCustomGameModes=Standard,Custom Map ; comma-separated list of strings,
 
 ```ini
 [Settings]
-ReplaySupport=false            ; boolean, enables replay recording and the Replays tab in the Load Game window.
-                               ; Requires a spawner that supports recording, so it is off by default.
+ReplaySupport=false            ; boolean, enables replay recording and playback for packages with a compatible spawner.
+                               ; The current implementation targets RA2/YR and is off by default.
 ReplaysDirectory=Replays       ; string,  directory, relative to the game directory, that replays are
                                ; recorded into and listed from.
 ReplayFileExtension=yrrp       ; string,  file extension of replay files, without a leading dot.
 ```
 
 With `ReplaySupport=true` the client also gains a `Storage` tab in the options window, where the
-player caps how many replays are kept and how large the replay directory may grow. See
-[LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for the lobby option that turns recording on.
+player caps how many replays are kept and how large the replay directory may grow. Use a
+[LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for lobby recording and a
+[CampaignCheckBox](#CampaignCheckBox) for campaign recording.
+
+The Load Game window keeps its existing controls and adds `tabControl`, `ReplaysPanel`, and
+`btnOpenReplayFolder`. These controls and the replay panel's children can be positioned in
+`GameLoadingWindow.ini` like the existing saved-game controls.
 
 > [!NOTE]
 > The extra tab does not fit the options window's default width, so the window is widened by one
 > tab's worth when `ReplaySupport=true`. If your package sets `$Width` for `[OptionsWindow]` in its
 > theme INI, that value wins and the `Storage` tab will be clipped - widen it there by
-> `BUTTON_WIDTH_92` (92) plus the tab spacing as well.
+> `BUTTON_WIDTH_92` (92).
 
 ## Game Modes
 

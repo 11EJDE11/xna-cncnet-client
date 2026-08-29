@@ -160,8 +160,6 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
         set => SelectedIndex = value;
     }
 
-    /// <summary>
-
     public void ApplySpawnIniCode(IniFile spawnIni)
     {
         if (!AffectsSpawnIni || SelectedIndex < 0 || SelectedIndex >= Items.Count)
@@ -203,7 +201,7 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
         // FIXME there's a discrepancy with how base XNAUI handles this
         // it doesn't set handled if changing the setting is not allowed
         inputEventArgs.Handled = true;
-            
+
         if (!AllowDropDown)
             return;
 

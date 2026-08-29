@@ -10,23 +10,17 @@ using Rampastring.XNAUI.XNAControls;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby;
 
-/// <summary>
-/// A lobby option that only affects the local player. Written to spawn.ini and remembered in
-/// the user's settings, but never sent in game option messages.
-/// </summary>
+/// <summary>A persisted lobby option that is not broadcast to other players.</summary>
 public class LocalGameLobbyCheckBox : GameSessionCheckBox
 {
     public LocalGameLobbyCheckBox(WindowManager windowManager) : base(windowManager) { }
 
-    /// <summary>
-    /// Key in the user's [LocalGameOptions] settings that remembers this option.
-    /// </summary>
+    /// <summary>Optional key used to persist this option in [LocalGameOptions].</summary>
     public string? UserSettingKey { get; private set; }
 
     public override void Initialize()
     {
-        // Register with the game lobby that owns us, so local options stay out of
-        // GameLobbyBase.CheckBoxes and therefore out of the broadcasted option list.
+        // Register separately from broadcast game options.
         XNAControl parent = Parent;
         while (parent != null)
         {
@@ -42,6 +36,7 @@ public class LocalGameLobbyCheckBox : GameSessionCheckBox
         base.Initialize();
 
         LoadPersistedValue();
+        CheckedChanged += (_, _) => PersistValue();
     }
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
@@ -56,7 +51,7 @@ public class LocalGameLobbyCheckBox : GameSessionCheckBox
         base.ParseControlINIAttribute(iniFile, key, value);
     }
 
-    public void PersistValue()
+    private void PersistValue()
     {
         if (string.IsNullOrWhiteSpace(UserSettingKey))
             return;

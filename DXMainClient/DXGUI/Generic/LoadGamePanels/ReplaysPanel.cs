@@ -25,9 +25,8 @@ namespace DTAClient.DXGUI.Generic.LoadGamePanels;
 /// <summary>
 /// Lists recorded replays and launches playback.
 /// </summary>
-public class ReplaysPanel : LoadGamePanel
+public class ReplaysPanel : XNAPanel
 {
-    /// <summary>Files named in a mismatch dialog before it starts summarising.</summary>
     private const int MAX_LISTED_MISMATCHES = 4;
 
     private const int LIST_HEIGHT = 240;
@@ -35,11 +34,9 @@ public class ReplaysPanel : LoadGamePanel
     private const int ROW_SPACING = 24;
     private const int CHECK_BOX_HEIGHT = 20;
 
-    /// <summary>Left edge of the perspective picker, clear of the playback speed drop-down.</summary>
     private const int PERSPECTIVE_X = 350;
     private const int PERSPECTIVE_WIDTH = 200;
 
-    /// <summary>Combined width of the fixed-width columns; the replay name gets the rest.</summary>
     private const int FIXED_COLUMNS_WIDTH = 320;
 
     public ReplaysPanel(WindowManager windowManager, DiscordHandler discordHandler) : base(windowManager)
@@ -60,33 +57,25 @@ public class ReplaysPanel : LoadGamePanel
     private XNAClientDropDown ddGameSpeed = null!;
     private XNAClientDropDown ddPerspective = null!;
 
-    private LoadGamePanelAction[]? extraActions;
-
     private List<ReplayGame> replays = new List<ReplayGame>();
 
-    /// <summary>Backs <see cref="ddPerspective"/>; its items are these players, in order.</summary>
     private IReadOnlyList<ReplayPlayer> perspectivePlayers = Array.Empty<ReplayPlayer>();
 
-    public override string TabTitle => "Replays".L10N("Client:Main:TabReplays");
+    public event EventHandler? SelectionChanged;
 
-    public override string LaunchButtonText => "Watch".L10N("Client:Main:ButtonWatchReplay");
+    public event EventHandler? LaunchRequested;
 
-    public override bool CanLaunch => SelectedReplay?.IsPlayable == true;
+    public string LaunchButtonText => "Watch".L10N("Client:Main:ButtonWatchReplay");
 
-    public override bool CanDelete => lbReplayList.SelectedIndex > -1;
+    public bool CanLaunch => SelectedReplay?.IsPlayable == true;
 
-    public override IReadOnlyList<LoadGamePanelAction> ExtraActions => extraActions ??= new[]
-    {
-        new LoadGamePanelAction("btnOpenReplayFolder",
-            "Open Folder".L10N("Client:Main:ReplayOpenFolder"), ReplayManager.OpenDirectory)
-    };
+    public bool CanDelete => lbReplayList.SelectedIndex > -1;
 
     private ReplayGame? SelectedReplay
         => lbReplayList.SelectedIndex > -1 && lbReplayList.SelectedIndex < replays.Count
             ? replays[lbReplayList.SelectedIndex]
             : null;
 
-    /// <summary>The player whose screen playback will reproduce, or null when nothing is selected.</summary>
     private ReplayPlayer? SelectedPerspective
         => ddPerspective.SelectedIndex > -1 && ddPerspective.SelectedIndex < perspectivePlayers.Count
             ? perspectivePlayers[ddPerspective.SelectedIndex]
@@ -151,7 +140,6 @@ public class ReplaysPanel : LoadGamePanel
             "Replays chat messages, beacons and taunts.".L10N("Client:Main:ReplayShowChatAndBeaconsTooltip"),
             UserINISettings.Instance.ReplayPlaybackShowChatAndBeacons);
 
-        // XNALabel sizes itself when Text is set.
         var lblGameSpeed = new XNALabel(WindowManager);
         lblGameSpeed.Name = nameof(lblGameSpeed);
         lblGameSpeed.Text = "Speed:".L10N("Client:Main:ReplayPlaybackSpeed");
@@ -208,12 +196,6 @@ public class ReplaysPanel : LoadGamePanel
         return checkBox;
     }
 
-    /// <summary>
-    /// Adds the playback rates the spawner's speed controls step through, plus the default of
-    /// watching at whatever speed the game was recorded at. The same list either way: how fast the
-    /// viewer watches has nothing to do with whether the recording was a skirmish or a multiplayer
-    /// game, which is what the old skirmish-only MAX entry was really about.
-    /// </summary>
     private void PopulateGameSpeedDropDown()
     {
         ddGameSpeed.AddItem("As recorded".L10N("Client:Main:ReplayPlaybackSpeedAsRecorded"));
@@ -224,17 +206,14 @@ public class ReplaysPanel : LoadGamePanel
                 "{0} FPS".L10N("Client:Main:ReplayPlaybackSpeedItem"), fps));
         }
 
-        // Stored as the rate itself rather than a position in the list, so a ladder that grows a
-        // rung later does not silently change what a returning user had selected.
+        // Store FPS instead of an index so ladder changes preserve the selection.
         int storedFPS = UserINISettings.Instance.ReplayPlaybackGameSpeed;
         int ladderIndex = Array.IndexOf(ReplayGame.PlaybackSpeedLadder, storedFPS);
         ddGameSpeed.SelectedIndex = ladderIndex >= 0 ? ladderIndex + 1 : 0;
         ddGameSpeed.SelectedIndexChanged += PlaybackSetting_Changed;
     }
 
-    /// <summary>
-    /// The selected playback rate in frames per second, or 0 for "as recorded".
-    /// </summary>
+    /// <summary>Selected playback rate in FPS, or 0 for the recorded speed.</summary>
     private int SelectedPlaybackFPS
     {
         get
@@ -266,7 +245,7 @@ public class ReplaysPanel : LoadGamePanel
     private void LbReplayList_SelectedIndexChanged(object? sender, EventArgs e)
     {
         UpdateForSelection();
-        OnSelectionChanged();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void UpdateForSelection()
@@ -275,15 +254,9 @@ public class ReplaysPanel : LoadGamePanel
         UpdatePerspectiveDropDown();
     }
 
-    /// <summary>
-    /// Rebuilds the perspective list for the selected replay. The choice is not carried over
-    /// between replays - a slot index names a different player in each - so it always lands back
-    /// on the player who made the recording.
-    /// </summary>
     private void UpdatePerspectiveDropDown()
     {
-        // Detached while the list is rebuilt: the intermediate selections it would report are not
-        // choices, and one of them is the empty list.
+        // Perspective indices are replay-specific, so reset to the recorder.
         ddPerspective.SelectedIndexChanged -= DdPerspective_SelectedIndexChanged;
 
         perspectivePlayers = SelectedReplay?.Players ?? (IReadOnlyList<ReplayPlayer>)Array.Empty<ReplayPlayer>();
@@ -302,23 +275,15 @@ public class ReplaysPanel : LoadGamePanel
 
         ddPerspective.SelectedIndexChanged += DdPerspective_SelectedIndexChanged;
 
-        // Also decides whether there is anything to choose between: a one-player recording, or none
-        // selected, leaves the drop-down closed.
         UpdatePlaybackOptionAvailability();
     }
 
-    /// <summary>
-    /// Greys out the options the spawner is going to ignore, rather than leaving ticked boxes that
-    /// do nothing. Spectating watches from no player's seat at all, which settles the shroud and
-    /// the perspective; watching from someone else's seat settles the camera and the selection,
-    /// since both reproduce the recording player's own screen.
-    /// </summary>
     private void UpdatePlaybackOptionAvailability()
     {
         bool spectating = chkSpectator.Checked;
         bool watchingRecordingPlayer = spectating || SelectedPerspective?.IsRecorder != false;
 
-        // An observer sees the whole map by definition, so the shroud option has nothing to act on.
+        // The spawner ignores these options for spectator or alternate-player views.
         chkShroudEnabled.AllowChecking = !spectating;
         ddPerspective.AllowDropDown = !spectating && perspectivePlayers.Count > 1;
 
@@ -326,10 +291,6 @@ public class ReplaysPanel : LoadGamePanel
         chkSelectUnits.AllowChecking = watchingRecordingPlayer;
     }
 
-    /// <summary>
-    /// How a player reads in the perspective list. Names come out of a file someone else produced,
-    /// so the caller still has to make the result renderable.
-    /// </summary>
     private static string DescribePerspective(ReplayPlayer player)
     {
         if (player.IsRecorder)
@@ -343,15 +304,11 @@ public class ReplaysPanel : LoadGamePanel
             : player.Name;
     }
 
-    public override void Refresh()
+    public void Refresh()
     {
-        // By name rather than by index: deleting a replay shifts every index after it, and
-        // silently selecting a different replay than the one next to the deleted one is worse
-        // than selecting nothing.
+        // Preserve selection by file name because deletion changes list indices.
         string? previouslySelected = SelectedReplay?.FileName;
 
-        // Cleared before the new list is taken, so that the selection change this fires cannot
-        // resolve the old index against the new list.
         lbReplayList.ClearItems();
         lbReplayList.SelectedIndex = -1;
 
@@ -373,8 +330,7 @@ public class ReplaysPanel : LoadGamePanel
                 continue;
             }
 
-            // Selectable but greyed: the row has to stay reachable for the details pane to say why
-            // it cannot be watched, and unreadable at a glance for the player not to try.
+            // Keep unsupported replays selectable so the details pane can explain them.
             lbReplayList.AddItem(Array.ConvertAll(columns,
                 text => new XNAListBoxItem(text, UISettings.ActiveSettings.DisabledItemColor)));
         }
@@ -426,8 +382,6 @@ public class ReplaysPanel : LoadGamePanel
             replay.RecordedAt.ToString("f")));
         details.AppendLine();
 
-        // An incomplete recording has no frame count to show - the header still reads 0, which is
-        // how it was recognised as incomplete in the first place.
         if (replay.IsComplete)
         {
             details.Append(string.Format("Length: {0} - {1} frames at {2} FPS"
@@ -439,11 +393,10 @@ public class ReplaysPanel : LoadGamePanel
         details.Append(string.Format("Version: {0}".L10N("Client:Main:ReplayDetailVersion"),
             SafeForDetails(GetDisplayVersion(replay))));
 
-        // Which spawner build wrote the file. Worth having in front of anyone reporting a replay
-        // that will not play, and it costs a few characters on a line that is already there.
         if (!string.IsNullOrWhiteSpace(replay.SpawnerVersion))
         {
-            details.Append(string.Format(" - spawner {0}".L10N("Client:Main:ReplayDetailSpawnerVersion"),
+            details.Append(" - ");
+            details.Append(string.Format("spawner {0}".L10N("Client:Main:ReplayDetailSpawnerVersion"),
                 SafeForDetails(replay.SpawnerVersion)));
         }
 
@@ -457,18 +410,13 @@ public class ReplaysPanel : LoadGamePanel
         tbDetails.Text = details.ToString();
     }
 
-    /// <summary>
-    /// The perspective the replay is launched with. Spectating watches from no player's seat, so it
-    /// drops the perspective rather than sitting in someone's chair with an observer's view.
-    /// </summary>
     private ReplayPlayer? LaunchPerspective => chkSpectator.Checked ? null : SelectedPerspective;
 
-    public override void Launch()
+    public void Launch()
     {
         ReplayGame? replay = SelectedReplay;
 
-        // CanLaunch already keeps the button disabled for these; the guard is here because Launch
-        // is also reachable by double-clicking the row.
+        // Double-click can call Launch even when the button is disabled.
         if (replay == null || !replay.IsPlayable)
             return;
 
@@ -486,7 +434,6 @@ public class ReplaysPanel : LoadGamePanel
 
         IniFile spawnIni = ReadReplaySpawnIni(spawnIniContent);
 
-        // A replay only plays back correctly against the game files it was recorded with.
         List<string> fileMismatches = ReplayFileHashes.FindMismatches(spawnIni);
         if (fileMismatches.Count > 0)
         {
@@ -517,7 +464,6 @@ public class ReplaysPanel : LoadGamePanel
                 fileMismatches.Count - MAX_LISTED_MISMATCHES);
         }
 
-        // Warn but allow playback; the mismatch might not affect this replay.
         var msgBox = new XNAMessageBox(WindowManager,
             "Replay File Mismatch".L10N("Client:Main:ReplayFileMismatchTitle"),
             string.Format(("This replay was recorded with different game files, so it will " +
@@ -539,23 +485,17 @@ public class ReplaysPanel : LoadGamePanel
     {
         spawnIni.SetStringValue("Settings", "ReplayFile", ReplayManager.GetRelativePath(replay.FileName));
 
-        // The spawner takes the spawn.ini player slot, which is what ReplayPlayer carries. Slot 0
-        // is the recording player and is also the spawner's default; it is still written, so the
-        // launch never depends on the key's absence. The spawner is what actually decides that
-        // LockedViewport and SelectUnits do not apply to another player's seat - the panel only
-        // greys them out - so nothing here has to compensate for the choice.
+        // ReplayViewPlayer is a spawn.ini player slot.
         spawnIni.SetIntValue("Settings", "ReplayViewPlayer", perspective?.SpawnIniIndex ?? 0);
 
-        // The load screen the recording embedded is the recording player's. Point it at whoever is
-        // being watched instead. A spectator has no side of their own, so theirs is left alone.
+        // Use the selected player's loading screen when available.
         if (perspective != null && !perspective.IsRecorder && perspective.SideIndex >= 0)
         {
             spawnIni.SetStringValue("Settings", "CustomLoadScreen",
                 LoadingScreenController.GetLoadScreenName(perspective.SideIndex.ToString()));
         }
 
-        // Its own key rather than GameSpeed: the spawner pins the simulation to the speed the game
-        // was recorded at, and this only controls how fast playback is paced.
+        // Playback speed changes pacing, not the recorded simulation speed.
         spawnIni.SetIntValue("Settings", "ReplayPlaybackSpeed", SelectedPlaybackFPS);
 
         spawnIni.SetBooleanValue("Settings", "ReplayShroudEnabled", chkShroudEnabled.Checked);
@@ -564,10 +504,8 @@ public class ReplaysPanel : LoadGamePanel
         spawnIni.SetBooleanValue("Settings", "ReplaySpectator", chkSpectator.Checked);
         spawnIni.SetBooleanValue("Settings", "ReplayShowChatAndBeacons", chkShowChatAndBeacons.Checked);
 
-        // Watching a replay must never produce another one.
         spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
 
-        // Already consumed by FindMismatches above; the spawner has no use for it.
         spawnIni.RemoveSection(ReplayFileHashes.SECTION);
 
         FileInfo spawnerSettingsFile = SafePath.GetFile(ProgramConstants.GamePath, ProgramConstants.SPAWNER_SETTINGS);
@@ -582,9 +520,7 @@ public class ReplaysPanel : LoadGamePanel
         if (spawnMapIniFile.Exists)
             spawnMapIniFile.Delete();
 
-        // A campaign recorded without CopyMissionsToSpawnmapINI has no embedded map - the mission
-        // is loaded by name out of the game's own mixes instead - so leave the file deleted
-        // rather than writing a zero byte one for the spawner to trip over.
+        // Campaign missions can load from game archives without an embedded map.
         if (spawnMapContent.Length > 0)
             File.WriteAllBytes(spawnMapIniFile.FullName, spawnMapContent);
 
@@ -592,7 +528,7 @@ public class ReplaysPanel : LoadGamePanel
 
         discordHandler.UpdatePresence(replay.GUIName, true);
 
-        OnLaunchRequested();
+        LaunchRequested?.Invoke(this, EventArgs.Empty);
 
         GameProcessLogic.GameProcessExited += GameProcessExited_Callback;
         GameProcessLogic.StartGameProcess(WindowManager);
@@ -611,7 +547,7 @@ public class ReplaysPanel : LoadGamePanel
         Refresh();
     }
 
-    public override void Delete()
+    public void Delete()
     {
         ReplayGame? replay = SelectedReplay;
         if (replay == null)
@@ -643,23 +579,12 @@ public class ReplaysPanel : LoadGamePanel
         msgBox.Show();
     }
 
-    /// <summary>
-    /// Everything shown about a replay comes out of a file another player produced, so none of it
-    /// is guaranteed to be renderable by the current font.
-    /// </summary>
+    /// <summary>Makes replay metadata renderable with the details font.</summary>
     private string SafeForDetails(string text) => Renderer.GetSafeString(text, tbDetails.FontIndex);
 
-    /// <summary>
-    /// As <see cref="SafeForDetails"/>, for message boxes. XNAMessageBox sanitizes only in its
-    /// static Show helpers, not when constructed directly as it is here.
-    /// </summary>
+    /// <summary>Makes replay metadata renderable in message boxes.</summary>
     private static string SafeForDialog(string text) => Renderer.GetSafeString(text, 0);
 
-    /// <summary>
-    /// What the details pane shows for a replay this build cannot play. It is deliberately about
-    /// the game being out of date rather than about the file being wrong - the file is fine, and
-    /// telling someone their own recording is broken would send them to delete it.
-    /// </summary>
     private string DescribeUnplayable(ReplayGame replay)
     {
         var details = new StringBuilder();
@@ -676,9 +601,6 @@ public class ReplaysPanel : LoadGamePanel
         return details.ToString();
     }
 
-    /// <summary>
-    /// The game package a replay was recorded with, for display.
-    /// </summary>
     private static string GetDisplayVersion(ReplayGame replay)
         => string.IsNullOrWhiteSpace(replay.GameClientVersion)
             ? "Unknown".L10N("Client:Main:ReplayUnknownVersion")
@@ -686,8 +608,6 @@ public class ReplaysPanel : LoadGamePanel
 
     private static string FormatDuration(ReplayGame replay)
     {
-        // An unplayable replay has no trustworthy frame count: the header fields it would come from
-        // are only where this build expects them for a layout generation it knows.
         if (!replay.IsPlayable || !replay.IsComplete)
             return "?";
 
