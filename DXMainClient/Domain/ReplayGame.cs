@@ -211,10 +211,9 @@ public class ReplayGame
 
             string? spawnIniContent = ReadText(stream, spawnIniSize);
 
-            if (spawnIniContent == null || !StartsWithIniSection(spawnIniContent))
+            if (spawnIniContent == null)
             {
-                Logger.Log($"Replay {FileName} does not contain a readable spawn.ini; " +
-                    "it was probably recorded by a different version of the spawner.");
+                Logger.Log("Replay file ended early while reading its embedded spawn.ini: " + FileName);
                 return false;
             }
 
@@ -333,25 +332,6 @@ public class ReplayGame
             return false;
 
         return headerSize + (long)spawnIniSize + spawnMapSize <= fileLength;
-    }
-
-    /// <summary>Checks that the first non-comment line opens an INI section.</summary>
-    private static bool StartsWithIniSection(string content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-            return false;
-
-        foreach (string line in content.Split('\n'))
-        {
-            string trimmed = line.Trim();
-
-            if (trimmed.Length == 0 || trimmed[0] == ';')
-                continue;
-
-            return trimmed[0] == '[';
-        }
-
-        return false;
     }
 
     /// <summary>Returns null when the file ends before <paramref name="size"/> bytes are read.</summary>

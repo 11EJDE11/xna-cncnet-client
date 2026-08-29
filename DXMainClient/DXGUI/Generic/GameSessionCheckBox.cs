@@ -1,5 +1,7 @@
 ﻿using System;
 
+using ClientCore;
+
 using ClientGUI;
 
 using DTAClient.Domain.Multiplayer;
@@ -113,10 +115,41 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
     /// </summary>
     public int SortOrder { get; private set; } = DEFAULT_SORT_ORDER;
 
+    /// <summary>Optional key used to persist this option in [LocalGameOptions].</summary>
+    public string UserSettingKey { get; private set; } = string.Empty;
+
+    public override void Initialize()
+    {
+        base.Initialize();
+
+        LoadPersistedValue();
+        CheckedChanged += (_, _) => PersistValue();
+    }
+
+    private void PersistValue()
+    {
+        if (string.IsNullOrWhiteSpace(UserSettingKey))
+            return;
+
+        UserINISettings.Instance.SetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, Checked);
+        UserINISettings.Instance.SaveSettings();
+    }
+
+    private void LoadPersistedValue()
+    {
+        if (string.IsNullOrWhiteSpace(UserSettingKey))
+            return;
+
+        Checked = UserINISettings.Instance.GetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, Checked);
+    }
+
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
         switch (key)
         {
+            case "UserSettingKey":
+                UserSettingKey = value;
+                return;
             case "SpawnIniOption":
                 spawnIniOption = value;
                 return;

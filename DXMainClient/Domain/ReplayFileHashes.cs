@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 
+using ClientCore.Extensions;
+
 using DTAClient.Online;
 
 using Rampastring.Tools;
@@ -63,20 +65,22 @@ public static class ReplayFileHashes
 
             if (!local.TryGetValue(relativePath, out string? localHash))
             {
-                mismatches.Add($"{relativePath} is missing locally");
+                mismatches.Add(string.Format("{0} is missing locally".L10N("Client:Main:ReplayFileMissing"), relativePath));
                 continue;
             }
 
             if (string.Equals(localHash, recordedHash, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            mismatches.Add($"{relativePath}\n    replay: {recordedHash}\n    yours:  {localHash}");
+            mismatches.Add(string.Format("{0}\n    replay: {1}\n    yours:  {2}".L10N("Client:Main:ReplayFileDifferent"), relativePath, recordedHash, localHash));
         }
 
         foreach (string relativePath in local.Keys)
         {
             if (!recordedPaths.Contains(relativePath))
-                mismatches.Add($"{relativePath} was not recorded with this replay");
+            {
+                mismatches.Add(string.Format("{0} was not recorded with this replay".L10N("Client:Main:ReplayFileNotRecorded"), relativePath));
+            }
         }
 
         return mismatches;
@@ -88,7 +92,7 @@ public static class ReplayFileHashes
 
         foreach (FileHashCalculator.TrackedFile tracked in new FileHashCalculator().EnumerateTrackedFiles())
         {
-            string hash = FileHashCalculator.CalculateSHA1ForFile(tracked.FullPath);
+            string hash = FileHashCalculator.GetTrackedFileHash(tracked.FullPath);
             if (!string.IsNullOrEmpty(hash))
                 hashes[FileHashCalculator.NormalizePath(tracked.RelativePath)] = hash;
         }

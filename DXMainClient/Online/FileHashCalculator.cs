@@ -21,7 +21,6 @@ namespace DTAClient.Online
 
         private static readonly IReadOnlyList<string> knownTextFileExtensions = [".txt", ".ini", ".json", ".xml"];
 
-        /// <summary>Default files used when FHCConfig.ini has no [FilenameList].</summary>
         private string[] fileNamesToCheck = ClientConfiguration.Instance.ClientGameType switch
         {
             ClientType.TS => new string[]
@@ -175,7 +174,10 @@ namespace DTAClient.Online
             {
                 string hash = fh.AddHashForFileIfExists(tracked.RelativePath, tracked.FullPath);
                 if (!string.IsNullOrEmpty(hash))
+                {
+                    StoreTrackedFileHash(tracked.FullPath, hash);
                     Logger.Log($"Hash for {tracked.RelativePath}: {hash}");
+                }
             }
 
             // Add the hashes for each checked file from the available translations
@@ -228,8 +230,59 @@ namespace DTAClient.Online
 
         internal static string NormalizePath(string path) => path.Replace('\\', '/');
 
-        /// <summary>Hashes a file, normalizing text line endings.</summary>
-        internal static string CalculateSHA1ForFile(string path)
+        /// <summary>Hashes computed by the most recent compatibility check, keyed by full path.</summary>
+        private static readonly Dictionary<string, CachedFileHash> trackedFileHashes
+            = new(StringComparer.OrdinalIgnoreCase);
+
+        private readonly struct CachedFileHash
+        {
+            public CachedFileHash(FileInfo file, string hash)
+            {
+                length = file.Length;
+                lastWriteTicks = file.LastWriteTimeUtc.Ticks;
+                Hash = hash;
+            }
+
+            private readonly long length;
+            private readonly long lastWriteTicks;
+
+            public string Hash { get; }
+
+            public bool Matches(FileInfo file)
+                => length == file.Length && lastWriteTicks == file.LastWriteTimeUtc.Ticks;
+        }
+
+        private static void StoreTrackedFileHash(string fullPath, string hash)
+        {
+            FileInfo file = SafePath.GetFile(fullPath);
+
+            if (file.Exists)
+                trackedFileHashes[fullPath] = new CachedFileHash(file, hash);
+        }
+
+        /// <summary>
+        /// Reuses the hash of an unchanged file. <see cref="CalculateHashes"/> deliberately does not
+        /// use this, so that it keeps detecting files modified during a client session.
+        /// </summary>
+        internal static string GetTrackedFileHash(string fullPath)
+        {
+            FileInfo file = SafePath.GetFile(fullPath);
+
+            if (!file.Exists)
+                return string.Empty;
+
+            if (trackedFileHashes.TryGetValue(fullPath, out CachedFileHash cached) && cached.Matches(file))
+                return cached.Hash;
+
+            string hash = CalculateSHA1ForFile(fullPath);
+
+            if (!string.IsNullOrEmpty(hash))
+                StoreTrackedFileHash(fullPath, hash);
+
+            return hash;
+        }
+
+        private static string CalculateSHA1ForFile(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
                 return string.Empty;

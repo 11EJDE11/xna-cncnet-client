@@ -1,17 +1,23 @@
-﻿using ClientCore.Extensions;
+﻿using System;
+using System.Collections.Generic;
+
 using ClientCore;
-using DTAClient.Domain.Multiplayer.CnCNet;
 using ClientCore.Enums;
+using ClientCore.Extensions;
+
 using ClientGUI;
+
+using ClientUpdater;
+
+using DTAClient.Domain;
+using DTAClient.Domain.Multiplayer.CnCNet;
 using DTAClient.DXGUI.Generic.OptionPanels;
+
 using Microsoft.Xna.Framework;
+
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
-using System;
-using System.Collections.Generic;
-using ClientUpdater;
-using DTAClient.Domain;
 
 namespace DTAClient.DXGUI.Generic
 {

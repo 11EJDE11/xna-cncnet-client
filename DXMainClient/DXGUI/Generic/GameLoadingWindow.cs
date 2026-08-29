@@ -1,5 +1,3 @@
-#nullable enable
-
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -38,29 +36,28 @@ namespace DTAClient.DXGUI.Generic
         private const int REPLAYS_TAB_INDEX = 1;
         private const int DATE_COLUMN_WIDTH = 174;
 
-        public GameLoadingWindow(WindowManager windowManager, DiscordHandler discordHandler,
-            CampaignTagSelector campaignTagSelector) : base(windowManager)
+        public GameLoadingWindow(WindowManager windowManager, DiscordHandler discordHandler, CampaignTagSelector campaignTagSelector) : base(windowManager)
         {
             this.discordHandler = discordHandler;
             this.campaignTagSelector = campaignTagSelector;
         }
 
-        private readonly DiscordHandler discordHandler;
-        private readonly CampaignTagSelector campaignTagSelector;
+        private DiscordHandler discordHandler;
+        private CampaignTagSelector campaignTagSelector;
 
-        private XNAClientTabControl? tabControl;
-        private ReplaysPanel? replaysPanel;
+        private XNAMultiColumnListBox lbSaveGameList;
+        private XNAClientButton btnLaunch;
+        private XNAClientButton btnDelete;
+        private XNAClientButton btnCancel;
 
-        private XNAMultiColumnListBox lbSaveGameList = null!;
-        private XNAClientButton btnLaunch = null!;
-        private XNAClientButton btnDelete = null!;
-        private XNAClientButton btnCancel = null!;
-        private XNAClientButton? btnOpenReplayFolder;
+        private XNAClientTabControl tabControl;
+        private ReplaysPanel replaysPanel;
+        private XNAClientButton btnOpenReplayFolder;
 
         private List<SavedGame> savedGames = new List<SavedGame>();
         private bool initialized;
 
-        private bool IsReplayTabSelected => tabControl?.SelectedTab == REPLAYS_TAB_INDEX;
+        private bool IsReplayTabSelected => tabControl != null && tabControl.SelectedTab == REPLAYS_TAB_INDEX;
 
         public override void Initialize()
         {
@@ -77,8 +74,53 @@ namespace DTAClient.DXGUI.Generic
             if (replaySupport)
                 CreateReplayControls();
 
-            CreateSaveGameList(replaySupport);
-            CreateButtons(replaySupport);
+            Rectangle listRectangle = replaySupport
+                ? GetReplayContentRectangle()
+                : new Rectangle(13, 13, 574, 317);
+
+            lbSaveGameList = new XNAMultiColumnListBox(WindowManager);
+            lbSaveGameList.Name = nameof(lbSaveGameList);
+            lbSaveGameList.ClientRectangle = listRectangle;
+            lbSaveGameList.AddColumn("SAVED GAME NAME".L10N("Client:Main:SavedGameNameColumnHeader"), listRectangle.Width - DATE_COLUMN_WIDTH);
+            lbSaveGameList.AddColumn("DATE / TIME".L10N("Client:Main:SavedGameDateTimeColumnHeader"), DATE_COLUMN_WIDTH);
+            lbSaveGameList.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
+            lbSaveGameList.PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
+            lbSaveGameList.SelectedIndexChanged += ListBox_SelectedIndexChanged;
+            lbSaveGameList.AllowKeyboardInput = true;
+
+            int buttonY = replaySupport ? Height - BUTTON_HEIGHT - MARGIN : 345;
+            int launchX = replaySupport
+                ? (Width - ((BUTTON_WIDTH * 3) + (BUTTON_SPACING * 2))) / 2
+                : 125;
+
+            btnLaunch = new XNAClientButton(WindowManager);
+            btnLaunch.Name = nameof(btnLaunch);
+            btnLaunch.ClientRectangle = new Rectangle(launchX, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT);
+            btnLaunch.Text = "Load".L10N("Client:Main:ButtonLoad");
+            btnLaunch.AllowClick = false;
+            btnLaunch.LeftClick += BtnLaunch_LeftClick;
+
+            btnDelete = new XNAClientButton(WindowManager);
+            btnDelete.Name = nameof(btnDelete);
+            btnDelete.ClientRectangle = new Rectangle(btnLaunch.Right + 10, btnLaunch.Y, 110, 23);
+            btnDelete.Text = "Delete".L10N("Client:Main:ButtonDelete");
+            btnDelete.AllowClick = false;
+            btnDelete.LeftClick += BtnDelete_LeftClick;
+
+            btnCancel = new XNAClientButton(WindowManager);
+            btnCancel.Name = nameof(btnCancel);
+            btnCancel.ClientRectangle = new Rectangle(btnDelete.Right + 10, btnLaunch.Y, 110, 23);
+            btnCancel.Text = "Cancel".L10N("Client:Main:ButtonCancel");
+            btnCancel.LeftClick += BtnCancel_LeftClick;
+
+            if (replaySupport)
+            {
+                btnOpenReplayFolder = new XNAClientButton(WindowManager);
+                btnOpenReplayFolder.Name = nameof(btnOpenReplayFolder);
+                btnOpenReplayFolder.ClientRectangle = new Rectangle(MARGIN, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT);
+                btnOpenReplayFolder.Text = "Open Folder".L10N("Client:Main:ReplayOpenFolder");
+                btnOpenReplayFolder.LeftClick += (_, _) => ReplayManager.OpenDirectory();
+            }
 
             if (tabControl != null)
                 AddChild(tabControl);
@@ -104,6 +146,7 @@ namespace DTAClient.DXGUI.Generic
             base.Initialize();
 
             initialized = true;
+
             ListSaves();
             UpdateButtonStates();
         }
@@ -125,103 +168,12 @@ namespace DTAClient.DXGUI.Generic
             replaysPanel.LaunchRequested += (_, _) => Disable();
         }
 
-        private void CreateSaveGameList(bool replaySupport)
-        {
-            Rectangle listRectangle = replaySupport
-                ? GetReplayContentRectangle()
-                : new Rectangle(13, 13, 574, 317);
-
-            lbSaveGameList = new XNAMultiColumnListBox(WindowManager);
-            lbSaveGameList.Name = nameof(lbSaveGameList);
-            lbSaveGameList.ClientRectangle = listRectangle;
-            lbSaveGameList.AddColumn("SAVED GAME NAME".L10N("Client:Main:SavedGameNameColumnHeader"),
-                listRectangle.Width - DATE_COLUMN_WIDTH);
-            lbSaveGameList.AddColumn("DATE / TIME".L10N("Client:Main:SavedGameDateTimeColumnHeader"), DATE_COLUMN_WIDTH);
-            lbSaveGameList.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
-            lbSaveGameList.PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
-            lbSaveGameList.SelectedIndexChanged += (_, _) => UpdateButtonStates();
-            lbSaveGameList.AllowKeyboardInput = true;
-        }
-
-        private void CreateButtons(bool replaySupport)
-        {
-            int buttonY = replaySupport ? Height - BUTTON_HEIGHT - MARGIN : 345;
-            int launchX = replaySupport
-                ? (Width - ((BUTTON_WIDTH * 3) + (BUTTON_SPACING * 2))) / 2
-                : 125;
-
-            btnLaunch = new XNAClientButton(WindowManager);
-            btnLaunch.Name = nameof(btnLaunch);
-            btnLaunch.ClientRectangle = new Rectangle(launchX, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT);
-            btnLaunch.Text = "Load".L10N("Client:Main:ButtonLoad");
-            btnLaunch.AllowClick = false;
-            btnLaunch.LeftClick += BtnLaunch_LeftClick;
-
-            btnDelete = new XNAClientButton(WindowManager);
-            btnDelete.Name = nameof(btnDelete);
-            btnDelete.ClientRectangle = new Rectangle(btnLaunch.Right + BUTTON_SPACING, buttonY,
-                BUTTON_WIDTH, BUTTON_HEIGHT);
-            btnDelete.Text = "Delete".L10N("Client:Main:ButtonDelete");
-            btnDelete.AllowClick = false;
-            btnDelete.LeftClick += BtnDelete_LeftClick;
-
-            btnCancel = new XNAClientButton(WindowManager);
-            btnCancel.Name = nameof(btnCancel);
-            btnCancel.ClientRectangle = new Rectangle(btnDelete.Right + BUTTON_SPACING, buttonY,
-                BUTTON_WIDTH, BUTTON_HEIGHT);
-            btnCancel.Text = "Cancel".L10N("Client:Main:ButtonCancel");
-            btnCancel.LeftClick += (_, _) => Disable();
-
-            if (!replaySupport)
-                return;
-
-            btnOpenReplayFolder = new XNAClientButton(WindowManager);
-            btnOpenReplayFolder.Name = nameof(btnOpenReplayFolder);
-            btnOpenReplayFolder.ClientRectangle = new Rectangle(MARGIN, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT);
-            btnOpenReplayFolder.Text = "Open Folder".L10N("Client:Main:ReplayOpenFolder");
-            btnOpenReplayFolder.LeftClick += (_, _) => ReplayManager.OpenDirectory();
-        }
-
         private Rectangle GetReplayContentRectangle()
         {
-            int contentTop = tabControl!.Bottom + MARGIN;
+            int contentTop = tabControl.Bottom + MARGIN;
             int contentHeight = Height - BUTTON_HEIGHT - (MARGIN * 2) - contentTop;
 
             return new Rectangle(MARGIN, contentTop, Width - (MARGIN * 2), contentHeight);
-        }
-
-        public void Open() => Enable();
-
-        public void ListSaves()
-        {
-            savedGames.Clear();
-            lbSaveGameList.ClearItems();
-            lbSaveGameList.SelectedIndex = -1;
-
-            DirectoryInfo savedGamesDirectoryInfo = SafePath.GetDirectory(ProgramConstants.GamePath, SAVED_GAMES_DIRECTORY);
-
-            if (!savedGamesDirectoryInfo.Exists)
-            {
-                Logger.Log("Saved Games directory not found!");
-                return;
-            }
-
-            IEnumerable<FileInfo> files = savedGamesDirectoryInfo.EnumerateFiles("*.SAV", SearchOption.TopDirectoryOnly);
-
-            foreach (FileInfo file in files)
-                ParseSaveGame(file.FullName);
-
-            savedGames = savedGames.OrderByDescending(savedGame => savedGame.LastModified.Ticks).ToList();
-
-            foreach (SavedGame savedGame in savedGames)
-            {
-                string[] item =
-                {
-                    Renderer.GetSafeString(savedGame.GUIName, lbSaveGameList.FontIndex),
-                    savedGame.LastModified.ToString()
-                };
-                lbSaveGameList.AddItem(item, true);
-            }
         }
 
         protected override void OnEnabledChanged(object sender, EventArgs args)
@@ -237,13 +189,13 @@ namespace DTAClient.DXGUI.Generic
             if (IsReplayTabSelected)
             {
                 lbSaveGameList.Disable();
-                replaysPanel!.Enable();
-                btnOpenReplayFolder!.Enable();
+                replaysPanel.Enable();
+                btnOpenReplayFolder.Enable();
             }
             else
             {
-                replaysPanel!.Disable();
-                btnOpenReplayFolder!.Disable();
+                replaysPanel.Disable();
+                btnOpenReplayFolder.Disable();
                 lbSaveGameList.Enable();
             }
 
@@ -253,7 +205,7 @@ namespace DTAClient.DXGUI.Generic
         private void RefreshSelectedTab()
         {
             if (IsReplayTabSelected)
-                replaysPanel!.Refresh();
+                replaysPanel.Refresh();
             else
                 ListSaves();
 
@@ -267,7 +219,7 @@ namespace DTAClient.DXGUI.Generic
 
             if (IsReplayTabSelected)
             {
-                btnLaunch.Text = replaysPanel!.LaunchButtonText;
+                btnLaunch.Text = replaysPanel.LaunchButtonText;
                 btnLaunch.AllowClick = replaysPanel.CanLaunch;
                 btnDelete.AllowClick = replaysPanel.CanDelete;
                 return;
@@ -278,37 +230,30 @@ namespace DTAClient.DXGUI.Generic
             btnDelete.AllowClick = lbSaveGameList.SelectedIndex > -1;
         }
 
-        private void BtnLaunch_LeftClick(object? sender, InputEventArgs e)
+        private void ListBox_SelectedIndexChanged(object sender, EventArgs e) => UpdateButtonStates();
+
+        public void Open()
+        {
+            Enable();
+        }
+
+        private void BtnCancel_LeftClick(object sender, EventArgs e)
+        {
+            Disable();
+        }
+
+        private void BtnLaunch_LeftClick(object sender, EventArgs e)
         {
             if (IsReplayTabSelected)
             {
-                replaysPanel!.Launch();
+                replaysPanel.Launch();
                 return;
             }
 
-            LaunchSavedGame();
-        }
+            SavedGame sg = savedGames[lbSaveGameList.SelectedIndex];
+            Logger.Log("Loading saved game " + sg.FileName);
 
-        private void BtnDelete_LeftClick(object? sender, InputEventArgs e)
-        {
-            if (IsReplayTabSelected)
-            {
-                replaysPanel!.Delete();
-                return;
-            }
-
-            DeleteSavedGame();
-        }
-
-        private void LaunchSavedGame()
-        {
-            if (lbSaveGameList.SelectedIndex < 0 || lbSaveGameList.SelectedIndex >= savedGames.Count)
-                return;
-
-            SavedGame savedGame = savedGames[lbSaveGameList.SelectedIndex];
-            Logger.Log("Loading saved game " + savedGame.FileName);
-
-            Mission? mission = campaignTagSelector.UniqueIDToMissions.GetValueOrDefault(savedGame.CustomMissionID, null);
+            Mission mission = campaignTagSelector.UniqueIDToMissions.GetValueOrDefault(sg.CustomMissionID, null);
 
             CustomMissionHelper.DeleteSupplementalMissionFiles();
 
@@ -327,7 +272,7 @@ namespace DTAClient.DXGUI.Generic
 
             IniSection spawnIniSettings = new("Settings");
             spawnIniSettings.AddKey("Scenario", "spawnmap.ini");
-            spawnIniSettings.AddKey("SaveGameName", savedGame.FileName);
+            spawnIniSettings.AddKey("SaveGameName", sg.FileName);
             spawnIniSettings.AddKey("LoadSaveGame", "Yes");
             spawnIniSettings.AddKey("SidebarHack", ClientConfiguration.Instance.SidebarHack.ToString());
             spawnIniSettings.AddKey("CustomLoadScreen", LoadingScreenController.GetLoadScreenName("g"));
@@ -338,7 +283,7 @@ namespace DTAClient.DXGUI.Generic
 
             if (mission != null)
             {
-                spawnIniSettings.AddKey("CustomMissionID", savedGame.CustomMissionID.ToString());
+                spawnIniSettings.AddKey("CustomMissionID", sg.CustomMissionID.ToString());
                 CampaignSelector.WriteMissionSectionToSpawnIni(spawnIni, mission);
             }
 
@@ -357,39 +302,41 @@ namespace DTAClient.DXGUI.Generic
                 spawnMapStreamWriter.WriteLine();
             }
 
-            discordHandler.UpdatePresence(savedGame.GUIName, true);
+            discordHandler.UpdatePresence(sg.GUIName, true);
 
             Disable();
             GameProcessLogic.GameProcessExited += GameProcessExited_Callback;
+
             GameProcessLogic.StartGameProcess(WindowManager);
         }
 
-        private void DeleteSavedGame()
+        private void BtnDelete_LeftClick(object sender, EventArgs e)
         {
-            if (lbSaveGameList.SelectedIndex < 0 || lbSaveGameList.SelectedIndex >= savedGames.Count)
+            if (IsReplayTabSelected)
+            {
+                replaysPanel.Delete();
                 return;
+            }
 
-            SavedGame savedGame = savedGames[lbSaveGameList.SelectedIndex];
-            var msgBox = new XNAMessageBox(WindowManager,
-                "Delete Confirmation".L10N("Client:Main:DeleteConfirmationTitle"),
+            SavedGame sg = savedGames[lbSaveGameList.SelectedIndex];
+            var msgBox = new XNAMessageBox(WindowManager, "Delete Confirmation".L10N("Client:Main:DeleteConfirmationTitle"),
                 string.Format(("The following saved game will be deleted permanently:\n\n" +
                     "Filename: {0}\n" +
                     "Saved game name: {1}\n" +
                     "Date and time: {2}\n\n" +
                     "Are you sure you want to proceed?").L10N("Client:Main:DeleteConfirmationText"),
-                    savedGame.FileName, Renderer.GetSafeString(savedGame.GUIName, lbSaveGameList.FontIndex),
-                    savedGame.LastModified.ToString()),
+                    sg.FileName, Renderer.GetSafeString(sg.GUIName, lbSaveGameList.FontIndex), sg.LastModified.ToString()),
                 XNAMessageBoxButtons.YesNo);
-            msgBox.YesClickedAction = DeleteMsgBox_YesClicked;
             msgBox.Show();
+            msgBox.YesClickedAction = DeleteMsgBox_YesClicked;
         }
 
-        private void DeleteMsgBox_YesClicked(XNAMessageBox messageBox)
+        private void DeleteMsgBox_YesClicked(XNAMessageBox obj)
         {
-            SavedGame savedGame = savedGames[lbSaveGameList.SelectedIndex];
+            SavedGame sg = savedGames[lbSaveGameList.SelectedIndex];
 
-            Logger.Log("Deleting saved game " + savedGame.FileName);
-            SafePath.DeleteFileIfExists(ProgramConstants.GamePath, SAVED_GAMES_DIRECTORY, savedGame.FileName);
+            Logger.Log("Deleting saved game " + sg.FileName);
+            SafePath.DeleteFileIfExists(ProgramConstants.GamePath, SAVED_GAMES_DIRECTORY, sg.FileName);
             ListSaves();
         }
 
@@ -407,13 +354,47 @@ namespace DTAClient.DXGUI.Generic
             discordHandler.UpdatePresence();
         }
 
+        public void ListSaves()
+        {
+            savedGames.Clear();
+            lbSaveGameList.ClearItems();
+            lbSaveGameList.SelectedIndex = -1;
+
+            DirectoryInfo savedGamesDirectoryInfo = SafePath.GetDirectory(ProgramConstants.GamePath, SAVED_GAMES_DIRECTORY);
+
+            if (!savedGamesDirectoryInfo.Exists)
+            {
+                Logger.Log("Saved Games directory not found!");
+                return;
+            }
+
+            IEnumerable<FileInfo> files = savedGamesDirectoryInfo.EnumerateFiles("*.SAV", SearchOption.TopDirectoryOnly);
+
+            foreach (FileInfo file in files)
+            {
+                // Note: ParseSaveGame modifies savedGames
+                ParseSaveGame(file.FullName);
+            }
+
+            savedGames = savedGames.OrderBy(sg => sg.LastModified.Ticks).ToList();
+            savedGames.Reverse();
+
+            foreach (SavedGame sg in savedGames)
+            {
+                string[] item = new string[] {
+                    Renderer.GetSafeString(sg.GUIName, lbSaveGameList.FontIndex),
+                    sg.LastModified.ToString() };
+                lbSaveGameList.AddItem(item, true);
+            }
+        }
+
         private void ParseSaveGame(string fileName)
         {
             string shortName = Path.GetFileName(fileName);
 
-            SavedGame savedGame = new SavedGame(shortName);
-            if (savedGame.ParseInfo())
-                savedGames.Add(savedGame);
+            SavedGame sg = new SavedGame(shortName);
+            if (sg.ParseInfo())
+                savedGames.Add(sg);
         }
     }
 }

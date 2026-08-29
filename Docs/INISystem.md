@@ -399,7 +399,12 @@ EnabledIcon=                               ; string,  texture name for the icon 
 DisabledIcon=                              ; string,  texture name for the icon when setting is disabled.
 SortOrder=0                                ; integer, display order for icons in GameInformationPanel and GameListBox. 
                                            ;          Lower values appear first.
+UserSettingKey=                            ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
+                                           ;          that remembers this checkbox. Without it the value is not
+                                           ;          persisted, and `Checked` applies on every client start.
 ```
+
+`UserSettingKey` is independent of `SaveSkirmishGameOptions` and `SaveCampaignGameOptions`, which persist whole lobbies' worth of options under the control's own name. Do not set both for the same checkbox: those settings are loaded after the checkbox is initialized and would override the remembered value. It is intended for checkboxes that must be remembered regardless of those settings, such as a [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox), which is not covered by them at all.
 
 ##### [CampaignCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Campaign/CampaignCheckBox.cs)
 
@@ -410,8 +415,6 @@ Use this control type for campaign checkboxes in `CampaignSelector.ini`. Inherit
 ```ini
 [SOMECAMPAIGNCHECKBOX]                  ; CampaignCheckBox
 ResetToDefaultOnGameExit=false          ; boolean, reset the checkbox to default value when the game exits.
-UserSettingKey=                         ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
-                                        ;          that remembers this checkbox. Without it the value is not persisted.
 ```
 
 ##### [GameLobbyCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Multiplayer/GameLobby/GameLobbyCheckBox.cs)
@@ -424,15 +427,7 @@ Use this control type for game lobby checkboxes in `GameLobbyBase.ini`. Inherits
 
 _(inherits [GameSessionCheckBox](#GameSessionCheckBox))_
 
-A game lobby checkbox that only affects the local player. It is written to `spawn.ini` and remembered in the user's settings, but is never sent in game option messages, so each player in a multiplayer game sets it for themselves. Because of that it cannot be broadcast: `BroadcastToLobby` and the game list properties do not apply.
-
-```ini
-[SOMELOCALGAMELOBBYCHECKBOX]            ; LocalGameLobbyCheckBox
-UserSettingKey=                         ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
-                                        ;          that remembers this checkbox. Without it the value is not persisted.
-```
-
-`Checked` is the default for a fresh install; once the player has changed the checkbox, their own choice is used instead.
+Use this control type for game lobby checkboxes in `GameLobbyBase.ini` that only affect the local player, such as replay recording. Unlike a `GameLobbyCheckBox` it is never sent in game option messages, so each player in a multiplayer game sets it for themselves and non-hosts can still change it. Because of that it cannot be broadcast: `BroadcastToLobby` and the game list properties do not apply. It is still written to `spawn.ini` through `SpawnIniOption`, and is normally paired with `UserSettingKey` so that the player's choice is remembered.
 
 ##### [GameSessionDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Generic/GameSessionDropDown.cs)
 
