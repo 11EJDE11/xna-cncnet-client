@@ -24,7 +24,6 @@ namespace ClientCore
         public const string GAME_OPTION_FILTERS = "GameOptionFilters";
         public const string REPLAYS = "Replays";
         public const string LOCAL_GAME_OPTIONS = "LocalGameOptions";
-
         private const string FAVORITE_MAPS = "FavoriteMaps";
 
         private const bool DEFAULT_SHOW_FRIENDS_ONLY_GAMES = false;
@@ -349,6 +348,28 @@ namespace ClientCore
                 SettingsIni.SetIntValue(GAME_OPTION_FILTERS, optionName, value.Value);
         }
 
+        /***********/
+        /* REPLAYS */
+        /***********/
+
+        /// <summary>Maximum number of replays to keep. 0 means unlimited.</summary>
+        public IntSetting MaxKeptReplays { get; private set; }
+
+        /// <summary>Maximum total size of the replay directory in megabytes. 0 means unlimited.</summary>
+        public IntSetting MaxReplayFolderSizeMB { get; private set; }
+
+        public BoolSetting ReplayPlaybackShroud { get; private set; }
+
+        public BoolSetting ReplayPlaybackLockedViewport { get; private set; }
+
+        public BoolSetting ReplayPlaybackSelectUnits { get; private set; }
+
+        public BoolSetting ReplayPlaybackSpectator { get; private set; }
+
+        public BoolSetting ReplayPlaybackShowChatAndBeacons { get; private set; }
+
+        public IntSetting ReplayPlaybackGameSpeed { get; private set; }
+
         /********/
         /* MISC */
         /********/
@@ -376,28 +397,6 @@ namespace ClientCore
         public BoolSetting GenerateOnlyNewValuesInTranslationStub { get; private set; }
 
         public List<string> FavoriteMaps { get; private set; }
-
-        /***********/
-        /* REPLAYS */
-        /***********/
-
-        /// <summary>Maximum number of replays to keep. 0 means unlimited.</summary>
-        public IntSetting MaxKeptReplays { get; private set; }
-
-        /// <summary>Maximum total size of the replay directory in megabytes. 0 means unlimited.</summary>
-        public IntSetting MaxReplayFolderSizeMB { get; private set; }
-
-        public BoolSetting ReplayPlaybackShroud { get; private set; }
-
-        public BoolSetting ReplayPlaybackLockedViewport { get; private set; }
-
-        public BoolSetting ReplayPlaybackSelectUnits { get; private set; }
-
-        public BoolSetting ReplayPlaybackSpectator { get; private set; }
-
-        public BoolSetting ReplayPlaybackShowChatAndBeacons { get; private set; }
-
-        public IntSetting ReplayPlaybackGameSpeed { get; private set; }
 
         public void SetValue(string section, string key, string value)
                => SettingsIni.SetStringValue(section, key, value);

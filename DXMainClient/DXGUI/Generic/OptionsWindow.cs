@@ -94,7 +94,6 @@ namespace DTAClient.DXGUI.Generic
                 componentsPanel
             };
 
-            // Keep the existing tab indices unchanged.
             if (showStorageTab)
                 panels.Add(new StorageOptionsPanel(WindowManager, UserINISettings.Instance));
 

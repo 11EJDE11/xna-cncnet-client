@@ -12,12 +12,9 @@ namespace DTAClient.DXGUI.Campaign;
 
 public class CampaignCheckBox : GameSessionCheckBox
 {
-    public CampaignCheckBox(WindowManager windowManager) : base(windowManager) { }
-
+    public CampaignCheckBox(WindowManager windowManager) : base (windowManager) { }
+    
     public bool ResetToDefaultOnGameExit { get; private set; }
-
-    /// <summary>Optional key used to persist this option in [LocalGameOptions].</summary>
-    public string UserSettingKey { get; private set; } = string.Empty;
 
     public override void Initialize()
     {
@@ -40,36 +37,12 @@ public class CampaignCheckBox : GameSessionCheckBox
         }
 
         base.Initialize();
-
-        LoadPersistedValue();
-        CheckedChanged += (_, _) => PersistValue();
-    }
-
-    private void PersistValue()
-    {
-        if (string.IsNullOrWhiteSpace(UserSettingKey))
-            return;
-
-        UserINISettings.Instance.SetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, Checked);
-        UserINISettings.Instance.SaveSettings();
-    }
-
-    private void LoadPersistedValue()
-    {
-        if (string.IsNullOrWhiteSpace(UserSettingKey))
-            return;
-
-        Checked = UserINISettings.Instance.GetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, Checked);
     }
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
         switch (key)
         {
-            case "UserSettingKey":
-                UserSettingKey = value;
-                return;
-
             case "ResetToDefaultOnGameExit":
                 ResetToDefaultOnGameExit = Conversions.BooleanFromString(value, false);
                 return;
@@ -78,7 +51,7 @@ public class CampaignCheckBox : GameSessionCheckBox
                 throw new Exception($"Campaign settings can't affect map code if {nameof(ClientConfiguration.Instance.CopyMissionsToSpawnmapINI)} is disabled!\n\n"
                     + $"Offending setting control: {Name}");
         }
-
+        
         base.ParseControlINIAttribute(iniFile, key, value);
     }
 }

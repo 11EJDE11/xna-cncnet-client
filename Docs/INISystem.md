@@ -427,10 +427,9 @@ _(inherits [GameSessionCheckBox](#GameSessionCheckBox))_
 A game lobby checkbox that only affects the local player. It is written to `spawn.ini` and remembered in the user's settings, but is never sent in game option messages, so each player in a multiplayer game sets it for themselves. Because of that it cannot be broadcast: `BroadcastToLobby` and the game list properties do not apply.
 
 ```ini
-[SOMELOCALGAMELOBBYCHECKBOX]               ; LocalGameLobbyCheckBox
-UserSettingKey=                            ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
-                                           ;          that remembers this checkbox. Without it the value is not
-                                           ;          persisted.
+[SOMELOCALGAMELOBBYCHECKBOX]            ; LocalGameLobbyCheckBox
+UserSettingKey=                         ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
+                                        ;          that remembers this checkbox. Without it the value is not persisted.
 ```
 
 `Checked` is the default for a fresh install; once the player has changed the checkbox, their own choice is used instead.
@@ -875,20 +874,12 @@ ReplaysDirectory=Replays       ; string,  directory, relative to the game direct
 ReplayFileExtension=yrrp       ; string,  file extension of replay files, without a leading dot.
 ```
 
-With `ReplaySupport=true` the client also gains a `Storage` tab in the options window, where the
-player caps how many replays are kept and how large the replay directory may grow. Use a
-[LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for lobby recording and a
-[CampaignCheckBox](#CampaignCheckBox) for campaign recording.
+With `ReplaySupport=true` the client also gains a `Storage` tab in the options window, where the player caps how many replays are kept and how large the replay directory may grow. Use a [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for lobby recording and a [CampaignCheckBox](#CampaignCheckBox) for campaign recording.
 
-The Load Game window keeps its existing controls and adds `tabControl`, `ReplaysPanel`, and
-`btnOpenReplayFolder`. These controls and the replay panel's children can be positioned in
-`GameLoadingWindow.ini` like the existing saved-game controls.
+The Load Game window keeps its existing controls and adds `tabControl`, `ReplaysPanel`, and `btnOpenReplayFolder`. These controls and the replay panel's children can be positioned in `GameLoadingWindow.ini` like the existing saved-game controls.
 
 > [!NOTE]
-> The extra tab does not fit the options window's default width, so the window is widened by one
-> tab's worth when `ReplaySupport=true`. If your package sets `$Width` for `[OptionsWindow]` in its
-> theme INI, that value wins and the `Storage` tab will be clipped - widen it there by
-> `BUTTON_WIDTH_92` (92).
+> Both windows grow when `ReplaySupport=true`: the options window is widened by one tab's worth to fit the `Storage` tab, and the Load Game window is enlarged to fit the replay list. The default positions of the controls in both windows are derived from those larger sizes. If your package sets `$Width` or `$Height` for `[OptionsWindow]` or `[GameLoadingWindow]` in its theme INI, those values win and the controls are not repositioned to match — widen `[OptionsWindow]` by `BUTTON_WIDTH_92` (92) and give the added Load Game window controls explicit positions there.
 
 ## Game Modes
 
