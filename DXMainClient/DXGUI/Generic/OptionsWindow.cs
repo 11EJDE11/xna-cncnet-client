@@ -17,10 +17,12 @@ namespace DTAClient.DXGUI.Generic
 {
     public class OptionsWindow : XNAWindow
     {
-        public OptionsWindow(WindowManager windowManager, GameCollection gameCollection, DirectDrawWrapperManager directDrawWrapperManager) : base(windowManager)
+        public OptionsWindow(WindowManager windowManager, GameCollection gameCollection,
+            DirectDrawWrapperManager directDrawWrapperManager, TunnelHandler tunnelHandler) : base(windowManager)
         {
             this.gameCollection = gameCollection;
             this.directDrawWrapperManager = directDrawWrapperManager;
+            this.tunnelHandler = tunnelHandler;
         }
 
         public event EventHandler OnForceUpdate;
@@ -35,6 +37,7 @@ namespace DTAClient.DXGUI.Generic
 
         private readonly GameCollection gameCollection;
         private readonly DirectDrawWrapperManager directDrawWrapperManager;
+        private readonly TunnelHandler tunnelHandler;
 
         public override void Initialize()
         {
@@ -86,7 +89,7 @@ namespace DTAClient.DXGUI.Generic
                 displayOptionsPanel,
                 new AudioOptionsPanel(WindowManager, UserINISettings.Instance),
                 new GameOptionsPanel(WindowManager, UserINISettings.Instance, topBar),
-                new CnCNetOptionsPanel(WindowManager, UserINISettings.Instance, gameCollection),
+                new CnCNetOptionsPanel(WindowManager, UserINISettings.Instance, gameCollection, tunnelHandler),
                 updaterOptionsPanel,
                 componentsPanel
             };
