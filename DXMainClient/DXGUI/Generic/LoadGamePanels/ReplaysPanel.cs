@@ -39,6 +39,14 @@ public class ReplaysPanel : XNAPanel
 
     private const int FIXED_COLUMNS_WIDTH = 320;
 
+    /// <summary>
+    /// Frame counts offered for the spawner's ReplayKeyframeInterval. Playback drops a savegame
+    /// keyframe this often as it watches, and rewinding restarts from the newest one at or before
+    /// where you asked for - so a shorter interval is a more precise rewind at the cost of more
+    /// scratch disk and a brief pause each time one is taken. Zero takes none.
+    /// </summary>
+    private static readonly int[] KeyframeIntervals = { 0, 375, 750, 1500 };
+
     public ReplaysPanel(WindowManager windowManager, DiscordHandler discordHandler) : base(windowManager)
     {
         this.discordHandler = discordHandler;
@@ -54,7 +62,9 @@ public class ReplaysPanel : XNAPanel
     private XNAClientCheckBox chkLockedViewport = null!;
     private XNAClientCheckBox chkSelectUnits = null!;
     private XNAClientCheckBox chkShowChatAndBeacons = null!;
+    private XNAClientCheckBox chkControlBar = null!;
     private XNAClientDropDown ddGameSpeed = null!;
+    private XNAClientDropDown ddRewindPoints = null!;
     private XNAClientDropDown ddPerspective = null!;
 
     private List<ReplayGame> replays = new List<ReplayGame>();
@@ -140,6 +150,15 @@ public class ReplaysPanel : XNAPanel
             "Replays chat messages, beacons and taunts.".L10N("Client:Main:ReplayShowChatAndBeaconsTooltip"),
             UserINISettings.Instance.ReplayPlaybackShowChatAndBeacons);
 
+        int thirdRowY = secondRowY + ROW_SPACING;
+
+        chkControlBar = CreateCheckBox(nameof(chkControlBar), 0, thirdRowY, 165,
+            "Playback controls".L10N("Client:Main:ReplayControlBar"),
+            ("Shows a seek bar and transport buttons over the game while watching. " +
+             "The same actions are also available as keyboard shortcuts.")
+                .L10N("Client:Main:ReplayControlBarTooltip"),
+            UserINISettings.Instance.ReplayPlaybackControlBar);
+
         var lblGameSpeed = new XNALabel(WindowManager);
         lblGameSpeed.Name = nameof(lblGameSpeed);
         lblGameSpeed.Text = "Speed:".L10N("Client:Main:ReplayPlaybackSpeed");
@@ -167,6 +186,21 @@ public class ReplaysPanel : XNAPanel
             .L10N("Client:Main:ReplayPerspectiveTooltip");
         ddPerspective.SelectedIndexChanged += DdPerspective_SelectedIndexChanged;
 
+        var lblRewindPoints = new XNALabel(WindowManager);
+        lblRewindPoints.Name = nameof(lblRewindPoints);
+        lblRewindPoints.Text = "Rewind:".L10N("Client:Main:ReplayRewindPoints");
+        lblRewindPoints.ClientRectangle = new Rectangle(chkShroudEnabled.X, thirdRowY + 3,
+            lblRewindPoints.Width, lblRewindPoints.Height);
+
+        ddRewindPoints = new XNAClientDropDown(WindowManager);
+        ddRewindPoints.Name = nameof(ddRewindPoints);
+        ddRewindPoints.ClientRectangle = new Rectangle(lblRewindPoints.Right + 8, thirdRowY, 170, 21);
+        ddRewindPoints.ToolTipText = ("How often playback saves a point it can rewind to. " +
+            "Closer together rewinds more precisely; further apart uses less disk and " +
+            "pauses less often. Off leaves seeking forward-only.")
+            .L10N("Client:Main:ReplayRewindPointsTooltip");
+        PopulateRewindPointsDropDown();
+
         AddChild(lbReplayList);
         AddChild(tbDetails);
         AddChild(lblPlayback);
@@ -179,6 +213,9 @@ public class ReplaysPanel : XNAPanel
         AddChild(ddGameSpeed);
         AddChild(lblPerspective);
         AddChild(ddPerspective);
+        AddChild(chkControlBar);
+        AddChild(lblRewindPoints);
+        AddChild(ddRewindPoints);
 
         base.Initialize();
     }
@@ -213,6 +250,32 @@ public class ReplaysPanel : XNAPanel
         ddGameSpeed.SelectedIndexChanged += PlaybackSetting_Changed;
     }
 
+    private void PopulateRewindPointsDropDown()
+    {
+        foreach (int interval in KeyframeIntervals)
+        {
+            ddRewindPoints.AddItem(interval <= 0
+                ? "Off".L10N("Client:Main:ReplayRewindPointsOff")
+                : string.Format("Every {0} frames".L10N("Client:Main:ReplayRewindPointsItem"), interval));
+        }
+
+        // Store the interval instead of an index, so changing the table preserves the selection.
+        int storedInterval = UserINISettings.Instance.ReplayPlaybackKeyframeInterval;
+        int index = Array.IndexOf(KeyframeIntervals, storedInterval);
+        ddRewindPoints.SelectedIndex = index >= 0 ? index : Array.IndexOf(KeyframeIntervals, 750);
+        ddRewindPoints.SelectedIndexChanged += PlaybackSetting_Changed;
+    }
+
+    /// <summary>Frames between rewind points, or 0 for none.</summary>
+    private int SelectedKeyframeInterval
+    {
+        get
+        {
+            int index = ddRewindPoints.SelectedIndex;
+            return index >= 0 && index < KeyframeIntervals.Length ? KeyframeIntervals[index] : 750;
+        }
+    }
+
     /// <summary>Selected playback rate in FPS, or 0 for the recorded speed.</summary>
     private int SelectedPlaybackFPS
     {
@@ -233,6 +296,8 @@ public class ReplaysPanel : XNAPanel
         UserINISettings.Instance.ReplayPlaybackSelectUnits.Value = chkSelectUnits.Checked;
         UserINISettings.Instance.ReplayPlaybackShowChatAndBeacons.Value = chkShowChatAndBeacons.Checked;
         UserINISettings.Instance.ReplayPlaybackGameSpeed.Value = SelectedPlaybackFPS;
+        UserINISettings.Instance.ReplayPlaybackControlBar.Value = chkControlBar.Checked;
+        UserINISettings.Instance.ReplayPlaybackKeyframeInterval.Value = SelectedKeyframeInterval;
 
         UserINISettings.Instance.SaveSettings();
 
@@ -503,6 +568,12 @@ public class ReplaysPanel : XNAPanel
         spawnIni.SetBooleanValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked);
         spawnIni.SetBooleanValue("Settings", "ReplaySpectator", chkSpectator.Checked);
         spawnIni.SetBooleanValue("Settings", "ReplayShowChatAndBeacons", chkShowChatAndBeacons.Checked);
+
+        spawnIni.SetBooleanValue("Settings", "ReplayControlBar", chkControlBar.Checked);
+
+        // Keyframes are scratch savegames the spawner takes as it plays, so that rewinding does not
+        // have to replay the game from the start. Nothing about them reaches the replay file.
+        spawnIni.SetIntValue("Settings", "ReplayKeyframeInterval", SelectedKeyframeInterval);
 
         spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
 

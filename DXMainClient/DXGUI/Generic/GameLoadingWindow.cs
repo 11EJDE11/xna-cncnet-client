@@ -28,7 +28,7 @@ namespace DTAClient.DXGUI.Generic
         private const string SAVED_GAMES_DIRECTORY = "Saved Games";
 
         private const int REPLAY_WINDOW_WIDTH = 700;
-        private const int REPLAY_WINDOW_HEIGHT = 540;
+        private const int REPLAY_WINDOW_HEIGHT = 575;
         private const int BUTTON_WIDTH = 110;
         private const int BUTTON_HEIGHT = 23;
         private const int BUTTON_SPACING = 10;

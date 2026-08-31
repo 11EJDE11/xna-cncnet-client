@@ -192,6 +192,8 @@ namespace ClientCore
             ReplayPlaybackSpectator = new BoolSetting(iniFile, REPLAYS, "PlaybackSpectator", false);
             ReplayPlaybackShowChatAndBeacons = new BoolSetting(iniFile, REPLAYS, "PlaybackShowChatAndBeacons", true);
             ReplayPlaybackGameSpeed = new IntSetting(iniFile, REPLAYS, "PlaybackGameSpeed", 0);
+            ReplayPlaybackControlBar = new BoolSetting(iniFile, REPLAYS, "PlaybackControlBar", true);
+            ReplayPlaybackKeyframeInterval = new IntSetting(iniFile, REPLAYS, "PlaybackKeyframeInterval", 750);
 
             SortState = new IntSetting(iniFile, GAME_FILTERS, "SortState", (int)SortDirection.None);
             ShowFriendGamesOnly = new BoolSetting(iniFile, GAME_FILTERS, "ShowFriendGamesOnly", DEFAULT_SHOW_FRIENDS_ONLY_GAMES);
@@ -369,6 +371,10 @@ namespace ClientCore
         public BoolSetting ReplayPlaybackShowChatAndBeacons { get; private set; }
 
         public IntSetting ReplayPlaybackGameSpeed { get; private set; }
+
+        public BoolSetting ReplayPlaybackControlBar { get; private set; }
+
+        public IntSetting ReplayPlaybackKeyframeInterval { get; private set; }
 
         /********/
         /* MISC */
