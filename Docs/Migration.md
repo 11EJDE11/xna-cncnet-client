@@ -5,6 +5,19 @@ This document lists all the breaking changes and how to address them. Each secti
 > [!NOTE]
 > You should always delete the `Binaries` and `BinariesNET8` folders when updating. See [How to update to latest client version](HowToUpdate.md) guide for a step-by-step process of updating the client binaries in your mod/game package.
 
+## 2.14.0
+
+- The client now uses **dynamic V3 tunnels** by default. A new `TunnelMode` key has been added to the `[MultiPlayer]` section of the user settings file (`SettingsFile` in `ClientDefinitions.ini`). Its default value is `1`:
+  - `0` = **Static (V3)** — a V3 tunnel server is manually picked from the tunnel list when hosting.
+  - `1` = **Dynamic (V3)** (default) — the client automatically negotiates the best tunnel for each pair of players when hosting; no tunnel is selected manually.
+  - `2` = **Legacy (V2)** — the old V2 tunnel servers are used, preserving the previous manual tunnel selection behavior.
+
+  The mode can be changed per game from the game creation window (the "Tunnel mode:" dropdown that replaces the old "Tunnel server:" label) or globally from the options window ("Tunnel mode when hosting:" dropdown in the CnCNet tab). If you want your users to keep the previous behavior by default, ship a default value in the `[MultiPlayer]` section of `UserDefaults.ini`, e.g. `TunnelMode=2` for legacy V2 tunnels or `TunnelMode=0` for manual V3 tunnel selection.
+
+- A new `EnableP2P` key (default `false`) has been added to the `[MultiPlayer]` section of the user settings file. When enabled, the client may upgrade pairs of players to direct player-to-player connections instead of routing all traffic through CnCNet tunnel servers. This shares players' IP addresses with each other, so a warning is shown when the option is turned on.
+
+- While tunnels are being negotiated, new player ping icons are used. The client ships with default versions, but you can provide your own `negotiating.png` and `negotiation-failed.png` in the `Resources` folder or in your theme to customize them.
+
 ## 2.13.0
 
 - `PlayerExtraOptionsPanel` control in `GameLobbyBase` has been changed from `XNAWindow` to `XNAPanel`. INI file `PlayerExtraOptionsPanel.ini` is no longer parsed for control attributes, and therefore all contents in this file should be appended to `GameLobbyBase.ini`. In addition, the control `chkBoxForceRandomTeams` has been renamed to `chkBoxForceNoTeams`, so please rename the `[chkBoxForceRandomTeams]` section to `[chkBoxForceNoTeams]`.

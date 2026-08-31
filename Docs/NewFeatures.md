@@ -4,6 +4,14 @@ This document describes optional, non-breaking changes. While not mandatory, ado
 
 Breaking changes are not covered here; see [Migration.md](Migration.md) instead.
 
+## 2.14.0
+
+- The client now supports **V3 dynamic tunnels**. When hosting with dynamic tunnels (the new default, see [Migration.md](Migration.md)), the client automatically negotiates the best tunnel for each pair of players instead of requiring a manual tunnel selection, and automatically upgrades pairs to direct player-to-player connections when possible.
+
+- A **tunnel mode** selection has been added to the game creation window ("Tunnel mode:" dropdown) and the options window ("Tunnel mode when hosting:" dropdown in the CnCNet tab). Three modes are available: Dynamic (V3), Static (V3) and Legacy (V2).
+
+- A new **"Enable direct P2P connections"** checkbox has been added to the CnCNet tab of the options window. It allows the client to connect players directly to each other instead of routing traffic through CnCNet tunnel servers. Note that this shares players' IP addresses with the other players in the game session, and a warning is shown when enabling it.
+
 ## 2.13.4
 
 - The `KeyboardCommands.ini` file now supports `DisableModifierKeys`. It is recommended to set this key for RA2/YR's `PlanningMode` (Waypoint Mode) command. See [INISystem.md](INISystem.md).
