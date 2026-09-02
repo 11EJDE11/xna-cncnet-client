@@ -29,4 +29,4 @@ If checked, describe the breaking change and migration impact:
 
 - [ ] I linked the corresponding feature issue above
 - [ ] This pull request is scoped to one feature only
-- [ ] I verified the implementation by running the client
+- [ ] I verified the implementation by running the client. Verifier name: ____. Verifier must be a human, not an AI.

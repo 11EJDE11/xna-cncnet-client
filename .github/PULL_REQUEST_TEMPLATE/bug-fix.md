@@ -37,4 +37,4 @@ If checked, describe the breaking change and migration impact:
 
 - [ ] I linked the corresponding bug issue above
 - [ ] This pull request is scoped to one bug fix only
-- [ ] I verified the fix by running the client with and without applying my PR
+- [ ] I verified the fix by running the client with and without applying my PR. Verifier name: ____. Verifier must be a human, not an AI.
