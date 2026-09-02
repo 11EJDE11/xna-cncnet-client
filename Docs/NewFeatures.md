@@ -6,11 +6,9 @@ Breaking changes are not covered here; see [Migration.md](Migration.md) instead.
 
 ## 2.14.0
 
-- The client now supports **V3 dynamic tunnels**. When hosting with dynamic tunnels (the new default, see [Migration.md](Migration.md)), the client automatically negotiates the best tunnel for each pair of players instead of requiring a manual tunnel selection and, when direct P2P is enabled, upgrades pairs to direct connections when possible.
+- The client now supports V3 dynamic tunnels. The default host tunnel mode is Dynamic (V3), and the new Tunnel mode selector in the game creation and options windows offers Dynamic (V3), Static (V3), and Legacy (V2). See [User Settings Defaults](INISystem.md#user-settings-defaults) for setup details.
 
-- A **tunnel mode** selection has been added to the game creation window ("Tunnel mode:" dropdown) and the options window ("Tunnel mode when hosting:" dropdown in the CnCNet tab). Three modes are available: Dynamic (V3), Static (V3) and Legacy (V2). See [User Settings Defaults](INISystem.md#user-settings-defaults) for configuration details.
-
-- A new **"Enable direct P2P connections"** checkbox has been added to the CnCNet tab of the options window. It allows the client to connect players directly to each other instead of routing traffic through CnCNet tunnel servers. Note that this shares players' IP addresses with the other players in the game session, and a warning is shown when enabling it.
+- A new "Enable direct P2P connections" checkbox is added to the CnCNet tab in the Options window. When enabled, the client will attempt to establish direct P2P connections with other players, bypassing the CnCNet relay server. This can improve latency and reduce server load, but may not work in all network environments.
 
 ## 2.13.4
 
