@@ -7,9 +7,8 @@ This document lists all the breaking changes and how to address them. Each secti
 
 ## 2.14.0
 
-- The client now uses dynamic V3 tunnels by default.
-- Copy [negotiating.png](/DXMainClient/Resources/DTA/negotiating.png) and [negotiation-failed.png](/DXMainClient/Resources/DTA/negotiation-failed.png) into your client's `Resources` folder; no settings changes are otherwise required.
-- To retain the old V2 behavior, set `TunnelMode=2` in `[MultiPlayer]` of `Resources/UserDefaults.ini`; see [User Settings Defaults](INISystem.md#user-settings-defaults) for other modes.
+- The client now defaults to Dynamic (V3) tunnel mode. If you need the old V2 behavior, set `TunnelMode=2` in `[MultiPlayer]` of `Resources/UserDefaults.ini`.
+- Copy [negotiating.png](/DXMainClient/Resources/DTA/negotiating.png) and [negotiation-failed.png](/DXMainClient/Resources/DTA/negotiation-failed.png) into your client's `Resources` folder.
 
 ## 2.13.0
 
