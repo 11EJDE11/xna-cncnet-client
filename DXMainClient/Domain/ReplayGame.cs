@@ -40,12 +40,10 @@ public class ReplayGame
     // Prevent corrupt headers from causing excessive allocations.
     private const uint MAX_EMBEDDED_FILE_SIZE = 32 * 1024 * 1024;
 
-    // Keep this layout in sync with ReplayFormat.h in the spawner repository.
-
     /// <summary>Size of the version-independent header prefix.</summary>
     private const int STABLE_PREFIX_SIZE = 12;
 
-    /// <summary>Size of the replay header understood by this build.</summary>
+    /// <summary>Size of the replay header.</summary>
     private const int KNOWN_HEADER_SIZE = 1452;
 
     private const uint MAX_HEADER_SIZE = 64 * 1024;
@@ -301,7 +299,7 @@ public class ReplayGame
 
         UIGameMode = spawnIni.GetStringValue("Settings", "UIGameMode", string.Empty);
 
-        // Preserve spawn.ini order because ReplayViewPlayer uses these slot indices.
+        // Preserve spawn.ini order because the spawner setting ReplayViewPlayer uses these slot indices.
         AddPlayer(spawnIni, "Settings", 0);
 
         for (int otherId = 1; ; otherId++)

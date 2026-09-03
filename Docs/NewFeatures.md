@@ -6,9 +6,7 @@ Breaking changes are not covered here; see [Migration.md](Migration.md) instead.
 
 ## 2.13.5
 
-- Replay recording and playback are now available to packages with a compatible spawner. The current implementation targets RA2/YR and is opt-in through `ReplaySupport=true` in `ClientDefinitions.ini`. See [INISystem.md](INISystem.md) for the replay settings and recording check boxes. Campaign recordings cover only the launched mission.
-
-- The `spawn.ini` written by game lobbies now contains a `GameClientVersion` key in `[Settings]`, naming the local game and its version, e.g. `YR 9.3.1`. Campaign launches include the same metadata when recording a replay. Loaded saved games are unaffected.
+- Replay recording and playback are now available to packages with a compatible spawner. Opt-in through `ReplaySupport=true` in `ClientDefinitions.ini`. See [INISystem.md](INISystem.md) for the replay settings and recording check boxes.
 
 ## 2.13.4
 

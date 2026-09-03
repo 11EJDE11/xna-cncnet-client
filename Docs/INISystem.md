@@ -871,9 +871,6 @@ ReplayFileExtension=yrrp       ; string,  file extension of replay files, withou
 
 With `ReplaySupport=true` the client also gains a `Storage` tab in the options window, where the player caps how many replays are kept and how large the replay directory may grow. Use a [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for lobby recording and a [CampaignCheckBox](#CampaignCheckBox) for campaign recording.
 
-The Load Game window keeps its existing controls and adds `tabControl`, `ReplaysPanel`, and `btnOpenReplayFolder`. These controls and the replay panel's children can be positioned in `GameLoadingWindow.ini` like the existing saved-game controls.
-
-> [!NOTE]
 > Both windows grow when `ReplaySupport=true`: the options window is widened by one tab's worth to fit the `Storage` tab, and the Load Game window is enlarged to fit the replay list. The default positions of the controls in both windows are derived from those larger sizes. If your package sets `$Width` or `$Height` for `[OptionsWindow]` or `[GameLoadingWindow]` in its theme INI, those values win and the controls are not repositioned to match — widen `[OptionsWindow]` by `BUTTON_WIDTH_92` (92) and give the added Load Game window controls explicit positions there.
 
 ## Game Modes
