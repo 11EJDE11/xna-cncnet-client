@@ -52,7 +52,6 @@ namespace DTAClient.DXGUI.Generic
 
         private XNAClientTabControl tabControl;
         private ReplaysPanel replaysPanel;
-        private XNAClientButton btnOpenReplayFolder;
 
         private List<SavedGame> savedGames = new List<SavedGame>();
         private bool initialized;
@@ -113,15 +112,6 @@ namespace DTAClient.DXGUI.Generic
             btnCancel.Text = "Cancel".L10N("Client:Main:ButtonCancel");
             btnCancel.LeftClick += BtnCancel_LeftClick;
 
-            if (replaySupport)
-            {
-                btnOpenReplayFolder = new XNAClientButton(WindowManager);
-                btnOpenReplayFolder.Name = nameof(btnOpenReplayFolder);
-                btnOpenReplayFolder.ClientRectangle = new Rectangle(MARGIN, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT);
-                btnOpenReplayFolder.Text = "Open Folder".L10N("Client:Main:ReplayOpenFolder");
-                btnOpenReplayFolder.LeftClick += (_, _) => ReplayManager.OpenDirectory();
-            }
-
             if (tabControl != null)
                 AddChild(tabControl);
 
@@ -136,12 +126,6 @@ namespace DTAClient.DXGUI.Generic
             AddChild(btnLaunch);
             AddChild(btnDelete);
             AddChild(btnCancel);
-
-            if (btnOpenReplayFolder != null)
-            {
-                AddChild(btnOpenReplayFolder);
-                btnOpenReplayFolder.Disable();
-            }
 
             base.Initialize();
 
@@ -190,12 +174,10 @@ namespace DTAClient.DXGUI.Generic
             {
                 lbSaveGameList.Disable();
                 replaysPanel.Enable();
-                btnOpenReplayFolder.Enable();
             }
             else
             {
                 replaysPanel.Disable();
-                btnOpenReplayFolder.Disable();
                 lbSaveGameList.Enable();
             }
 

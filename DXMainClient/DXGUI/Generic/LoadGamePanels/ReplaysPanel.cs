@@ -34,18 +34,21 @@ public class ReplaysPanel : XNAPanel
     private const int ROW_SPACING = 24;
     private const int CHECK_BOX_HEIGHT = 20;
 
-    private const int PERSPECTIVE_X = 350;
-    private const int PERSPECTIVE_WIDTH = 200;
+    private const int DROPDOWN_WIDTH = 190;
+    private const int DROPDOWN_HEIGHT = 21;
+    private const int CHECK_BOX_WIDTH = 230;
+    private const int COLUMN_LABEL_GAP = 8;
+    private const int COLUMN_GAP = 40;
 
     private const int FIXED_COLUMNS_WIDTH = 320;
 
     /// <summary>
-    /// Frame counts offered for the spawner's ReplayKeyframeInterval. Playback drops a savegame
-    /// keyframe this often as it watches, and rewinding restarts from the newest one at or before
-    /// where you asked for - so a shorter interval is a more precise rewind at the cost of more
-    /// scratch disk and a brief pause each time one is taken. Zero takes none.
+    /// Frame counts offered for the spawner's rewind checkpoint interval. Playback drops a savegame
+    /// checkpoint this often as it watches, and rewinding restarts from the newest one at or before
+    /// where you asked for - so a lower option seeks more precisely at the cost of more scratch disk
+    /// and a brief pause each time one is taken. Off takes none.
     /// </summary>
-    private static readonly int[] KeyframeIntervals = { 0, 375, 750, 1500 };
+    private static readonly int[] RewindCheckpointIntervals = { 0, 375, 750, 1500 };
 
     public ReplaysPanel(WindowManager windowManager, DiscordHandler discordHandler) : base(windowManager)
     {
@@ -56,26 +59,26 @@ public class ReplaysPanel : XNAPanel
 
     private XNAMultiColumnListBox lbReplayList = null!;
     private XNATextBlock tbDetails = null!;
+    private XNAContextMenu replayContextMenu = null!;
 
-    private XNAClientCheckBox chkSpectator = null!;
     private XNAClientCheckBox chkShroudEnabled = null!;
-    private XNAClientCheckBox chkLockedViewport = null!;
-    private XNAClientCheckBox chkSelectUnits = null!;
+    private XNAClientCheckBox chkFollowRecordedCamera = null!;
+    private XNAClientCheckBox chkShowSelections = null!;
     private XNAClientCheckBox chkShowChatAndBeacons = null!;
-    private XNAClientCheckBox chkControlBar = null!;
     private XNAClientDropDown ddGameSpeed = null!;
-    private XNAClientDropDown ddRewindPoints = null!;
-    private XNAClientDropDown ddPerspective = null!;
+    private XNAClientDropDown ddRewindCheckpoints = null!;
+    private XNAClientDropDown ddWatchAs = null!;
 
     private List<ReplayGame> replays = new List<ReplayGame>();
 
-    private IReadOnlyList<ReplayPlayer> perspectivePlayers = Array.Empty<ReplayPlayer>();
+    /// <summary>Players available in ddWatchAs, one-for-one with its items after the leading Spectator entry.</summary>
+    private IReadOnlyList<ReplayPlayer> watchAsPlayers = Array.Empty<ReplayPlayer>();
 
     public event EventHandler? SelectionChanged;
 
     public event EventHandler? LaunchRequested;
 
-    public string LaunchButtonText => "Watch".L10N("Client:Main:ButtonWatchReplay");
+    public string LaunchButtonText => "Play".L10N("Client:Main:ButtonPlayReplay");
 
     public bool CanLaunch => SelectedReplay?.IsPlayable == true;
 
@@ -86,10 +89,16 @@ public class ReplaysPanel : XNAPanel
             ? replays[lbReplayList.SelectedIndex]
             : null;
 
-    private ReplayPlayer? SelectedPerspective
-        => ddPerspective.SelectedIndex > -1 && ddPerspective.SelectedIndex < perspectivePlayers.Count
-            ? perspectivePlayers[ddPerspective.SelectedIndex]
-            : null;
+    private bool IsSpectatorSelected => ddWatchAs.SelectedIndex == 0;
+
+    private ReplayPlayer? SelectedPlayer
+    {
+        get
+        {
+            int index = ddWatchAs.SelectedIndex - 1;
+            return index >= 0 && index < watchAsPlayers.Count ? watchAsPlayers[index] : null;
+        }
+    }
 
     public override void Initialize()
     {
@@ -106,7 +115,14 @@ public class ReplaysPanel : XNAPanel
         lbReplayList.BackgroundTexture = AssetLoader.CreateTexture(new Color(0, 0, 0, 128), 1, 1);
         lbReplayList.PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
         lbReplayList.SelectedIndexChanged += LbReplayList_SelectedIndexChanged;
+        lbReplayList.RightClick += LbReplayList_RightClick;
         lbReplayList.AllowKeyboardInput = true;
+
+        replayContextMenu = new XNAContextMenu(WindowManager);
+        replayContextMenu.Name = nameof(replayContextMenu);
+        replayContextMenu.Width = 160;
+        replayContextMenu.AddItem("Show in folder".L10N("Client:Main:ReplayShowInFolder"),
+            selectAction: () => ReplayManager.OpenDirectory());
 
         tbDetails = new XNATextBlock(WindowManager);
         tbDetails.Name = nameof(tbDetails);
@@ -121,101 +137,94 @@ public class ReplaysPanel : XNAPanel
 
         int firstRowY = lblPlayback.Bottom + 8;
 
-        chkSpectator = CreateCheckBox(nameof(chkSpectator), 0, firstRowY, 160,
-            "Spectator view".L10N("Client:Main:ReplaySpectator"),
-            ("Watch from an observer's seat instead of a player's: the whole map is visible, " +
-             "the scoreboard replaces the sidebar, and EVA stays quiet.")
-                .L10N("Client:Main:ReplaySpectatorTooltip"),
-            UserINISettings.Instance.ReplayPlaybackSpectator);
-
-        chkShroudEnabled = CreateCheckBox(nameof(chkShroudEnabled), 170, firstRowY, 150,
-            "Enable shroud".L10N("Client:Main:ReplayShroud"),
-            "Enables or disables the fog of war shrouding.".L10N("Client:Main:ReplayShroudTooltip"),
-            UserINISettings.Instance.ReplayPlaybackShroud);
-
-        chkLockedViewport = CreateCheckBox(nameof(chkLockedViewport), 330, firstRowY, 150,
-            "Lock viewport".L10N("Client:Main:ReplayLockViewport"),
-            "Locks the viewport to what the recording player was seeing.".L10N("Client:Main:ReplayLockViewportTooltip"),
-            UserINISettings.Instance.ReplayPlaybackLockedViewport);
-
-        chkSelectUnits = CreateCheckBox(nameof(chkSelectUnits), 490, firstRowY, 150,
-            "Select units".L10N("Client:Main:ReplaySelectUnits"),
-            "Shows which units were selected by the recording player.".L10N("Client:Main:ReplaySelectUnitsTooltip"),
-            UserINISettings.Instance.ReplayPlaybackSelectUnits);
-
-        int secondRowY = firstRowY + ROW_SPACING;
-
-        chkShowChatAndBeacons = CreateCheckBox(nameof(chkShowChatAndBeacons), 0, secondRowY, 165,
-            "Show chat and beacons".L10N("Client:Main:ReplayShowChatAndBeacons"),
-            "Replays chat messages, beacons and taunts.".L10N("Client:Main:ReplayShowChatAndBeaconsTooltip"),
-            UserINISettings.Instance.ReplayPlaybackShowChatAndBeacons);
-
-        int thirdRowY = secondRowY + ROW_SPACING;
-
-        chkControlBar = CreateCheckBox(nameof(chkControlBar), 0, thirdRowY, 165,
-            "Playback controls".L10N("Client:Main:ReplayControlBar"),
-            ("Shows a seek bar and transport buttons over the game while watching. " +
-             "The same actions are also available as keyboard shortcuts.")
-                .L10N("Client:Main:ReplayControlBarTooltip"),
-            UserINISettings.Instance.ReplayPlaybackControlBar);
+        // Three dropdown labels of different lengths share one left column, so the dropdowns
+        // themselves line up: every label starts at X 0, every dropdown starts past the widest one.
+        var lblWatchAs = new XNALabel(WindowManager);
+        lblWatchAs.Name = nameof(lblWatchAs);
+        lblWatchAs.Text = "Watch as:".L10N("Client:Main:ReplayWatchAs");
 
         var lblGameSpeed = new XNALabel(WindowManager);
         lblGameSpeed.Name = nameof(lblGameSpeed);
         lblGameSpeed.Text = "Speed:".L10N("Client:Main:ReplayPlaybackSpeed");
-        lblGameSpeed.ClientRectangle = new Rectangle(chkShroudEnabled.X, secondRowY + 3,
-            lblGameSpeed.Width, lblGameSpeed.Height);
+
+        var lblRewindCheckpoints = new XNALabel(WindowManager);
+        lblRewindCheckpoints.Name = nameof(lblRewindCheckpoints);
+        lblRewindCheckpoints.Text = "Rewind checkpoints:".L10N("Client:Main:ReplayRewindCheckpoints");
+
+        int dropDownLabelWidth = new[] { lblWatchAs.Width, lblGameSpeed.Width, lblRewindCheckpoints.Width }.Max();
+        int dropDownX = dropDownLabelWidth + COLUMN_LABEL_GAP;
+        int checkBoxX = dropDownX + DROPDOWN_WIDTH + COLUMN_GAP;
+
+        int watchAsRowY = firstRowY;
+        int gameSpeedRowY = watchAsRowY + ROW_SPACING;
+        int rewindCheckpointsRowY = gameSpeedRowY + ROW_SPACING;
+
+        lblWatchAs.ClientRectangle = new Rectangle(0, watchAsRowY + 3, lblWatchAs.Width, lblWatchAs.Height);
+        lblGameSpeed.ClientRectangle = new Rectangle(0, gameSpeedRowY + 3, lblGameSpeed.Width, lblGameSpeed.Height);
+        lblRewindCheckpoints.ClientRectangle = new Rectangle(0, rewindCheckpointsRowY + 3,
+            lblRewindCheckpoints.Width, lblRewindCheckpoints.Height);
+
+        ddWatchAs = new XNAClientDropDown(WindowManager);
+        ddWatchAs.Name = nameof(ddWatchAs);
+        ddWatchAs.ClientRectangle = new Rectangle(dropDownX, watchAsRowY, DROPDOWN_WIDTH, DROPDOWN_HEIGHT);
+        ddWatchAs.ToolTipText = ("Whose eyes you watch through: as a spectator who can see the whole map, " +
+            "or as one of the players, seeing only what they saw.")
+            .L10N("Client:Main:ReplayWatchAsTooltip");
+        ddWatchAs.SelectedIndexChanged += DdWatchAs_SelectedIndexChanged;
 
         ddGameSpeed = new XNAClientDropDown(WindowManager);
         ddGameSpeed.Name = nameof(ddGameSpeed);
-        ddGameSpeed.ClientRectangle = new Rectangle(lblGameSpeed.Right + 8, secondRowY, 110, 21);
+        ddGameSpeed.ClientRectangle = new Rectangle(dropDownX, gameSpeedRowY, DROPDOWN_WIDTH, DROPDOWN_HEIGHT);
         ddGameSpeed.ToolTipText = ("How fast the replay is played back.").L10N("Client:Main:ReplayPlaybackSpeedTooltip");
         PopulateGameSpeedDropDown();
 
-        var lblPerspective = new XNALabel(WindowManager);
-        lblPerspective.Name = nameof(lblPerspective);
-        lblPerspective.Text = "Watch as:".L10N("Client:Main:ReplayPerspective");
-        lblPerspective.ClientRectangle = new Rectangle(PERSPECTIVE_X, secondRowY + 3,
-            lblPerspective.Width, lblPerspective.Height);
+        ddRewindCheckpoints = new XNAClientDropDown(WindowManager);
+        ddRewindCheckpoints.Name = nameof(ddRewindCheckpoints);
+        ddRewindCheckpoints.ClientRectangle = new Rectangle(dropDownX, rewindCheckpointsRowY, DROPDOWN_WIDTH, DROPDOWN_HEIGHT);
+        ddRewindCheckpoints.ToolTipText =
+            "For faster seeking, a lower option is better.".L10N("Client:Main:ReplayRewindCheckpointsTooltip");
+        PopulateRewindCheckpointsDropDown();
 
-        ddPerspective = new XNAClientDropDown(WindowManager);
-        ddPerspective.Name = nameof(ddPerspective);
-        ddPerspective.ClientRectangle = new Rectangle(lblPerspective.Right + 8, secondRowY,
-            PERSPECTIVE_WIDTH, 21);
-        ddPerspective.ToolTipText = ("Whose screen the replay is watched from - their fog of war, " +
-            "sidebar, beacons and starting view, but no team chat messages.")
-            .L10N("Client:Main:ReplayPerspectiveTooltip");
-        ddPerspective.SelectedIndexChanged += DdPerspective_SelectedIndexChanged;
+        // The checkboxes form their own column to the right of the dropdowns.
+        chkShroudEnabled = CreateCheckBox(nameof(chkShroudEnabled), checkBoxX, watchAsRowY, CHECK_BOX_WIDTH,
+            "Shroud enabled".L10N("Client:Main:ReplayShroudEnabled"),
+            "Hides the map outside of what the watched player could see."
+                .L10N("Client:Main:ReplayShroudEnabledTooltip"),
+            UserINISettings.Instance.ReplayPlaybackShroudEnabled);
 
-        var lblRewindPoints = new XNALabel(WindowManager);
-        lblRewindPoints.Name = nameof(lblRewindPoints);
-        lblRewindPoints.Text = "Rewind:".L10N("Client:Main:ReplayRewindPoints");
-        lblRewindPoints.ClientRectangle = new Rectangle(chkShroudEnabled.X, thirdRowY + 3,
-            lblRewindPoints.Width, lblRewindPoints.Height);
+        chkFollowRecordedCamera = CreateCheckBox(nameof(chkFollowRecordedCamera), checkBoxX, gameSpeedRowY, CHECK_BOX_WIDTH,
+            "Follow recorded camera".L10N("Client:Main:ReplayFollowRecordedCamera"),
+            "Keeps the camera on the recorded view instead of letting you move it yourself."
+                .L10N("Client:Main:ReplayFollowRecordedCameraTooltip"),
+            UserINISettings.Instance.ReplayPlaybackFollowCamera);
 
-        ddRewindPoints = new XNAClientDropDown(WindowManager);
-        ddRewindPoints.Name = nameof(ddRewindPoints);
-        ddRewindPoints.ClientRectangle = new Rectangle(lblRewindPoints.Right + 8, thirdRowY, 170, 21);
-        ddRewindPoints.ToolTipText = ("How often playback saves a point it can rewind to. " +
-            "Closer together rewinds more precisely; further apart uses less disk and " +
-            "pauses less often. Off leaves seeking forward-only.")
-            .L10N("Client:Main:ReplayRewindPointsTooltip");
-        PopulateRewindPointsDropDown();
+        chkShowSelections = CreateCheckBox(nameof(chkShowSelections), checkBoxX, rewindCheckpointsRowY, CHECK_BOX_WIDTH,
+            "Show recorded selections".L10N("Client:Main:ReplayShowSelections"),
+            "Highlights the units the watched player had selected."
+                .L10N("Client:Main:ReplayShowSelectionsTooltip"),
+            UserINISettings.Instance.ReplayPlaybackShowSelections);
+
+        int chatAndBeaconsRowY = rewindCheckpointsRowY + ROW_SPACING;
+
+        chkShowChatAndBeacons = CreateCheckBox(nameof(chkShowChatAndBeacons), checkBoxX, chatAndBeaconsRowY, CHECK_BOX_WIDTH,
+            "Show chat and beacons".L10N("Client:Main:ReplayShowChatAndBeacons"),
+            "Replays chat messages, beacons and taunts.".L10N("Client:Main:ReplayShowChatAndBeaconsTooltip"),
+            UserINISettings.Instance.ReplayPlaybackShowChatAndBeacons);
 
         AddChild(lbReplayList);
+        AddChild(replayContextMenu);
         AddChild(tbDetails);
         AddChild(lblPlayback);
-        AddChild(chkSpectator);
-        AddChild(chkShroudEnabled);
-        AddChild(chkLockedViewport);
-        AddChild(chkSelectUnits);
-        AddChild(chkShowChatAndBeacons);
+        AddChild(lblWatchAs);
+        AddChild(ddWatchAs);
         AddChild(lblGameSpeed);
         AddChild(ddGameSpeed);
-        AddChild(lblPerspective);
-        AddChild(ddPerspective);
-        AddChild(chkControlBar);
-        AddChild(lblRewindPoints);
-        AddChild(ddRewindPoints);
+        AddChild(lblRewindCheckpoints);
+        AddChild(ddRewindCheckpoints);
+        AddChild(chkShroudEnabled);
+        AddChild(chkFollowRecordedCamera);
+        AddChild(chkShowSelections);
+        AddChild(chkShowChatAndBeacons);
 
         base.Initialize();
     }
@@ -250,29 +259,29 @@ public class ReplaysPanel : XNAPanel
         ddGameSpeed.SelectedIndexChanged += PlaybackSetting_Changed;
     }
 
-    private void PopulateRewindPointsDropDown()
+    private void PopulateRewindCheckpointsDropDown()
     {
-        foreach (int interval in KeyframeIntervals)
+        foreach (int interval in RewindCheckpointIntervals)
         {
-            ddRewindPoints.AddItem(interval <= 0
-                ? "Off".L10N("Client:Main:ReplayRewindPointsOff")
-                : string.Format("Every {0} frames".L10N("Client:Main:ReplayRewindPointsItem"), interval));
+            ddRewindCheckpoints.AddItem(interval <= 0
+                ? "Off".L10N("Client:Main:ReplayRewindCheckpointsOff")
+                : string.Format("Every {0} frames".L10N("Client:Main:ReplayRewindCheckpointsItem"), interval));
         }
 
         // Store the interval instead of an index, so changing the table preserves the selection.
-        int storedInterval = UserINISettings.Instance.ReplayPlaybackKeyframeInterval;
-        int index = Array.IndexOf(KeyframeIntervals, storedInterval);
-        ddRewindPoints.SelectedIndex = index >= 0 ? index : Array.IndexOf(KeyframeIntervals, 750);
-        ddRewindPoints.SelectedIndexChanged += PlaybackSetting_Changed;
+        int storedInterval = UserINISettings.Instance.ReplayPlaybackRewindCheckpointInterval;
+        int index = Array.IndexOf(RewindCheckpointIntervals, storedInterval);
+        ddRewindCheckpoints.SelectedIndex = index >= 0 ? index : Array.IndexOf(RewindCheckpointIntervals, 750);
+        ddRewindCheckpoints.SelectedIndexChanged += PlaybackSetting_Changed;
     }
 
-    /// <summary>Frames between rewind points, or 0 for none.</summary>
-    private int SelectedKeyframeInterval
+    /// <summary>Frames between rewind checkpoints, or 0 for none.</summary>
+    private int SelectedRewindCheckpointInterval
     {
         get
         {
-            int index = ddRewindPoints.SelectedIndex;
-            return index >= 0 && index < KeyframeIntervals.Length ? KeyframeIntervals[index] : 750;
+            int index = ddRewindCheckpoints.SelectedIndex;
+            return index >= 0 && index < RewindCheckpointIntervals.Length ? RewindCheckpointIntervals[index] : 750;
         }
     }
 
@@ -290,22 +299,21 @@ public class ReplaysPanel : XNAPanel
 
     private void PlaybackSetting_Changed(object? sender, EventArgs e)
     {
-        UserINISettings.Instance.ReplayPlaybackSpectator.Value = chkSpectator.Checked;
-        UserINISettings.Instance.ReplayPlaybackShroud.Value = chkShroudEnabled.Checked;
-        UserINISettings.Instance.ReplayPlaybackLockedViewport.Value = chkLockedViewport.Checked;
-        UserINISettings.Instance.ReplayPlaybackSelectUnits.Value = chkSelectUnits.Checked;
+        UserINISettings.Instance.ReplayPlaybackShroudEnabled.Value = chkShroudEnabled.Checked;
+        UserINISettings.Instance.ReplayPlaybackFollowCamera.Value = chkFollowRecordedCamera.Checked;
+        UserINISettings.Instance.ReplayPlaybackShowSelections.Value = chkShowSelections.Checked;
+        UserINISettings.Instance.ReplayPlaybackSpectator.Value = IsSpectatorSelected;
         UserINISettings.Instance.ReplayPlaybackShowChatAndBeacons.Value = chkShowChatAndBeacons.Checked;
         UserINISettings.Instance.ReplayPlaybackGameSpeed.Value = SelectedPlaybackFPS;
-        UserINISettings.Instance.ReplayPlaybackControlBar.Value = chkControlBar.Checked;
-        UserINISettings.Instance.ReplayPlaybackKeyframeInterval.Value = SelectedKeyframeInterval;
+        UserINISettings.Instance.ReplayPlaybackRewindCheckpointInterval.Value = SelectedRewindCheckpointInterval;
 
         UserINISettings.Instance.SaveSettings();
 
         UpdatePlaybackOptionAvailability();
     }
 
-    private void DdPerspective_SelectedIndexChanged(object? sender, EventArgs e)
-        => UpdatePlaybackOptionAvailability();
+    private void DdWatchAs_SelectedIndexChanged(object? sender, EventArgs e)
+        => PlaybackSetting_Changed(sender, e);
 
     private void LbReplayList_SelectedIndexChanged(object? sender, EventArgs e)
     {
@@ -313,59 +321,85 @@ public class ReplaysPanel : XNAPanel
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    private void LbReplayList_RightClick(object? sender, EventArgs e)
+    {
+        if (lbReplayList.HoveredIndex < 0 || lbReplayList.HoveredIndex >= lbReplayList.ItemCount)
+            return;
+
+        replayContextMenu.Open(GetCursorPoint());
+    }
+
     private void UpdateForSelection()
     {
         UpdateDetails();
-        UpdatePerspectiveDropDown();
+        UpdateWatchAsDropDown();
     }
 
-    private void UpdatePerspectiveDropDown()
+    private void UpdateWatchAsDropDown()
     {
-        // Perspective indices are replay-specific, so reset to the recorder.
-        ddPerspective.SelectedIndexChanged -= DdPerspective_SelectedIndexChanged;
+        // Watch-as indices are replay-specific, so reset for the newly selected replay.
+        ddWatchAs.SelectedIndexChanged -= DdWatchAs_SelectedIndexChanged;
 
-        perspectivePlayers = SelectedReplay?.Players ?? (IReadOnlyList<ReplayPlayer>)Array.Empty<ReplayPlayer>();
+        watchAsPlayers = SelectedReplay?.Players ?? (IReadOnlyList<ReplayPlayer>)Array.Empty<ReplayPlayer>();
 
-        ddPerspective.Items.Clear();
-        ddPerspective.SelectedIndex = -1;
+        ddWatchAs.Items.Clear();
+        ddWatchAs.SelectedIndex = -1;
 
-        foreach (ReplayPlayer player in perspectivePlayers)
+        ddWatchAs.AddItem(Renderer.GetSafeString("Spectator".L10N("Client:Main:ReplayWatchAsSpectator"),
+            ddWatchAs.FontIndex));
+
+        foreach (ReplayPlayer player in watchAsPlayers)
         {
-            ddPerspective.AddItem(Renderer.GetSafeString(DescribePerspective(player),
-                ddPerspective.FontIndex));
+            ddWatchAs.AddItem(Renderer.GetSafeString(DescribeWatchAsPlayer(player),
+                ddWatchAs.FontIndex));
         }
 
-        if (perspectivePlayers.Count > 0)
-            ddPerspective.SelectedIndex = 0;
+        if (UserINISettings.Instance.ReplayPlaybackSpectator)
+        {
+            ddWatchAs.SelectedIndex = 0;
+        }
+        else
+        {
+            int recorderIndex = -1;
+            for (int i = 0; i < watchAsPlayers.Count; i++)
+            {
+                if (watchAsPlayers[i].IsRecorder)
+                {
+                    recorderIndex = i;
+                    break;
+                }
+            }
 
-        ddPerspective.SelectedIndexChanged += DdPerspective_SelectedIndexChanged;
+            ddWatchAs.SelectedIndex = recorderIndex >= 0 ? recorderIndex + 1 : 0;
+        }
+
+        ddWatchAs.SelectedIndexChanged += DdWatchAs_SelectedIndexChanged;
 
         UpdatePlaybackOptionAvailability();
     }
 
     private void UpdatePlaybackOptionAvailability()
     {
-        bool spectating = chkSpectator.Checked;
-        bool watchingRecordingPlayer = spectating || SelectedPerspective?.IsRecorder != false;
+        bool spectating = IsSpectatorSelected;
+        bool watchingRecordingPlayer = spectating || SelectedPlayer?.IsRecorder != false;
 
         // The spawner ignores these options for spectator or alternate-player views.
         chkShroudEnabled.AllowChecking = !spectating;
-        ddPerspective.AllowDropDown = !spectating && perspectivePlayers.Count > 1;
 
-        chkLockedViewport.AllowChecking = watchingRecordingPlayer;
-        chkSelectUnits.AllowChecking = watchingRecordingPlayer;
+        chkFollowRecordedCamera.AllowChecking = watchingRecordingPlayer;
+        chkShowSelections.AllowChecking = watchingRecordingPlayer;
     }
 
-    private static string DescribePerspective(ReplayPlayer player)
+    private static string DescribeWatchAsPlayer(ReplayPlayer player)
     {
         if (player.IsRecorder)
         {
-            return string.Format("{0} (recorded)".L10N("Client:Main:ReplayPerspectiveRecorder"),
+            return string.Format("{0} (recorded)".L10N("Client:Main:ReplayWatchAsRecorder"),
                 player.Name);
         }
 
         return player.IsSpectator
-            ? string.Format("{0} (spectator)".L10N("Client:Main:ReplayPerspectiveSpectator"), player.Name)
+            ? string.Format("{0} (spectator)".L10N("Client:Main:ReplayWatchAsPlayerSpectator"), player.Name)
             : player.Name;
     }
 
@@ -475,7 +509,7 @@ public class ReplaysPanel : XNAPanel
         tbDetails.Text = details.ToString();
     }
 
-    private ReplayPlayer? LaunchPerspective => chkSpectator.Checked ? null : SelectedPerspective;
+    private ReplayPlayer? LaunchPerspective => IsSpectatorSelected ? null : SelectedPlayer;
 
     public void Launch()
     {
@@ -564,16 +598,15 @@ public class ReplaysPanel : XNAPanel
         spawnIni.SetIntValue("Settings", "ReplayPlaybackSpeed", SelectedPlaybackFPS);
 
         spawnIni.SetBooleanValue("Settings", "ReplayShroudEnabled", chkShroudEnabled.Checked);
-        spawnIni.SetBooleanValue("Settings", "ReplayLockedViewport", chkLockedViewport.Checked);
-        spawnIni.SetBooleanValue("Settings", "ReplaySelectUnits", chkSelectUnits.Checked);
-        spawnIni.SetBooleanValue("Settings", "ReplaySpectator", chkSpectator.Checked);
+        // The spawner's flag is phrased as freedom, not following, so this is the negation of the checkbox.
+        spawnIni.SetBooleanValue("Settings", "ReplayFreeCamera", !chkFollowRecordedCamera.Checked);
+        spawnIni.SetBooleanValue("Settings", "ReplayShowSelections", chkShowSelections.Checked);
+        spawnIni.SetBooleanValue("Settings", "ReplaySpectator", IsSpectatorSelected);
         spawnIni.SetBooleanValue("Settings", "ReplayShowChatAndBeacons", chkShowChatAndBeacons.Checked);
 
-        spawnIni.SetBooleanValue("Settings", "ReplayControlBar", chkControlBar.Checked);
-
-        // Keyframes are scratch savegames the spawner takes as it plays, so that rewinding does not
-        // have to replay the game from the start. Nothing about them reaches the replay file.
-        spawnIni.SetIntValue("Settings", "ReplayKeyframeInterval", SelectedKeyframeInterval);
+        // Rewind checkpoints are scratch savegames the spawner takes as it plays, so that rewinding does
+        // not have to replay the game from the start. Nothing about them reaches the replay file.
+        spawnIni.SetIntValue("Settings", "ReplayRewindCheckpointInterval", SelectedRewindCheckpointInterval);
 
         spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
 
