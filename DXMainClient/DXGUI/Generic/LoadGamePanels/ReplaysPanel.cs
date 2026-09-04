@@ -43,12 +43,10 @@ public class ReplaysPanel : XNAPanel
     private const int FIXED_COLUMNS_WIDTH = 320;
 
     /// <summary>
-    /// Frame counts offered for the spawner's rewind checkpoint interval. Playback drops a savegame
-    /// checkpoint this often as it watches, and rewinding restarts from the newest one at or before
-    /// where you asked for - so a lower option seeks more precisely at the cost of more scratch disk
-    /// and a brief pause each time one is taken. Off takes none.
+    /// Frame counts offered for the spawner's seek checkpoint interval. A lower option seeks more
+    /// precisely at the cost of disk space and a brief pause whenever one is taken.
     /// </summary>
-    private static readonly int[] RewindCheckpointIntervals = { 0, 375, 750, 1500 };
+    private static readonly int[] SeekCheckpointIntervals = { 0, 375, 750, 1500 };
 
     public ReplaysPanel(WindowManager windowManager, DiscordHandler discordHandler) : base(windowManager)
     {
@@ -66,7 +64,7 @@ public class ReplaysPanel : XNAPanel
     private XNAClientCheckBox chkShowSelections = null!;
     private XNAClientCheckBox chkShowChatAndBeacons = null!;
     private XNAClientDropDown ddGameSpeed = null!;
-    private XNAClientDropDown ddRewindCheckpoints = null!;
+    private XNAClientDropDown ddSeekCheckpoints = null!;
     private XNAClientDropDown ddWatchAs = null!;
 
     private List<ReplayGame> replays = new List<ReplayGame>();
@@ -147,22 +145,22 @@ public class ReplaysPanel : XNAPanel
         lblGameSpeed.Name = nameof(lblGameSpeed);
         lblGameSpeed.Text = "Speed:".L10N("Client:Main:ReplayPlaybackSpeed");
 
-        var lblRewindCheckpoints = new XNALabel(WindowManager);
-        lblRewindCheckpoints.Name = nameof(lblRewindCheckpoints);
-        lblRewindCheckpoints.Text = "Rewind checkpoints:".L10N("Client:Main:ReplayRewindCheckpoints");
+        var lblSeekCheckpoints = new XNALabel(WindowManager);
+        lblSeekCheckpoints.Name = nameof(lblSeekCheckpoints);
+        lblSeekCheckpoints.Text = "Seek checkpoints:".L10N("Client:Main:ReplaySeekCheckpoints");
 
-        int dropDownLabelWidth = new[] { lblWatchAs.Width, lblGameSpeed.Width, lblRewindCheckpoints.Width }.Max();
+        int dropDownLabelWidth = new[] { lblWatchAs.Width, lblGameSpeed.Width, lblSeekCheckpoints.Width }.Max();
         int dropDownX = dropDownLabelWidth + COLUMN_LABEL_GAP;
         int checkBoxX = dropDownX + DROPDOWN_WIDTH + COLUMN_GAP;
 
         int watchAsRowY = firstRowY;
         int gameSpeedRowY = watchAsRowY + ROW_SPACING;
-        int rewindCheckpointsRowY = gameSpeedRowY + ROW_SPACING;
+        int seekCheckpointsRowY = gameSpeedRowY + ROW_SPACING;
 
         lblWatchAs.ClientRectangle = new Rectangle(0, watchAsRowY + 3, lblWatchAs.Width, lblWatchAs.Height);
         lblGameSpeed.ClientRectangle = new Rectangle(0, gameSpeedRowY + 3, lblGameSpeed.Width, lblGameSpeed.Height);
-        lblRewindCheckpoints.ClientRectangle = new Rectangle(0, rewindCheckpointsRowY + 3,
-            lblRewindCheckpoints.Width, lblRewindCheckpoints.Height);
+        lblSeekCheckpoints.ClientRectangle = new Rectangle(0, seekCheckpointsRowY + 3,
+            lblSeekCheckpoints.Width, lblSeekCheckpoints.Height);
 
         ddWatchAs = new XNAClientDropDown(WindowManager);
         ddWatchAs.Name = nameof(ddWatchAs);
@@ -178,12 +176,12 @@ public class ReplaysPanel : XNAPanel
         ddGameSpeed.ToolTipText = ("How fast the replay is played back.").L10N("Client:Main:ReplayPlaybackSpeedTooltip");
         PopulateGameSpeedDropDown();
 
-        ddRewindCheckpoints = new XNAClientDropDown(WindowManager);
-        ddRewindCheckpoints.Name = nameof(ddRewindCheckpoints);
-        ddRewindCheckpoints.ClientRectangle = new Rectangle(dropDownX, rewindCheckpointsRowY, DROPDOWN_WIDTH, DROPDOWN_HEIGHT);
-        ddRewindCheckpoints.ToolTipText =
-            "For faster seeking, a lower option is better.".L10N("Client:Main:ReplayRewindCheckpointsTooltip");
-        PopulateRewindCheckpointsDropDown();
+        ddSeekCheckpoints = new XNAClientDropDown(WindowManager);
+        ddSeekCheckpoints.Name = nameof(ddSeekCheckpoints);
+        ddSeekCheckpoints.ClientRectangle = new Rectangle(dropDownX, seekCheckpointsRowY, DROPDOWN_WIDTH, DROPDOWN_HEIGHT);
+        ddSeekCheckpoints.ToolTipText =
+            "For faster seeking, a lower option is better.".L10N("Client:Main:ReplaySeekCheckpointsTooltip");
+        PopulateSeekCheckpointsDropDown();
 
         // The checkboxes form their own column to the right of the dropdowns.
         chkShroudEnabled = CreateCheckBox(nameof(chkShroudEnabled), checkBoxX, watchAsRowY, CHECK_BOX_WIDTH,
@@ -198,13 +196,13 @@ public class ReplaysPanel : XNAPanel
                 .L10N("Client:Main:ReplayFollowRecordedCameraTooltip"),
             UserINISettings.Instance.ReplayPlaybackFollowCamera);
 
-        chkShowSelections = CreateCheckBox(nameof(chkShowSelections), checkBoxX, rewindCheckpointsRowY, CHECK_BOX_WIDTH,
+        chkShowSelections = CreateCheckBox(nameof(chkShowSelections), checkBoxX, seekCheckpointsRowY, CHECK_BOX_WIDTH,
             "Show recorded selections".L10N("Client:Main:ReplayShowSelections"),
             "Highlights the units the watched player had selected."
                 .L10N("Client:Main:ReplayShowSelectionsTooltip"),
             UserINISettings.Instance.ReplayPlaybackShowSelections);
 
-        int chatAndBeaconsRowY = rewindCheckpointsRowY + ROW_SPACING;
+        int chatAndBeaconsRowY = seekCheckpointsRowY + ROW_SPACING;
 
         chkShowChatAndBeacons = CreateCheckBox(nameof(chkShowChatAndBeacons), checkBoxX, chatAndBeaconsRowY, CHECK_BOX_WIDTH,
             "Show chat and beacons".L10N("Client:Main:ReplayShowChatAndBeacons"),
@@ -219,8 +217,8 @@ public class ReplaysPanel : XNAPanel
         AddChild(ddWatchAs);
         AddChild(lblGameSpeed);
         AddChild(ddGameSpeed);
-        AddChild(lblRewindCheckpoints);
-        AddChild(ddRewindCheckpoints);
+        AddChild(lblSeekCheckpoints);
+        AddChild(ddSeekCheckpoints);
         AddChild(chkShroudEnabled);
         AddChild(chkFollowRecordedCamera);
         AddChild(chkShowSelections);
@@ -259,29 +257,29 @@ public class ReplaysPanel : XNAPanel
         ddGameSpeed.SelectedIndexChanged += PlaybackSetting_Changed;
     }
 
-    private void PopulateRewindCheckpointsDropDown()
+    private void PopulateSeekCheckpointsDropDown()
     {
-        foreach (int interval in RewindCheckpointIntervals)
+        foreach (int interval in SeekCheckpointIntervals)
         {
-            ddRewindCheckpoints.AddItem(interval <= 0
-                ? "Off".L10N("Client:Main:ReplayRewindCheckpointsOff")
-                : string.Format("Every {0} frames".L10N("Client:Main:ReplayRewindCheckpointsItem"), interval));
+            ddSeekCheckpoints.AddItem(interval <= 0
+                ? "Off".L10N("Client:Main:ReplaySeekCheckpointsOff")
+                : string.Format("Every {0} frames".L10N("Client:Main:ReplaySeekCheckpointsItem"), interval));
         }
 
         // Store the interval instead of an index, so changing the table preserves the selection.
         int storedInterval = UserINISettings.Instance.ReplayPlaybackKeyframeInterval;
-        int index = Array.IndexOf(RewindCheckpointIntervals, storedInterval);
-        ddRewindCheckpoints.SelectedIndex = index >= 0 ? index : Array.IndexOf(RewindCheckpointIntervals, 750);
-        ddRewindCheckpoints.SelectedIndexChanged += PlaybackSetting_Changed;
+        int index = Array.IndexOf(SeekCheckpointIntervals, storedInterval);
+        ddSeekCheckpoints.SelectedIndex = index >= 0 ? index : Array.IndexOf(SeekCheckpointIntervals, 750);
+        ddSeekCheckpoints.SelectedIndexChanged += PlaybackSetting_Changed;
     }
 
-    /// <summary>Frames between rewind checkpoints, or 0 for none.</summary>
+    /// <summary>Frames between seek checkpoints, or 0 for none.</summary>
     private int SelectedKeyframeInterval
     {
         get
         {
-            int index = ddRewindCheckpoints.SelectedIndex;
-            return index >= 0 && index < RewindCheckpointIntervals.Length ? RewindCheckpointIntervals[index] : 750;
+            int index = ddSeekCheckpoints.SelectedIndex;
+            return index >= 0 && index < SeekCheckpointIntervals.Length ? SeekCheckpointIntervals[index] : 750;
         }
     }
 

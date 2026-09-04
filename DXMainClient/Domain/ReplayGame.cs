@@ -5,6 +5,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 
+using ClientCore.Extensions;
 using ClientCore.PlatformShim;
 
 using Rampastring.Tools;
@@ -299,8 +300,17 @@ public class ReplayGame
 
         UIGameMode = spawnIni.GetStringValue("Settings", "UIGameMode", string.Empty);
 
+        bool isCampaign = spawnIni.GetBooleanValue("Settings", "IsSinglePlayer", false);
+
         // Preserve spawn.ini order because the spawner setting ReplayViewPlayer uses these slot indices.
-        AddPlayer(spawnIni, "Settings", 0);
+        if (!AddPlayer(spawnIni, "Settings", 0) && isCampaign)
+        {
+            // A campaign spawn.ini carries no name for the player, so give the slot a generic one.
+            players.Add(new ReplayPlayer(0,
+                "Player".L10N("Client:Main:ReplayCampaignPlayer"),
+                spawnIni.GetIntValue("Settings", "Side", -1),
+                false));
+        }
 
         for (int otherId = 1; ; otherId++)
         {

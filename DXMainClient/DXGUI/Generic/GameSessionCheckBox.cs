@@ -126,9 +126,12 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
         CheckedChanged += (_, _) => PersistValue();
     }
 
+    /// <summary>Set while a stored value is being restored, which must not save it back.</summary>
+    private bool restoringValue;
+
     private void PersistValue()
     {
-        if (string.IsNullOrWhiteSpace(UserSettingKey))
+        if (restoringValue || string.IsNullOrWhiteSpace(UserSettingKey))
             return;
 
         UserINISettings.Instance.SetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, Checked);
@@ -167,7 +170,20 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
                 return;
             case "Checked":
                 bool checkedValue = Conversions.BooleanFromString(value, false);
-                DefaultChecked = Checked = checkedValue;
+                DefaultChecked = checkedValue;
+
+                try
+                {
+                    restoringValue = true;
+                    Checked = string.IsNullOrWhiteSpace(UserSettingKey)
+                        ? checkedValue
+                        : UserINISettings.Instance.GetValue(UserINISettings.LOCAL_GAME_OPTIONS, UserSettingKey, checkedValue);
+                }
+                finally
+                {
+                    restoringValue = false;
+                }
+
                 return;
             case "MapScoringMode":
                 mapScoringMode = (CheckBoxMapScoringMode)Enum.Parse(typeof(CheckBoxMapScoringMode), value);
