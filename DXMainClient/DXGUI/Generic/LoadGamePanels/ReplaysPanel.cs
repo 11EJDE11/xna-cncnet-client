@@ -269,14 +269,14 @@ public class ReplaysPanel : XNAPanel
         }
 
         // Store the interval instead of an index, so changing the table preserves the selection.
-        int storedInterval = UserINISettings.Instance.ReplayPlaybackRewindCheckpointInterval;
+        int storedInterval = UserINISettings.Instance.ReplayPlaybackKeyframeInterval;
         int index = Array.IndexOf(RewindCheckpointIntervals, storedInterval);
         ddRewindCheckpoints.SelectedIndex = index >= 0 ? index : Array.IndexOf(RewindCheckpointIntervals, 750);
         ddRewindCheckpoints.SelectedIndexChanged += PlaybackSetting_Changed;
     }
 
     /// <summary>Frames between rewind checkpoints, or 0 for none.</summary>
-    private int SelectedRewindCheckpointInterval
+    private int SelectedKeyframeInterval
     {
         get
         {
@@ -305,7 +305,7 @@ public class ReplaysPanel : XNAPanel
         UserINISettings.Instance.ReplayPlaybackSpectator.Value = IsSpectatorSelected;
         UserINISettings.Instance.ReplayPlaybackShowChatAndBeacons.Value = chkShowChatAndBeacons.Checked;
         UserINISettings.Instance.ReplayPlaybackGameSpeed.Value = SelectedPlaybackFPS;
-        UserINISettings.Instance.ReplayPlaybackRewindCheckpointInterval.Value = SelectedRewindCheckpointInterval;
+        UserINISettings.Instance.ReplayPlaybackKeyframeInterval.Value = SelectedKeyframeInterval;
 
         UserINISettings.Instance.SaveSettings();
 
@@ -604,9 +604,10 @@ public class ReplaysPanel : XNAPanel
         spawnIni.SetBooleanValue("Settings", "ReplaySpectator", IsSpectatorSelected);
         spawnIni.SetBooleanValue("Settings", "ReplayShowChatAndBeacons", chkShowChatAndBeacons.Checked);
 
-        // Rewind checkpoints are scratch savegames the spawner takes as it plays, so that rewinding does
-        // not have to replay the game from the start. Nothing about them reaches the replay file.
-        spawnIni.SetIntValue("Settings", "ReplayRewindCheckpointInterval", SelectedRewindCheckpointInterval);
+        // Keyframes make rewinding faster and are deleted after playback.
+        spawnIni.SetIntValue("Settings", "ReplayKeyframeInterval", SelectedKeyframeInterval);
+        spawnIni.SetIntValue("Settings", "ReplayKeyframeStorageLimitMB",
+            UserINISettings.Instance.ReplayKeyframeStorageLimitMB.Value);
 
         spawnIni.SetBooleanValue("Settings", "EnableReplayRecording", false);
 

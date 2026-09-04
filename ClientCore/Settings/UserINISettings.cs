@@ -186,13 +186,14 @@ namespace ClientCore
 
             MaxKeptReplays = new IntSetting(iniFile, REPLAYS, "MaxKeptReplays", 50);
             MaxReplayFolderSizeMB = new IntSetting(iniFile, REPLAYS, "MaxReplayFolderSizeMB", 2048);
+            ReplayKeyframeStorageLimitMB = new IntSetting(iniFile, REPLAYS, "ReplayKeyframeStorageLimitMB", 512);
             ReplayPlaybackShroudEnabled = new BoolSetting(iniFile, REPLAYS, "PlaybackShroudEnabled", false);
             ReplayPlaybackFollowCamera = new BoolSetting(iniFile, REPLAYS, "PlaybackFollowCamera", true);
             ReplayPlaybackShowSelections = new BoolSetting(iniFile, REPLAYS, "PlaybackShowSelections", true);
             ReplayPlaybackSpectator = new BoolSetting(iniFile, REPLAYS, "PlaybackSpectator", true);
             ReplayPlaybackShowChatAndBeacons = new BoolSetting(iniFile, REPLAYS, "PlaybackShowChatAndBeacons", true);
             ReplayPlaybackGameSpeed = new IntSetting(iniFile, REPLAYS, "PlaybackGameSpeed", 0);
-            ReplayPlaybackRewindCheckpointInterval = new IntSetting(iniFile, REPLAYS, "PlaybackRewindCheckpointInterval", 750);
+            ReplayPlaybackKeyframeInterval = new IntSetting(iniFile, REPLAYS, "PlaybackKeyframeInterval", 750);
 
             SortState = new IntSetting(iniFile, GAME_FILTERS, "SortState", (int)SortDirection.None);
             ShowFriendGamesOnly = new BoolSetting(iniFile, GAME_FILTERS, "ShowFriendGamesOnly", DEFAULT_SHOW_FRIENDS_ONLY_GAMES);
@@ -359,6 +360,9 @@ namespace ClientCore
         /// <summary>Maximum total size of the replay directory in megabytes. 0 means unlimited.</summary>
         public IntSetting MaxReplayFolderSizeMB { get; private set; }
 
+        /// <summary>Maximum playback keyframe storage in megabytes. 0 means unlimited.</summary>
+        public IntSetting ReplayKeyframeStorageLimitMB { get; private set; }
+
         public BoolSetting ReplayPlaybackShroudEnabled { get; private set; }
 
         public BoolSetting ReplayPlaybackFollowCamera { get; private set; }
@@ -371,7 +375,7 @@ namespace ClientCore
 
         public IntSetting ReplayPlaybackGameSpeed { get; private set; }
 
-        public IntSetting ReplayPlaybackRewindCheckpointInterval { get; private set; }
+        public IntSetting ReplayPlaybackKeyframeInterval { get; private set; }
 
         /********/
         /* MISC */

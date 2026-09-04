@@ -35,6 +35,7 @@ class StorageOptionsPanel : XNAOptionsPanel
 
     private XNATextBox tbMaxKeptReplays = null!;
     private XNATextBox tbMaxReplayFolderSize = null!;
+    private XNATextBox tbReplayKeyframeStorageLimit = null!;
     private XNALabel lblReplayUsage = null!;
 
     public override void Initialize()
@@ -93,6 +94,29 @@ class StorageOptionsPanel : XNAOptionsPanel
             .L10N("Client:DTAConfig:StorageReplayExplanation");
         lblExplanation.ClientRectangle = new Rectangle(12, lblReplayUsage.Y + ROW_SPACING, 0, 0);
 
+        var lblKeyframesHeader = new XNALabel(WindowManager);
+        lblKeyframesHeader.Name = nameof(lblKeyframesHeader);
+        lblKeyframesHeader.FontIndex = 1;
+        lblKeyframesHeader.Text = "Playback keyframes".L10N("Client:DTAConfig:StorageKeyframesHeader");
+        lblKeyframesHeader.ClientRectangle = new Rectangle(12, lblExplanation.Bottom + ROW_SPACING, 0, 0);
+
+        var lblKeyframeSize = new XNALabel(WindowManager);
+        lblKeyframeSize.Name = nameof(lblKeyframeSize);
+        lblKeyframeSize.Text = "Maximum size:".L10N("Client:DTAConfig:StorageKeyframeMaxSize");
+        lblKeyframeSize.ClientRectangle = new Rectangle(12, lblKeyframesHeader.Bottom + ROW_SPACING - 12, 0, 0);
+
+        tbReplayKeyframeStorageLimit = new XNATextBox(WindowManager);
+        tbReplayKeyframeStorageLimit.Name = nameof(tbReplayKeyframeStorageLimit);
+        tbReplayKeyframeStorageLimit.MaximumTextLength = 7;
+        tbReplayKeyframeStorageLimit.ClientRectangle = new Rectangle(
+            TEXT_BOX_X, lblKeyframeSize.Y - 4, TEXT_BOX_WIDTH, TEXT_BOX_HEIGHT);
+
+        var lblKeyframeSizeSuffix = new XNALabel(WindowManager);
+        lblKeyframeSizeSuffix.Name = nameof(lblKeyframeSizeSuffix);
+        lblKeyframeSizeSuffix.Text = "MB  (0 = no limit)".L10N("Client:DTAConfig:StorageKeyframeMaxSizeSuffix");
+        lblKeyframeSizeSuffix.ClientRectangle = new Rectangle(
+            tbReplayKeyframeStorageLimit.Right + 8, lblKeyframeSize.Y, 0, 0);
+
         AddChild(lblReplaysHeader);
         AddChild(lblKeptReplays);
         AddChild(tbMaxKeptReplays);
@@ -102,6 +126,10 @@ class StorageOptionsPanel : XNAOptionsPanel
         AddChild(lblFolderSizeSuffix);
         AddChild(lblReplayUsage);
         AddChild(lblExplanation);
+        AddChild(lblKeyframesHeader);
+        AddChild(lblKeyframeSize);
+        AddChild(tbReplayKeyframeStorageLimit);
+        AddChild(lblKeyframeSizeSuffix);
     }
 
     public override void Load()
@@ -110,6 +138,7 @@ class StorageOptionsPanel : XNAOptionsPanel
 
         tbMaxKeptReplays.Text = IniSettings.MaxKeptReplays.Value.ToString();
         tbMaxReplayFolderSize.Text = IniSettings.MaxReplayFolderSizeMB.Value.ToString();
+        tbReplayKeyframeStorageLimit.Text = IniSettings.ReplayKeyframeStorageLimitMB.Value.ToString();
 
         RefreshUsageLabel();
     }
@@ -122,6 +151,9 @@ class StorageOptionsPanel : XNAOptionsPanel
             ParseLimit(tbMaxKeptReplays.Text, IniSettings.MaxKeptReplays.Value, MAX_KEPT_REPLAYS_LIMIT);
         IniSettings.MaxReplayFolderSizeMB.Value =
             ParseLimit(tbMaxReplayFolderSize.Text, IniSettings.MaxReplayFolderSizeMB.Value, MAX_FOLDER_SIZE_LIMIT_MB);
+        IniSettings.ReplayKeyframeStorageLimitMB.Value =
+            ParseLimit(tbReplayKeyframeStorageLimit.Text,
+                IniSettings.ReplayKeyframeStorageLimitMB.Value, MAX_FOLDER_SIZE_LIMIT_MB);
 
         ReplayManager.Prune();
 
