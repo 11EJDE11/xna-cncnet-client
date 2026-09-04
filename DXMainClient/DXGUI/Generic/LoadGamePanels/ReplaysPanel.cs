@@ -481,9 +481,9 @@ public class ReplaysPanel : XNAPanel
 
         if (replay.IsComplete)
         {
-            details.Append(string.Format("Length: {0} - {1} frames at {2} FPS"
+            details.Append(string.Format("Length: {0} - {1} frames"
                 .L10N("Client:Main:ReplayDetailLength"),
-                FormatDuration(replay), replay.TotalFrames.ToString("N0"), replay.FramesPerSecond));
+                FormatDuration(replay), replay.TotalFrames.ToString("N0")));
             details.AppendLine();
         }
 
