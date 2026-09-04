@@ -49,6 +49,7 @@ public class V3TunnelNegotiationManager
         tunnelHandler.KeepAliveMonitor.PongReceived += OnKeepAlivePongReceived;
         tunnelHandler.KeepAliveMonitor.TimedOut += OnKeepAliveTimedOut;
         tunnelHandler.GameBridgeStopped += FlushDeferredP2PCleanups;
+        tunnelHandler.GameBridgeStopped += EnsureLocalGamePortReserved;
     }
 
     public IReadOnlyList<V3PlayerInfo> PlayerInfos => _v3PlayerInfos;
@@ -116,14 +117,76 @@ public class V3TunnelNegotiationManager
                     GeneratePlayerID(player.Name),
                     player.Name,
                     i,
-                    0)); // PlayerGameId is assigned at game start
+                    0)); // PlayerGameId is filled in once the port is reserved/reported
             }
             else
             {
                 v3Player.PlayerIndex = i;
             }
         }
+
+        EnsureLocalGamePortReserved();
     }
+
+    /// <summary>
+    /// Reserves this client's local game-relay UDP port for the lobby session, if it isn't
+    /// already reserved, and reports it to the host so it can go into the next STARTV3
+    /// payload.
+    /// </summary>
+    private void EnsureLocalGamePortReserved()
+    {
+        if (host.TunnelMode != TunnelMode.V3Static && host.TunnelMode != TunnelMode.V3Dynamic)
+            return;
+
+        if (tunnelHandler.ReservedGamePort.HasValue)
+            return;
+
+        var localV3Player = FindPlayer(ProgramConstants.PLAYERNAME);
+        if (localV3Player == null)
+            return;
+
+        int port;
+        try
+        {
+            port = tunnelHandler.ReserveLocalGamePort();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"V3TunnelNegotiationManager: Failed to reserve a local game port: {ex.Message}");
+            return;
+        }
+
+        localV3Player.PlayerGameId = (ushort)port;
+
+        if (!host.IsHost)
+            host.SendChannelCTCP($"{TunnelNegotiationCommands.GamePortReport} {port}", 10);
+    }
+
+    /// <summary>
+    /// Handles a remote player's GPRT report: records their reserved game port so the host
+    /// can include it in the next STARTV3 payload.
+    /// </summary>
+    public void HandleGamePortReport(string sender, int port)
+    {
+        if (!host.IsHost || port <= 0 || port > ushort.MaxValue)
+            return;
+
+        var v3Player = FindPlayer(sender);
+        if (v3Player == null)
+            return;
+
+        v3Player.PlayerGameId = (ushort)port;
+
+        var pInfo = host.Players.Find(p => p.Name == sender);
+        if (pInfo != null)
+            pInfo.GamePortReported = true;
+    }
+
+    /// <summary>
+    /// True once every known V3 player (including the local one) has a reserved/reported
+    /// game port.
+    /// </summary>
+    public bool AreAllGamePortsKnown() => _v3PlayerInfos.Count > 0 && _v3PlayerInfos.All(p => p.PlayerGameId != 0);
 
     /// <summary>
     /// Starts negotiating with a single player (by name), if dynamic tunnels are in use and
@@ -638,6 +701,9 @@ public class V3TunnelNegotiationManager
             StartPendingNegotiations();
         }
 
+        if (newMode == TunnelMode.V3Static || newMode == TunnelMode.V3Dynamic)
+            EnsureLocalGamePortReserved();
+
         RefreshKeepAliveTargets();
     }
 
@@ -794,7 +860,9 @@ public class V3TunnelNegotiationManager
     /// </summary>
     public void ClearAll()
     {
-        StopAllNegotiations(keepGameRoutes: IsLocalGameRouteActive());
+        bool gameRouteActive = IsLocalGameRouteActive();
+
+        StopAllNegotiations(keepGameRoutes: gameRouteActive);
         _negotiationData.ClearAll();
         _v3PlayerInfos.Clear();
 
@@ -803,13 +871,18 @@ public class V3TunnelNegotiationManager
         // Re-query STUN in the next lobby: without keepalives running, the NAT mapping
         // behind the cached external endpoint may expire and get remapped.
         tunnelHandler.ClearP2PEndpointCache();
+
+        if (!gameRouteActive)
+            tunnelHandler.ReleaseLocalGamePort();
     }
 
     /// <summary>
-    /// Parses one STARTV3 player entry (3 semicolon-delimited fields: id;name;ip:port) from
-    /// <paramref name="parts"/> starting at <paramref name="offset"/>, derives the game port
-    /// from <paramref name="playerPosition"/>, and updates both the <see cref="PlayerInfo"/>
-    /// and <see cref="V3PlayerInfo"/> for that player.
+    /// Parses one STARTV3 player entry (4 semicolon-delimited fields: id;name;ip:port;gameport)
+    /// from <paramref name="parts"/> starting at <paramref name="offset"/>, and updates both
+    /// the <see cref="PlayerInfo"/> and <see cref="V3PlayerInfo"/> for that player. The game
+    /// port is the sender's own reserved/reported local port (see
+    /// <see cref="EnsureLocalGamePortReserved"/>/<see cref="HandleGamePortReport"/>), not
+    /// derived from <paramref name="playerPosition"/>.
     /// </summary>
     /// <returns>False if any field is malformed or the player name is not found.</returns>
     public bool ApplyV3StartEntry(string[] parts, int offset, int playerPosition)
@@ -823,11 +896,13 @@ public class V3TunnelNegotiationManager
         if (ipAndPort.Length != 2 || !int.TryParse(ipAndPort[1], out int tunnelPort))
             return false;
 
+        if (!ushort.TryParse(parts[offset + 3], out ushort gamePort) || gamePort == 0)
+            return false;
+
         PlayerInfo? pInfo = host.Players.Find(p => p.Name == pName);
         if (pInfo == null)
             return false;
 
-        int gamePort = 48000 - playerPosition;
         pInfo.Port = gamePort;
 
         var v3PlayerInfo = FindPlayer(pName);
@@ -844,36 +919,36 @@ public class V3TunnelNegotiationManager
                 return false;
         }
         v3PlayerInfo.PlayerIndex = playerPosition;
-        v3PlayerInfo.PlayerGameId = (ushort)gamePort;
+        v3PlayerInfo.PlayerGameId = gamePort;
         v3PlayerInfo.Id = id;
 
         return true;
     }
 
     /// <summary>
-    /// Assigns final game IDs/ports/tunnels to every player and builds the
-    /// "id;name;address;..." payload used in the STARTV3 message. Sets each player's Port.
+    /// Assigns final game IDs/tunnels to every player and builds the
+    /// "id;name;address;gameport;..." payload used in the STARTV3 message. Each player's
+    /// game port is their own reserved/reported local port (<see cref="AreAllGamePortsKnown"/>
+    /// must be true before calling this — the caller is expected to gate on it).
     /// </summary>
     public string GenerateV3StartPayload()
     {
         var sb = new StringBuilder();
 
-        // The player order here defines each player's in-game id (port). All clients must
-        // iterate in this same order; the STARTV3 handler keys the id off message position.
         for (int i = 0; i < host.Players.Count; i++)
         {
             var player = host.Players[i];
             uint id = GeneratePlayerID(player.Name);
-            int port = 48000 - i; // with V3 this is more like an ID for the game (first bytes of packet data)
+
+            var v3PlayerInfo = FindPlayer(player.Name);
+            int port = v3PlayerInfo?.PlayerGameId ?? 0;
             player.Port = port;
 
             string address = IPAddress.Any + ":0";
-            var v3PlayerInfo = FindPlayer(player.Name);
             if (v3PlayerInfo != null)
             {
                 v3PlayerInfo.Id = id;
                 v3PlayerInfo.PlayerIndex = i;
-                v3PlayerInfo.PlayerGameId = (ushort)port;
 
                 if (host.TunnelMode == TunnelMode.V3Static)
                     v3PlayerInfo.Tunnel = tunnelHandler.CurrentTunnel;
@@ -891,7 +966,8 @@ public class V3TunnelNegotiationManager
 
             sb.Append(id).Append(';')
               .Append(player.Name).Append(';')
-              .Append(address).Append(';');
+              .Append(address).Append(';')
+              .Append(port).Append(';');
         }
 
         return sb.ToString().TrimEnd(';');
@@ -910,7 +986,7 @@ public class V3TunnelNegotiationManager
             return false;
         }
 
-        tunnelHandler.StartGameBridge(localV3Player.Id, localV3Player.PlayerGameId, _v3PlayerInfos);
+        tunnelHandler.StartGameBridge(localV3Player.Id, _v3PlayerInfos);
         return true;
     }
 
