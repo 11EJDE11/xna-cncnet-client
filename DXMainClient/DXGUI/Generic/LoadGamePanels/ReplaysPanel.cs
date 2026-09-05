@@ -494,13 +494,6 @@ public class ReplaysPanel : XNAPanel
         details.Append(string.Format("Version: {0}".L10N("Client:Main:ReplayDetailVersion"),
             SafeForDetails(GetDisplayVersion(replay))));
 
-        if (!string.IsNullOrWhiteSpace(replay.SpawnerVersion))
-        {
-            details.Append(" - ");
-            details.Append(string.Format("spawner {0}".L10N("Client:Main:ReplayDetailSpawnerVersion"),
-                SafeForDetails(replay.SpawnerVersion)));
-        }
-
         if (!replay.IsComplete)
         {
             details.AppendLine();

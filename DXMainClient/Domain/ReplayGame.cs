@@ -45,21 +45,19 @@ public class ReplayGame
     private const int STABLE_PREFIX_SIZE = 12;
 
     /// <summary>Size of the replay header.</summary>
-    private const int KNOWN_HEADER_SIZE = 1128;
+    private const int KNOWN_HEADER_SIZE = 1124;
 
     private const uint MAX_HEADER_SIZE = 64 * 1024;
 
     private const int OFFSET_MAGIC = 0;
     private const int OFFSET_FORMAT_VERSION = 4;
     private const int OFFSET_HEADER_SIZE = 8;
-    private const int OFFSET_SPAWNER_VERSION = 12;
-    private const int LENGTH_SPAWNER_VERSION = 4;
-    private const int OFFSET_SPAWN_INI_SIZE = 1036;
-    private const int OFFSET_SPAWN_MAP_SIZE = 1040;
-    private const int OFFSET_RECORDED_GAME_SPEED = 1044;
-    private const int OFFSET_RECORDED_UNIX_TIME = 1048;
-    private const int OFFSET_TOTAL_FRAMES = 1056;
-    private const int OFFSET_FLAGS = 1060;
+    private const int OFFSET_SPAWN_INI_SIZE = 1032;
+    private const int OFFSET_SPAWN_MAP_SIZE = 1036;
+    private const int OFFSET_RECORDED_GAME_SPEED = 1040;
+    private const int OFFSET_RECORDED_UNIX_TIME = 1044;
+    private const int OFFSET_TOTAL_FRAMES = 1052;
+    private const int OFFSET_FLAGS = 1056;
 
     private const uint HEADER_FLAG_CLEAN_SHUTDOWN = 1;
 
@@ -81,9 +79,6 @@ public class ReplayGame
 
     /// <summary>Game package version recorded in the replay.</summary>
     public string GameClientVersion { get; private set; } = string.Empty;
-
-    /// <summary>Spawner build that created the replay.</summary>
-    public string SpawnerVersion { get; private set; } = string.Empty;
 
     /// <summary>The lobby's game mode name, e.g. "Battle".</summary>
     public string UIGameMode { get; private set; } = string.Empty;
@@ -183,8 +178,6 @@ public class ReplayGame
                 Logger.Log($"Replay {FileName} declares embedded file sizes that do not fit the file");
                 return false;
             }
-
-            SpawnerVersion = DecodeVersion(header, OFFSET_SPAWNER_VERSION, LENGTH_SPAWNER_VERSION);
 
             RecordedAt = FromUnixTime(ReadUInt64(header, OFFSET_RECORDED_UNIX_TIME), replayFileInfo.LastWriteTime);
 
@@ -389,21 +382,5 @@ public class ReplayGame
         {
             return fallback;
         }
-    }
-
-    /// <summary>Reads version bytes as a dotted string; all-zero means unspecified.</summary>
-    private static string DecodeVersion(byte[] bytes, int offset, int length)
-    {
-        var parts = new string[length];
-        bool anyNonZero = false;
-
-        for (int i = 0; i < length; i++)
-        {
-            byte value = bytes[offset + i];
-            anyNonZero |= value != 0;
-            parts[i] = value.ToString();
-        }
-
-        return anyNonZero ? string.Join(".", parts) : string.Empty;
     }
 }
