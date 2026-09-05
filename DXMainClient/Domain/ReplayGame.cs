@@ -45,25 +45,21 @@ public class ReplayGame
     private const int STABLE_PREFIX_SIZE = 12;
 
     /// <summary>Size of the replay header.</summary>
-    private const int KNOWN_HEADER_SIZE = 1452;
+    private const int KNOWN_HEADER_SIZE = 1128;
 
     private const uint MAX_HEADER_SIZE = 64 * 1024;
 
     private const int OFFSET_MAGIC = 0;
     private const int OFFSET_FORMAT_VERSION = 4;
     private const int OFFSET_HEADER_SIZE = 8;
-    private const int OFFSET_MAP_NAME = 12;
-    private const int LENGTH_MAP_NAME = 260;
-    private const int OFFSET_SPAWNER_VERSION = 272;
+    private const int OFFSET_SPAWNER_VERSION = 12;
     private const int LENGTH_SPAWNER_VERSION = 4;
-    private const int OFFSET_GAME_CLIENT_VERSION = 276;
-    private const int LENGTH_GAME_CLIENT_VERSION = 64;
-    private const int OFFSET_SPAWN_INI_SIZE = 1360;
-    private const int OFFSET_SPAWN_MAP_SIZE = 1364;
-    private const int OFFSET_RECORDED_GAME_SPEED = 1368;
-    private const int OFFSET_RECORDED_UNIX_TIME = 1372;
-    private const int OFFSET_TOTAL_FRAMES = 1380;
-    private const int OFFSET_FLAGS = 1384;
+    private const int OFFSET_SPAWN_INI_SIZE = 1036;
+    private const int OFFSET_SPAWN_MAP_SIZE = 1040;
+    private const int OFFSET_RECORDED_GAME_SPEED = 1044;
+    private const int OFFSET_RECORDED_UNIX_TIME = 1048;
+    private const int OFFSET_TOTAL_FRAMES = 1056;
+    private const int OFFSET_FLAGS = 1060;
 
     private const uint HEADER_FLAG_CLEAN_SHUTDOWN = 1;
 
@@ -188,8 +184,6 @@ public class ReplayGame
                 return false;
             }
 
-            string mapName = DecodeCString(header, OFFSET_MAP_NAME, LENGTH_MAP_NAME);
-            GameClientVersion = DecodeCString(header, OFFSET_GAME_CLIENT_VERSION, LENGTH_GAME_CLIENT_VERSION);
             SpawnerVersion = DecodeVersion(header, OFFSET_SPAWNER_VERSION, LENGTH_SPAWNER_VERSION);
 
             RecordedAt = FromUnixTime(ReadUInt64(header, OFFSET_RECORDED_UNIX_TIME), replayFileInfo.LastWriteTime);
@@ -217,10 +211,6 @@ public class ReplayGame
             }
 
             ReadEmbeddedSpawnIni(spawnIniContent);
-
-            GUIName = string.IsNullOrWhiteSpace(mapName)
-                ? Path.GetFileNameWithoutExtension(FileName)
-                : mapName;
 
             return true;
         }
@@ -295,10 +285,14 @@ public class ReplayGame
         using MemoryStream spawnIniStream = new MemoryStream(EncodingExt.UTF8NoBOM.GetBytes(spawnIniContent));
         IniFile spawnIni = new IniFile(spawnIniStream, EncodingExt.UTF8NoBOM, applyBaseIni: false);
 
-        if (string.IsNullOrWhiteSpace(GameClientVersion))
-            GameClientVersion = spawnIni.GetStringValue("Settings", "GameClientVersion", string.Empty);
+        GameClientVersion = spawnIni.GetStringValue("Settings", "GameClientVersion", string.Empty);
 
         UIGameMode = spawnIni.GetStringValue("Settings", "UIGameMode", string.Empty);
+
+        string mapName = spawnIni.GetStringValue("Settings", "UIMapName", string.Empty);
+        GUIName = string.IsNullOrWhiteSpace(mapName)
+            ? Path.GetFileNameWithoutExtension(FileName)
+            : mapName;
 
         bool isCampaign = spawnIni.GetBooleanValue("Settings", "IsSinglePlayer", false);
 
@@ -411,14 +405,5 @@ public class ReplayGame
         }
 
         return anyNonZero ? string.Join(".", parts) : string.Empty;
-    }
-
-    private static string DecodeCString(byte[] bytes, int offset, int length)
-    {
-        int end = Array.IndexOf(bytes, (byte)0, offset, length);
-        if (end < 0)
-            end = offset + length;
-
-        return EncodingExt.UTF8NoBOM.GetString(bytes, offset, end - offset);
     }
 }
