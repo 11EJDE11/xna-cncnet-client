@@ -146,7 +146,7 @@ namespace DTAClient.DXGUI.Generic
             tabControl.AddTab("Replays".L10N("Client:Main:TabReplays"), UIDesignConstants.BUTTON_WIDTH_133);
             tabControl.SelectedIndexChanged += TabControl_SelectedIndexChanged;
 
-            replaysPanel = new ReplaysPanel(WindowManager, discordHandler);
+            replaysPanel = new ReplaysPanel(WindowManager, discordHandler, campaignTagSelector);
             replaysPanel.ClientRectangle = GetReplayContentRectangle();
             replaysPanel.SelectionChanged += (_, _) => UpdateButtonStates();
             replaysPanel.LaunchRequested += (_, _) => Disable();

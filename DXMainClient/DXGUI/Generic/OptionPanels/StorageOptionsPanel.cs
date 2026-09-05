@@ -155,8 +155,6 @@ class StorageOptionsPanel : XNAOptionsPanel
             ParseLimit(tbReplayKeyframeStorageLimit.Text,
                 IniSettings.ReplayKeyframeStorageLimitMB.Value, MAX_FOLDER_SIZE_LIMIT_MB);
 
-        ReplayManager.Prune();
-
         return restartRequired;
     }
 

@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 
 using ClientCore;
+using ClientCore.Extensions;
 
 using ClientUpdater;
 
@@ -76,15 +77,7 @@ public static class ReplayManager
             : timestamp + " " + safeMapName;
 
         if (baseName.Length > MaxRecordingBaseFileNameLength)
-        {
-            int length = MaxRecordingBaseFileNameLength;
-
-            // Keep UTF-16 surrogate pairs intact.
-            if (char.IsHighSurrogate(baseName[length - 1]))
-                length--;
-
-            baseName = baseName.Substring(0, length).TrimEnd();
-        }
+            baseName = baseName.SubstringSurrogateAware(0, MaxRecordingBaseFileNameLength).TrimEnd();
 
         string fileName = baseName + "." + FileExtension;
 

@@ -13,6 +13,7 @@ using ClientCore.PlatformShim;
 using ClientGUI;
 
 using DTAClient.Domain;
+using DTAClient.DXGUI.Campaign;
 
 using Microsoft.Xna.Framework;
 
@@ -48,12 +49,15 @@ public class ReplaysPanel : XNAPanel
     /// </summary>
     private static readonly int[] SeekCheckpointIntervals = { 0, 375, 750, 1500 };
 
-    public ReplaysPanel(WindowManager windowManager, DiscordHandler discordHandler) : base(windowManager)
+    public ReplaysPanel(WindowManager windowManager, DiscordHandler discordHandler,
+        CampaignTagSelector campaignTagSelector) : base(windowManager)
     {
         this.discordHandler = discordHandler;
+        this.campaignTagSelector = campaignTagSelector;
     }
 
     private readonly DiscordHandler discordHandler;
+    private readonly CampaignTagSelector campaignTagSelector;
 
     private XNAMultiColumnListBox lbReplayList = null!;
     private XNATextBlock tbDetails = null!;
@@ -531,7 +535,19 @@ public class ReplaysPanel : XNAPanel
 
         IniFile spawnIni = ReadReplaySpawnIni(spawnIniContent);
 
-        List<string> fileMismatches = ReplayFileHashes.FindMismatches(spawnIni);
+        List<string> fileMismatches;
+        try
+        {
+            // Check the same supplemental files that campaign recording had installed.
+            PrepareMissionFiles(spawnIni);
+            fileMismatches = ReplayFileHashes.FindMismatches(spawnIni);
+        }
+        finally
+        {
+            // A mismatch prompt can be cancelled, so leave no mission files installed yet.
+            CustomMissionHelper.DeleteSupplementalMissionFiles();
+        }
+
         if (fileMismatches.Count > 0)
         {
             ShowMismatchPrompt(replay, spawnIni, spawnMapContent, LaunchPerspective, fileMismatches);
@@ -545,6 +561,18 @@ public class ReplaysPanel : XNAPanel
     {
         using MemoryStream stream = new MemoryStream(EncodingExt.UTF8NoBOM.GetBytes(spawnIniContent));
         return new IniFile(stream, EncodingExt.UTF8NoBOM, applyBaseIni: false);
+    }
+
+    private void PrepareMissionFiles(IniFile spawnIni)
+    {
+        CustomMissionHelper.DeleteSupplementalMissionFiles();
+
+        if (!spawnIni.GetBooleanValue("Settings", "IsSinglePlayer", false))
+            return;
+
+        int customMissionID = spawnIni.GetIntValue("Settings", "CustomMissionID", 0);
+        if (campaignTagSelector.UniqueIDToMissions.TryGetValue(customMissionID, out Mission mission))
+            CustomMissionHelper.CopySupplementalMissionFiles(mission);
     }
 
     private void ShowMismatchPrompt(ReplayGame replay, IniFile spawnIni, byte[] spawnMapContent,
@@ -633,8 +661,27 @@ public class ReplaysPanel : XNAPanel
 
         LaunchRequested?.Invoke(this, EventArgs.Empty);
 
-        GameProcessLogic.GameProcessExited += GameProcessExited_Callback;
-        GameProcessLogic.StartGameProcess(WindowManager);
+        bool gameStarted = false;
+        Action onGameStarted = () => gameStarted = true;
+        GameProcessLogic.GameProcessStarted += onGameStarted;
+
+        try
+        {
+            PrepareMissionFiles(spawnIni);
+            GameProcessLogic.GameProcessExited += GameProcessExited_Callback;
+            GameProcessLogic.StartGameProcess(WindowManager);
+        }
+        finally
+        {
+            GameProcessLogic.GameProcessStarted -= onGameStarted;
+
+            // Startup can return early without raising GameProcessExited.
+            if (!gameStarted)
+            {
+                GameProcessLogic.GameProcessExited -= GameProcessExited_Callback;
+                CustomMissionHelper.DeleteSupplementalMissionFiles();
+            }
+        }
     }
 
     private void GameProcessExited_Callback()
@@ -645,6 +692,8 @@ public class ReplaysPanel : XNAPanel
     protected virtual void GameProcessExited()
     {
         GameProcessLogic.GameProcessExited -= GameProcessExited_Callback;
+
+        CustomMissionHelper.DeleteSupplementalMissionFiles();
 
         discordHandler.UpdatePresence();
         Refresh();
