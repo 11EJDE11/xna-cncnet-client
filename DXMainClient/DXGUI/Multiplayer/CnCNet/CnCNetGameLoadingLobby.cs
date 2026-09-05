@@ -74,7 +74,6 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 new StringCommandHandler(TunnelNegotiationCommands.NegotiationReport, HandleNegotiationReportMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelRenegotiate, HandleTunnelRenegotiateMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelFailed, HandleTunnelFailedMessage),
-                new IntCommandHandler(TunnelNegotiationCommands.GamePortReport, HandleGamePortReport),
             };
         }
 
@@ -621,21 +620,22 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (ProgramConstants.IsInGame)
             {
                 Logger.Log("HandleStartGameV3Command: Ignoring game start while still in a running game.");
+                NotifyStartFailed();
                 return;
             }
 
             string[] parts = data.Split(';');
 
-            if (parts.Length != Players.Count * 4)
+            if (parts.Length != Players.Count * 3)
             {
-                Logger.Log($"HandleStartGameV3Command: Invalid start message: expected {Players.Count * 4} parts for {Players.Count} players, got {parts.Length}.");
+                Logger.Log($"HandleStartGameV3Command: Invalid start message: expected {Players.Count * 3} parts for {Players.Count} players, got {parts.Length}.");
                 NotifyStartFailed();
                 return;
             }
 
             for (int i = 0; i < Players.Count; i++)
             {
-                if (!_negotiator.ApplyV3StartEntry(parts, i * 4, i))
+                if (!_negotiator.ApplyV3StartEntry(parts, i * 3, i))
                 {
                     Logger.Log($"HandleStartGameV3Command: Could not apply start entry for player at position {i}.");
                     NotifyStartFailed();
@@ -719,9 +719,6 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private void HandleTunnelFailedMessage(string sender, string tunnelName)
             => _negotiator.HandleRemoteTunnelFailed(sender, tunnelName);
 
-        private void HandleGamePortReport(string sender, int port)
-            => _negotiator.HandleGamePortReport(sender, port);
-
         #endregion
 
         protected override void HostStartGame()
@@ -729,13 +726,6 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (_tunnelMode == TunnelMode.V3Dynamic && !_negotiator.AreAllNegotiationsSuccessful())
             {
                 AddNotice("Cannot start game: tunnel negotiations have not completed.".L10N("Client:Main:CannotStartNegotiationsIncomplete"), Color.Yellow);
-                return;
-            }
-
-            if ((_tunnelMode == TunnelMode.V3Static || _tunnelMode == TunnelMode.V3Dynamic) && !_negotiator.AreAllGamePortsKnown())
-            {
-                var missingPorts = Players.Where(p => (_negotiator.FindPlayer(p.Name)?.PlayerGameId ?? 0) == 0).Select(p => p.Name);
-                AddNotice(string.Format("Waiting for game port info from: {0}".L10N("Client:Main:WaitingForGamePorts"), string.Join(", ", missingPorts)), Color.Yellow);
                 return;
             }
 
@@ -822,8 +812,11 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 PlayerInfo localPlayer = Players.Find(p => p.Name == ProgramConstants.PLAYERNAME);
                 if (localPlayer != null)
                 {
+                    // This is the client's own real, OS-assigned relay socket (see
+                    // TunnelHandler.ReserveLocalGamePort) — distinct from localPlayer.Port,
+                    // which is this player's deterministic in-game id, not a real endpoint.
                     spawnIni.SetStringValue("Tunnel", "Ip", IPAddress.Loopback.ToString());
-                    spawnIni.SetIntValue("Tunnel", "Port", localPlayer.Port);
+                    spawnIni.SetIntValue("Tunnel", "Port", tunnelHandler.ReservedGamePort ?? localPlayer.Port);
                 }
             }
 

@@ -23,10 +23,4 @@ public static class TunnelNegotiationCommands
 
     /// <summary>Announces a host-selected tunnel server change.</summary>
     public const string ChangeTunnelServer = "CHTNL";
-
-    /// <summary>
-    /// Reports the sender's reserved local game-relay port to the host, for inclusion as
-    /// that player's in-game ID in the next STARTV3 payload.
-    /// </summary>
-    public const string GamePortReport = "GPRT";
 }

@@ -43,12 +43,6 @@ namespace DTAClient.Domain.Multiplayer
         /// </summary>
         public bool HashReceived { get; set; }
 
-        /// <summary>
-        /// Whether this player has reported the local game port they reserved for the V3
-        /// tunnel bridge.
-        /// </summary>
-        public bool GamePortReported { get; set; }
-
         public int Index { get; set; }
 
         public PingValue Ping { get; set; } = PingValue.Unknown;

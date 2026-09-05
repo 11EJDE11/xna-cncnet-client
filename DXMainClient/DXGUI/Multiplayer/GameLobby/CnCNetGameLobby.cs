@@ -100,7 +100,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelRenegotiate, HandleTunnelRenegotiateMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.TunnelFailed, HandleTunnelFailedMessage),
                 new StringCommandHandler(TunnelNegotiationCommands.RenegotiateAll, HandleRenegotiateAll),
-                new IntCommandHandler(TunnelNegotiationCommands.GamePortReport, HandleGamePortReport),
                 new StringCommandHandler("GSETTINGS", ApplyGameLobbySettings)
             };
 
@@ -1162,13 +1161,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
-            if ((_tunnelMode == TunnelMode.V3Static || _tunnelMode == TunnelMode.V3Dynamic) && !_negotiator.AreAllGamePortsKnown())
-            {
-                var missingPorts = Players.Where(p => (_negotiator.FindPlayer(p.Name)?.PlayerGameId ?? 0) == 0).Select(p => p.Name);
-                AddNotice(string.Format("Waiting for game port info from: {0}".L10N("Client:Main:WaitingForGamePorts"), string.Join(", ", missingPorts)), Color.Yellow);
-                return;
-            }
-
             if (Players.Count > 1)
             {
                 // with V2 tunnels we get our ids from the tunnel server
@@ -1650,8 +1642,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             _negotiator.HandleNegotiationReportMessage(sender, data);
             CheckAllNegotiationsComplete();
         }
-
-        private void HandleGamePortReport(string sender, int port) => _negotiator.HandleGamePortReport(sender, port);
 
         private void HandleRenegotiateAll(string sender, string data)
         {
@@ -2299,6 +2289,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (ProgramConstants.IsInGame)
             {
                 Logger.Log("NonHostLaunchGameV3: Ignoring game start while still in a running game.");
+                NotifyStartFailed();
                 return;
             }
 
@@ -2310,9 +2301,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             string[] parts = message.Split(';');
 
-            if (parts.Length != (Players.Count * 4) + 1)
+            if (parts.Length != (Players.Count * 3) + 1)
             {
-                Logger.Log($"NonHostLaunchGameV3: Invalid start message: expected {(Players.Count * 4) + 1} parts for {Players.Count} players, got {parts.Length}.");
+                Logger.Log($"NonHostLaunchGameV3: Invalid start message: expected {(Players.Count * 3) + 1} parts for {Players.Count} players, got {parts.Length}.");
                 NotifyStartFailed();
                 return;
             }
@@ -2329,7 +2320,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             for (int i = 0; i < Players.Count; i++)
             {
-                int offset = 1 + i * 4;
+                int offset = 1 + i * 3;
                 if (!_negotiator.ApplyV3StartEntry(parts, offset, i))
                 {
                     Logger.Log($"NonHostLaunchGameV3: Could not apply start entry for player at position {i}.");
@@ -2400,9 +2391,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (_tunnelMode != TunnelMode.V2Legacy)
             {
-                // tell the game to connect to our bridge
+                // Tell the game to connect to our bridge.
                 iniFile.SetStringValue("Tunnel", "Ip", IPAddress.Loopback.ToString());
-                iniFile.SetIntValue("Tunnel", "Port", localPlayer.Port);
+                iniFile.SetIntValue("Tunnel", "Port", tunnelHandler.ReservedGamePort ?? localPlayer.Port);
             }
             else if (tunnelHandler.CurrentTunnel != null)
             {
