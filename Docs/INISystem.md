@@ -890,12 +890,25 @@ AllowedCustomGameModes=Standard,Custom Map ; comma-separated list of strings,
 ```
 
 ```ini
+[Settings]
+ReplaySupport=false            ; boolean, enables replay recording and playback for packages with a compatible spawner.
+                               ; The current implementation targets RA2/YR and is off by default.
+ReplaysDirectory=Replays       ; string,  directory, relative to the game directory, that replays are
+                               ; recorded into and listed from.
+ReplayFileExtension=yrrp       ; string,  file extension of replay files, without a leading dot.
+```
+
+```ini
 [ClientLogs]
 MaxKeptLogFiles=5       ; maximum number of timestamped old log files; 0 = unlimited
 MaxLogFolderSizeMB=50   ; maximum combined size of old log files in MB; 0 = unlimited
 ```
 
 Packages can provide initial values in `Resources/UserDefaults.ini`; existing user settings take precedence.
+
+With `ReplaySupport=true` that tab additionally gains controls for how many replays are kept and how large the replay directory may grow. Use a [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for lobby recording and a [CampaignCheckBox](#CampaignCheckBox) for campaign recording.
+
+> The Load Game window grows when `ReplaySupport=true` to fit the replay list, and its default control positions are derived from that larger size. If your package sets `$Width` or `$Height` for `[GameLoadingWindow]` in its theme INI, those values win and the added controls are not repositioned to match — give them explicit positions there. The options window no longer changes size based on `ReplaySupport`, since the `Storage` tab is always present.
 
 ## Game Modes
 
