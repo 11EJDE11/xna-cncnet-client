@@ -330,6 +330,7 @@ namespace DTAClient.DXGUI
                             .AddTransientXnaControl<GameLobbyCheckBox>()
                             .AddTransientXnaControl<LocalGameLobbyCheckBox>()
                             .AddTransientXnaControl<GameLobbyDropDown>()
+                            .AddTransientXnaControl<LocalGameLobbyDropDown>()
                             .AddTransientXnaControl<CampaignCheckBox>()
                             .AddTransientXnaControl<CampaignDropDown>()
                             .AddTransientXnaControl<SettingCheckBox>()

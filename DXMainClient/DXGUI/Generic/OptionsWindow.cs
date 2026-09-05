@@ -49,10 +49,7 @@ namespace DTAClient.DXGUI.Generic
         {
             Name = "OptionsWindow";
 
-            bool showStorageTab = ReplayManager.IsSupported;
-
-            ClientRectangle = new Rectangle(0, 0,
-                showStorageTab ? 576 + UIDesignConstants.BUTTON_WIDTH_92 : 576, 475);
+            ClientRectangle = new Rectangle(0, 0, 576 + UIDesignConstants.BUTTON_WIDTH_92, 475);
             BackgroundTexture = AssetLoader.LoadTextureUncached("optionsbg.png");
 
             tabControl = new XNAClientTabControl(WindowManager);
@@ -67,8 +64,7 @@ namespace DTAClient.DXGUI.Generic
             tabControl.AddTab("Updater".L10N("Client:DTAConfig:TabUpdater"), UIDesignConstants.BUTTON_WIDTH_92);
             tabControl.AddTab("Components".L10N("Client:DTAConfig:TabComponents"), UIDesignConstants.BUTTON_WIDTH_92);
 
-            if (showStorageTab)
-                tabControl.AddTab("Storage".L10N("Client:DTAConfig:TabStorage"), UIDesignConstants.BUTTON_WIDTH_92);
+            tabControl.AddTab("Storage".L10N("Client:DTAConfig:TabStorage"), UIDesignConstants.BUTTON_WIDTH_92);
 
             tabControl.SelectedIndexChanged += TabControl_SelectedIndexChanged;
 
@@ -100,8 +96,7 @@ namespace DTAClient.DXGUI.Generic
                 componentsPanel
             };
 
-            if (showStorageTab)
-                panels.Add(new StorageOptionsPanel(WindowManager, UserINISettings.Instance));
+            panels.Add(new StorageOptionsPanel(WindowManager, UserINISettings.Instance));
 
             optionsPanels = panels.ToArray();
 

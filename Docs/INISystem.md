@@ -460,7 +460,12 @@ Icons=                                     ; comma-separated strings,
                                            ;          number of items.
 SortOrder=0                                ; integer, display order for icons in GameInformationPanel and GameListBox. 
                                            ;          Lower values appear first.
+UserSettingKey=                            ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
+                                           ;          that remembers this dropdown. Without it the value is not
+                                           ;          persisted, and `DefaultIndex` applies on every client start.
 ```
+
+`UserSettingKey` is independent of `SaveSkirmishGameOptions` and `SaveCampaignGameOptions`, which persist whole lobbies' worth of options under the control's own name. Do not set both for the same dropdown: those settings are loaded after the dropdown is initialized and would override the remembered value. It is intended for dropdowns that must be remembered regardless of those settings, such as a [LocalGameLobbyDropDown](#LocalGameLobbyDropDown), which is not covered by them at all.
 
 ##### [CampaignDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Campaign/CampaignDropDown.cs)
 
@@ -473,6 +478,12 @@ Use this control type for campaign dropdowns in `CampaignSelector.ini`. Inherits
 _(inherits [GameSessionDropDown](#GameSessionDropDown))_
 
 Use this control type for game lobby dropdowns in `GameLobbyBase.ini`. Inherits all properties from `GameSessionDropDown`.
+
+##### [LocalGameLobbyDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Multiplayer/GameLobby/LocalGameLobbyDropDown.cs)
+
+_(inherits [GameSessionDropDown](#GameSessionDropDown))_
+
+Use this control type for game lobby dropdowns in `GameLobbyBase.ini` that only affect the local player, mirroring [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox). Unlike a `GameLobbyDropDown` it is never sent in game option messages, so each player in a multiplayer game sets it for themselves and non-hosts can still change it. Because of that it cannot be broadcast: `BroadcastToLobby` and the game list properties do not apply. It is still written to `spawn.ini` through `SpawnIniOption`, and is normally paired with `UserSettingKey` so that the player's choice is remembered.
 
 #### XNAOptionsPanel Controls
 
@@ -869,9 +880,9 @@ ReplaysDirectory=Replays       ; string,  directory, relative to the game direct
 ReplayFileExtension=yrrp       ; string,  file extension of replay files, without a leading dot.
 ```
 
-With `ReplaySupport=true` the client also gains a `Storage` tab in the options window, where the player caps how many replays are kept and how large the replay directory may grow. Use a [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for lobby recording and a [CampaignCheckBox](#CampaignCheckBox) for campaign recording.
+The options window always has a `Storage` tab, where the player caps how many old client log files are kept and how large they may grow in total (see Issue [#1021](https://github.com/CnCNet/xna-cncnet-client/issues/1021)). With `ReplaySupport=true` that tab additionally gains controls for how many replays are kept and how large the replay directory may grow. Use a [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for lobby recording and a [CampaignCheckBox](#CampaignCheckBox) for campaign recording.
 
-> Both windows grow when `ReplaySupport=true`: the options window is widened by one tab's worth to fit the `Storage` tab, and the Load Game window is enlarged to fit the replay list. The default positions of the controls in both windows are derived from those larger sizes. If your package sets `$Width` or `$Height` for `[OptionsWindow]` or `[GameLoadingWindow]` in its theme INI, those values win and the controls are not repositioned to match — widen `[OptionsWindow]` by `BUTTON_WIDTH_92` (92) and give the added Load Game window controls explicit positions there.
+> The Load Game window grows when `ReplaySupport=true` to fit the replay list, and its default control positions are derived from that larger size. If your package sets `$Width` or `$Height` for `[GameLoadingWindow]` in its theme INI, those values win and the added controls are not repositioned to match — give them explicit positions there. The options window no longer changes size based on `ReplaySupport`, since the `Storage` tab is always present.
 
 ## Game Modes
 
