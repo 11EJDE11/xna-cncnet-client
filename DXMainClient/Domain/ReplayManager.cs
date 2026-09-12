@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 
 using ClientCore;
 using ClientCore.Extensions;
@@ -21,8 +20,8 @@ namespace DTAClient.Domain;
 /// </summary>
 public static class ReplayManager
 {
-    /// <summary>Maximum timestamp and map name length.</summary>
-    private const int MaxRecordingBaseFileNameLength = 180;
+    /// <summary>Maximum UTF-8 length of the timestamp and map name, as the spawner reads ReplayFileOut into a MAX_PATH byte buffer.</summary>
+    private const int MaxRecordingBaseFileNameBytes = 180;
 
     public static bool IsSupported => ClientConfiguration.Instance.ReplaySupport;
 
@@ -33,7 +32,7 @@ public static class ReplayManager
     public static string SearchPattern => "*." + FileExtension;
 
     /// <summary>Installed game package and version written to replay metadata.</summary>
-    public static string GameClientVersion
+    public static string GamePackageVersion
     {
         get
         {
@@ -43,13 +42,13 @@ public static class ReplayManager
         }
     }
 
-    public static DirectoryInfo GetDirectory()
+    public static DirectoryInfo GetReplayDirectory()
         => SafePath.GetDirectory(ProgramConstants.GamePath, DirectoryName);
 
-    public static FileInfo GetFile(string fileName)
+    public static FileInfo GetReplayFile(string fileName)
         => SafePath.GetFile(ProgramConstants.GamePath, DirectoryName, fileName);
 
-    public static string GetRelativePath(string fileName)
+    public static string GetReplayFileRelativePath(string fileName)
         => SafePath.CombineFilePath(DirectoryName, fileName);
 
     /// <summary>Adds replay metadata when recording is enabled in spawn.ini.</summary>
@@ -61,7 +60,7 @@ public static class ReplayManager
         if (!spawnIni.GetBooleanValue("Settings", "EnableReplayRecording", false))
             return;
 
-        spawnIni.SetStringValue("Settings", "GameClientVersion", GameClientVersion);
+        spawnIni.SetStringValue("Settings", "GamePackageVersion", GamePackageVersion);
         spawnIni.SetStringValue("Settings", "ReplayFileOut", BuildRecordingPath(mapName));
 
         ReplayFileHashes.Write(spawnIni);
@@ -70,31 +69,30 @@ public static class ReplayManager
     public static string BuildRecordingPath(string mapName)
     {
         string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture);
-        string safeMapName = SanitizeForFileName(mapName);
+        string safeMapName = mapName.ToWin32FileName();
 
         string baseName = string.IsNullOrWhiteSpace(safeMapName)
             ? timestamp
             : timestamp + " " + safeMapName;
 
-        if (baseName.Length > MaxRecordingBaseFileNameLength)
-            baseName = baseName.SubstringSurrogateAware(0, MaxRecordingBaseFileNameLength).TrimEnd();
+        baseName = baseName.TruncateToUtf8ByteLength(MaxRecordingBaseFileNameBytes).TrimEnd();
 
         string fileName = baseName + "." + FileExtension;
 
         int counter = 1;
-        while (GetFile(fileName).Exists)
+        while (GetReplayFile(fileName).Exists)
         {
             fileName = $"{baseName} ({counter})." + FileExtension;
             counter++;
         }
 
-        return GetRelativePath(fileName);
+        return GetReplayFileRelativePath(fileName);
     }
 
     /// <summary>Cached result for a replay file at a specific size and timestamp.</summary>
     private readonly struct CachedReplay
     {
-        public CachedReplay(FileInfo file, ReplayGame? replay)
+        public CachedReplay(FileInfo file, YRReplayGame? replay)
         {
             length = file.Length;
             lastWriteTicks = file.LastWriteTimeUtc.Ticks;
@@ -105,7 +103,7 @@ public static class ReplayManager
         private readonly long lastWriteTicks;
 
         /// <summary>Null when the file could not be parsed.</summary>
-        public ReplayGame? Replay { get; }
+        public YRReplayGame? Replay { get; }
 
         public bool Matches(FileInfo file)
             => length == file.Length && lastWriteTicks == file.LastWriteTimeUtc.Ticks;
@@ -115,11 +113,11 @@ public static class ReplayManager
         = new Dictionary<string, CachedReplay>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Lists parseable replays newest first.</summary>
-    public static List<ReplayGame> List()
+    public static List<YRReplayGame> List()
     {
-        var replays = new List<ReplayGame>();
+        var replays = new List<YRReplayGame>();
 
-        DirectoryInfo directory = GetDirectory();
+        DirectoryInfo directory = GetReplayDirectory();
         if (!directory.Exists)
         {
             parsedReplays.Clear();
@@ -134,7 +132,7 @@ public static class ReplayManager
 
             if (!parsedReplays.TryGetValue(file.Name, out CachedReplay cached) || !cached.Matches(file))
             {
-                var parsed = new ReplayGame(file.Name);
+                var parsed = new YRReplayGame(file.Name);
                 cached = new CachedReplay(file, parsed.ParseInfo() ? parsed : null);
                 parsedReplays[file.Name] = cached;
             }
@@ -156,7 +154,7 @@ public static class ReplayManager
             parsedReplays.Remove(name);
     }
 
-    public static bool Delete(ReplayGame replay)
+    public static bool Delete(YRReplayGame replay)
     {
         Logger.Log("Deleting replay " + replay.FileName);
 
@@ -186,7 +184,7 @@ public static class ReplayManager
 
         try
         {
-            DirectoryInfo directory = GetDirectory();
+            DirectoryInfo directory = GetReplayDirectory();
             if (!directory.Exists)
                 return;
 
@@ -242,7 +240,7 @@ public static class ReplayManager
     {
         try
         {
-            DirectoryInfo directory = GetDirectory();
+            DirectoryInfo directory = GetReplayDirectory();
             if (!directory.Exists)
                 directory.Create();
 
@@ -252,36 +250,5 @@ public static class ReplayManager
         {
             Logger.Log("ReplayManager: could not open the replay directory: " + ex.Message);
         }
-    }
-
-    private static readonly HashSet<char> invalidFileNameChars = BuildInvalidFileNameChars();
-
-    private static HashSet<char> BuildInvalidFileNameChars()
-    {
-        var invalid = new HashSet<char>(Path.GetInvalidFileNameChars());
-
-        // Use Windows restrictions on every platform because replay files are shared.
-        foreach (char character in "<>:\"/\\|?*")
-            invalid.Add(character);
-        for (char character = '\0'; character < ' '; character++)
-            invalid.Add(character);
-
-        return invalid;
-    }
-
-    private static string SanitizeForFileName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return string.Empty;
-
-        var builder = new StringBuilder(name.Length);
-
-        foreach (char character in name)
-        {
-            if (character <= '~' && !invalidFileNameChars.Contains(character))
-                builder.Append(character);
-        }
-
-        return builder.ToString().Trim().TrimEnd('.');
     }
 }

@@ -399,12 +399,11 @@ EnabledIcon=                               ; string,  texture name for the icon 
 DisabledIcon=                              ; string,  texture name for the icon when setting is disabled.
 SortOrder=0                                ; integer, display order for icons in GameInformationPanel and GameListBox. 
                                            ;          Lower values appear first.
-UserSettingKey=                            ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
-                                           ;          that remembers this checkbox. Without it the value is not
-                                           ;          persisted, and `Checked` applies on every client start.
+Persistent=false                           ; boolean, remember this checkbox's value per user in the `[LocalGameOptions]`
+                                           ;          section of the user's settings INI, keyed by the checkbox's own
+                                           ;          section name (`SOMEGAMESESSIONCHECKBOX` above). Without it, `Checked`
+                                           ;          applies on every client start.
 ```
-
-`UserSettingKey` is independent of `SaveSkirmishGameOptions` and `SaveCampaignGameOptions`, which persist whole lobbies' worth of options under the control's own name. Do not set both for the same checkbox: those settings are loaded after the checkbox is initialized and would override the remembered value. It is intended for checkboxes that must be remembered regardless of those settings, such as a [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox), which is not covered by them at all.
 
 ##### [CampaignCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Campaign/CampaignCheckBox.cs)
 
@@ -427,7 +426,18 @@ Use this control type for game lobby checkboxes in `GameLobbyBase.ini`. Inherits
 
 _(inherits [GameSessionCheckBox](#GameSessionCheckBox))_
 
-Use this control type for game lobby checkboxes in `GameLobbyBase.ini` that only affect the local player, such as replay recording. Unlike a `GameLobbyCheckBox` it is never sent in game option messages, so each player in a multiplayer game sets it for themselves and non-hosts can still change it. Because of that it cannot be broadcast: `BroadcastToLobby` and the game list properties do not apply. It is still written to `spawn.ini` through `SpawnIniOption`, and is normally paired with `UserSettingKey` so that the player's choice is remembered.
+Use this control type for game lobby checkboxes in `GameLobbyBase.ini` that only affect the local player, such as replay recording. Unlike `GameLobbyCheckBox` it isn't sent in game option messages, so each player (including non-hosts) sets it for themselves and `BroadcastToLobby`/the game list properties don't apply. Still written to `spawn.ini` via `SpawnIniOption`, usually paired with `Persistent=true` to remember the player's choice.
+
+For example, a "Record replay" checkbox that every player sets for themselves and that is remembered between client sessions:
+
+```ini
+[chkRecordReplay]                    ; LocalGameLobbyCheckBox, in GameLobbyBase.ini
+SpawnIniOption=EnableReplayRecording ; written to spawn.ini as EnableReplayRecording=True/False for the game engine to read
+Persistent=true                      ; remembered under [LocalGameOptions] -> chkRecordReplay=True/False in the user's settings INI
+Checked=true                         ; default the first time the client runs
+```
+
+`Persistent` has no separate key name to configure - it always uses the control's own INI section name (`chkRecordReplay` here) as the storage key in `[LocalGameOptions]`. That keeps the key unique automatically (section names are already unique within an INI file) and avoids modders having to invent and keep a second name in sync.
 
 ##### [GameSessionDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Generic/GameSessionDropDown.cs)
 
@@ -460,12 +470,11 @@ Icons=                                     ; comma-separated strings,
                                            ;          number of items.
 SortOrder=0                                ; integer, display order for icons in GameInformationPanel and GameListBox. 
                                            ;          Lower values appear first.
-UserSettingKey=                            ; string,  key in the `[LocalGameOptions]` section of the user's settings INI
-                                           ;          that remembers this dropdown. Without it the value is not
-                                           ;          persisted, and `DefaultIndex` applies on every client start.
+Persistent=false                           ; boolean, remember this dropdown's selected item per user in the
+                                           ;          `[LocalGameOptions]` section of the user's settings INI, keyed by
+                                           ;          the dropdown's own section name. Without it, `DefaultIndex` applies
+                                           ;          on every client start.
 ```
-
-`UserSettingKey` is independent of `SaveSkirmishGameOptions` and `SaveCampaignGameOptions`, which persist whole lobbies' worth of options under the control's own name. Do not set both for the same dropdown: those settings are loaded after the dropdown is initialized and would override the remembered value. It is intended for dropdowns that must be remembered regardless of those settings, such as a [LocalGameLobbyDropDown](#LocalGameLobbyDropDown), which is not covered by them at all.
 
 ##### [CampaignDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Campaign/CampaignDropDown.cs)
 
@@ -483,7 +492,7 @@ Use this control type for game lobby dropdowns in `GameLobbyBase.ini`. Inherits 
 
 _(inherits [GameSessionDropDown](#GameSessionDropDown))_
 
-Use this control type for game lobby dropdowns in `GameLobbyBase.ini` that only affect the local player, mirroring [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox). Unlike a `GameLobbyDropDown` it is never sent in game option messages, so each player in a multiplayer game sets it for themselves and non-hosts can still change it. Because of that it cannot be broadcast: `BroadcastToLobby` and the game list properties do not apply. It is still written to `spawn.ini` through `SpawnIniOption`, and is normally paired with `UserSettingKey` so that the player's choice is remembered.
+Dropdown counterpart of [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox); the same rules apply.
 
 #### XNAOptionsPanel Controls
 
@@ -810,6 +819,28 @@ DisableModifierKeys=true
 
 # Global Config Files
 
+## [UserDefaults](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientCore/Settings/UserINISettings.cs)
+> [!NOTE]
+> _TODO work in progress_
+
+The client's user settings file is configured by `SettingsFile` in `ClientDefinitions.ini`. Mod packages can provide initial values for settings that a user has not changed by adding them to `Resources/UserDefaults.ini`.
+
+### Tunnel Settings
+
+The `[MultiPlayer]` section supports these tunnel settings:
+
+```ini
+[MultiPlayer]
+TunnelMode=1   ; 0 = Static (V3), 1 = Dynamic (V3, default), 2 = Legacy (V2)
+EnableP2P=false ; whether dynamic V3 tunnels may be upgraded to direct player-to-player connections
+```
+
+- **Dynamic (V3)** automatically negotiates the best tunnel for each pair of players and does not require the host to select a tunnel manually.
+- **Static (V3)** uses one V3 tunnel that the host selects manually.
+- **Legacy (V2)** preserves the previous manual V2 tunnel selection behavior, which was the only behavior in versions up to, but not including, 2.14.0.
+
+Users can select a mode for an individual game from the "Tunnel mode:" dropdown in the game creation window, or change their default with "Tunnel mode when hosting:" in the CnCNet options tab in the Options window. Enabling direct P2P connections shares each player's IP address with the other players in the game session, so the client displays a warning when this option is enabled.
+
 ## [ClientDefinition](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientCore/ClientConfiguration.cs)
 > [!NOTE]
 > _TODO work in progress_
@@ -880,9 +911,19 @@ ReplaysDirectory=Replays       ; string,  directory, relative to the game direct
 ReplayFileExtension=yrrp       ; string,  file extension of replay files, without a leading dot.
 ```
 
-The options window always has a `Storage` tab, where the player caps how many old client log files are kept and how large they may grow in total (see Issue [#1021](https://github.com/CnCNet/xna-cncnet-client/issues/1021)). With `ReplaySupport=true` that tab additionally gains controls for how many replays are kept and how large the replay directory may grow. Use a [LocalGameLobbyCheckBox](#LocalGameLobbyCheckBox) for lobby recording and a [CampaignCheckBox](#CampaignCheckBox) for campaign recording.
+```ini
+[ClientLogs]
+MaxKeptLogFiles=20      ; maximum number of timestamped old log files; 0 = unlimited
+MaxLogFolderSizeMB=50   ; maximum combined size of old log files in MB; 0 = unlimited
+```
 
-> The Load Game window grows when `ReplaySupport=true` to fit the replay list, and its default control positions are derived from that larger size. If your package sets `$Width` or `$Height` for `[GameLoadingWindow]` in its theme INI, those values win and the added controls are not repositioned to match — give them explicit positions there. The options window no longer changes size based on `ReplaySupport`, since the `Storage` tab is always present.
+Packages can provide initial values in `Resources/UserDefaults.ini`; existing user settings take precedence.
+
+```ini
+[SavedGames]
+MaxKeptSavedGames=0           ; maximum number of single-player saved games; 0 = unlimited (default)
+MaxSavedGameFolderSizeMB=0    ; maximum combined size of single-player saved games in MB; 0 = unlimited (default)
+```
 
 ## Game Modes
 
