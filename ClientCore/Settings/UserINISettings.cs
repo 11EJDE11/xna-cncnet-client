@@ -5,6 +5,7 @@ using System.Linq;
 
 using ClientCore.Enums;
 using ClientCore.Extensions;
+using ClientCore.I18N;
 using ClientCore.Settings;
 
 using Rampastring.Tools;
@@ -63,8 +64,13 @@ namespace ClientCore
 
             var userDefaultIni = new IniFile(userDefaultIniFilePath);
 
-            var combinedUserIni = userDefaultIni.Clone();
-            combinedUserIni.FileName = null;
+            // Create combinedUserIni with all sections cloned from userDefaultIni
+            var combinedUserIni = new IniFile() { FilePath = null };
+            foreach (string sectionName in userDefaultIni.GetSections())
+            {
+                IniSection oldSection = userDefaultIni.GetSection(sectionName);
+                combinedUserIni.AddSection(oldSection.Clone(sectionName));
+            }
 
             // Combine userIni and userDefaultIni
             foreach (string sectionName in userIni.GetSections())
@@ -84,7 +90,7 @@ namespace ClientCore
                 }
             }
 
-            combinedUserIni.FileName = userIni.FileName;
+            combinedUserIni.FilePath = userIni.FilePath;
 
             _instance = new UserINISettings(combinedUserIni);
         }
@@ -186,6 +192,7 @@ namespace ClientCore
             AutoRemoveUnderscoresFromName = new BoolSetting(iniFile, OPTIONS, "AutoRemoveUnderscoresFromName", true);
             GenerateTranslationStub = new BoolSetting(iniFile, OPTIONS, nameof(GenerateTranslationStub), false);
             GenerateOnlyNewValuesInTranslationStub = new BoolSetting(iniFile, OPTIONS, nameof(GenerateOnlyNewValuesInTranslationStub), false);
+            TranslationStubNotificationLevel = new IntSetting(iniFile, OPTIONS, nameof(TranslationStubNotificationLevel), (int)TranslationNotificationLevel.Default);
 
             MaxKeptClientLogFiles = new IntSetting(iniFile, CLIENT_LOGS, "MaxKeptLogFiles", 20);
             MaxClientLogFolderSizeMB = new IntSetting(iniFile, CLIENT_LOGS, "MaxLogFolderSizeMB", 50);
@@ -414,6 +421,8 @@ namespace ClientCore
         public BoolSetting GenerateTranslationStub { get; private set; }
 
         public BoolSetting GenerateOnlyNewValuesInTranslationStub { get; private set; }
+
+        public IntSetting TranslationStubNotificationLevel { get; private set; }
 
         public List<string> FavoriteMaps { get; private set; }
 
