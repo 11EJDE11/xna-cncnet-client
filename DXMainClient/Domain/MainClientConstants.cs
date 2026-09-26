@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows.Forms;
 #endif
 using ClientCore;
+using DTAClient.Domain.Multiplayer;
 
 using Rampastring.Tools;
 
@@ -15,10 +16,6 @@ namespace DTAClient.Domain
         public static string GAME_NAME_LONG = "CnCNet Client";
         public static string GAME_NAME_SHORT = "CnCNet";
         public static string SUPPORT_URL_SHORT = "www.cncnet.org";
-        public static bool USE_ISOMETRIC_CELLS = true;
-        public static int TDRA_WAYPOINT_COEFFICIENT = 128;
-        public static int MAP_CELL_SIZE_X = 48;
-        public static int MAP_CELL_SIZE_Y = 24;
 
         public static OSVersion OSId = OSVersion.UNKNOWN;
 
@@ -82,10 +79,10 @@ namespace DTAClient.Domain
             GAME_NAME_SHORT = clientConfiguration.LocalGame;
             GAME_NAME_LONG = clientConfiguration.LongGameName;
             SUPPORT_URL_SHORT = clientConfiguration.ShortSupportURL;
-            USE_ISOMETRIC_CELLS = clientConfiguration.UseIsometricCells;
-            TDRA_WAYPOINT_COEFFICIENT = clientConfiguration.WaypointCoefficient;
-            MAP_CELL_SIZE_X = clientConfiguration.MapCellSizeX;
-            MAP_CELL_SIZE_Y = clientConfiguration.MapCellSizeY;
+            MapCoordinateSettings.USE_ISOMETRIC_CELLS = clientConfiguration.UseIsometricCells;
+            MapCoordinateSettings.TDRA_WAYPOINT_COEFFICIENT = clientConfiguration.WaypointCoefficient;
+            MapCoordinateSettings.MAP_CELL_SIZE_X = clientConfiguration.MapCellSizeX;
+            MapCoordinateSettings.MAP_CELL_SIZE_Y = clientConfiguration.MapCellSizeY;
 
             if (string.IsNullOrEmpty(GAME_NAME_SHORT))
                 throw new ClientConfigurationException("LocalGame is set to an empty value.");

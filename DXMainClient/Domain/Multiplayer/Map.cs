@@ -305,7 +305,7 @@ namespace DTAClient.Domain.Multiplayer
                     i++;
                 }
 
-                if (MainClientConstants.USE_ISOMETRIC_CELLS)
+                if (MapCoordinateSettings.USE_ISOMETRIC_CELLS)
                 {
                     localSize = section.GetStringValue("LocalSize", "0,0,0,0").Split(',');
                     actualSize = section.GetStringValue("Size", "0,0,0,0").Split(',');
@@ -358,7 +358,7 @@ namespace DTAClient.Domain.Multiplayer
             catch (Exception ex)
             {
                 Logger.Log("Setting info for " + BaseFilePath + " failed! Reason: " + ex.ToString());
-                PreStartup.LogException(ex);
+                ExceptionLogger.LogException(ex);
                 return false;
             }
         }
@@ -400,7 +400,7 @@ namespace DTAClient.Domain.Multiplayer
 
                 foreach (string waypoint in waypoints)
                 {
-                    if (MainClientConstants.USE_ISOMETRIC_CELLS)
+                    if (MapCoordinateSettings.USE_ISOMETRIC_CELLS)
                         startingLocations.Add(GetIsometricWaypointCoords(waypoint, actualSize, localSize, previewSize));
                     else
                         startingLocations.Add(GetTDRAWaypointCoords(waypoint, x, y, width, height, previewSize));
@@ -412,7 +412,7 @@ namespace DTAClient.Domain.Multiplayer
 
         public MapPoint MapPointToMapPreviewPoint(MapPoint mapPoint, MapPoint previewSize, int level)
         {
-            if (MainClientConstants.USE_ISOMETRIC_CELLS)
+            if (MapCoordinateSettings.USE_ISOMETRIC_CELLS)
                 return GetIsoTilePixelCoord(mapPoint.X, mapPoint.Y, actualSize, localSize, previewSize, level);
 
             return GetTDRACellPixelCoord(mapPoint.X, mapPoint.Y, x, y, width, height, previewSize);
@@ -508,7 +508,7 @@ namespace DTAClient.Domain.Multiplayer
                 localSize = iniFile.GetStringValue("Map", "LocalSize", "0,0,0,0").Split(',');
                 actualSize = iniFile.GetStringValue("Map", "Size", "0,0,0,0").Split(',');
 
-                if (MainClientConstants.USE_ISOMETRIC_CELLS)
+                if (MapCoordinateSettings.USE_ISOMETRIC_CELLS)
                 {
                     localSize = iniFile.GetStringValue("Map", "LocalSize", "0,0,0,0").Split(',');
                     actualSize = iniFile.GetStringValue("Map", "Size", "0,0,0,0").Split(',');
@@ -740,7 +740,7 @@ namespace DTAClient.Domain.Multiplayer
 
         public string GetSizeString()
         {
-            if (MainClientConstants.USE_ISOMETRIC_CELLS)
+            if (MapCoordinateSettings.USE_ISOMETRIC_CELLS)
             {
                 if (actualSize == null || actualSize.Length < 4)
                     return "Not available";
@@ -761,8 +761,8 @@ namespace DTAClient.Domain.Multiplayer
                 return new MapPoint(0, 0);
 
             // https://modenc.renegadeprojects.com/Waypoints
-            int waypointX = waypointCoordsInt % MainClientConstants.TDRA_WAYPOINT_COEFFICIENT;
-            int waypointY = waypointCoordsInt / MainClientConstants.TDRA_WAYPOINT_COEFFICIENT;
+            int waypointX = waypointCoordsInt % MapCoordinateSettings.TDRA_WAYPOINT_COEFFICIENT;
+            int waypointY = waypointCoordsInt / MapCoordinateSettings.TDRA_WAYPOINT_COEFFICIENT;
 
             return GetTDRACellPixelCoord(waypointX, waypointY, x, y, width, height, previewSizePoint);
         }
@@ -808,15 +808,15 @@ namespace DTAClient.Domain.Multiplayer
             int rx = isoTileX - isoTileY + Convert.ToInt32(actualSizeValues[2], CultureInfo.InvariantCulture) - 1;
             int ry = isoTileX + isoTileY - Convert.ToInt32(actualSizeValues[2], CultureInfo.InvariantCulture) - 1;
 
-            int pixelPosX = rx * MainClientConstants.MAP_CELL_SIZE_X / 2;
-            int pixelPosY = ry * MainClientConstants.MAP_CELL_SIZE_Y / 2 - level * MainClientConstants.MAP_CELL_SIZE_Y / 2;
+            int pixelPosX = rx * MapCoordinateSettings.MAP_CELL_SIZE_X / 2;
+            int pixelPosY = ry * MapCoordinateSettings.MAP_CELL_SIZE_Y / 2 - level * MapCoordinateSettings.MAP_CELL_SIZE_Y / 2;
 
-            pixelPosX = pixelPosX - (Convert.ToInt32(localSizeValues[0], CultureInfo.InvariantCulture) * MainClientConstants.MAP_CELL_SIZE_X);
-            pixelPosY = pixelPosY - (Convert.ToInt32(localSizeValues[1], CultureInfo.InvariantCulture) * MainClientConstants.MAP_CELL_SIZE_Y);
+            pixelPosX = pixelPosX - (Convert.ToInt32(localSizeValues[0], CultureInfo.InvariantCulture) * MapCoordinateSettings.MAP_CELL_SIZE_X);
+            pixelPosY = pixelPosY - (Convert.ToInt32(localSizeValues[1], CultureInfo.InvariantCulture) * MapCoordinateSettings.MAP_CELL_SIZE_Y);
 
             // Calculate map size
-            int mapSizeX = Convert.ToInt32(localSizeValues[2], CultureInfo.InvariantCulture) * MainClientConstants.MAP_CELL_SIZE_X;
-            int mapSizeY = Convert.ToInt32(localSizeValues[3], CultureInfo.InvariantCulture) * MainClientConstants.MAP_CELL_SIZE_Y;
+            int mapSizeX = Convert.ToInt32(localSizeValues[2], CultureInfo.InvariantCulture) * MapCoordinateSettings.MAP_CELL_SIZE_X;
+            int mapSizeY = Convert.ToInt32(localSizeValues[3], CultureInfo.InvariantCulture) * MapCoordinateSettings.MAP_CELL_SIZE_Y;
 
             double ratioX = Convert.ToDouble(pixelPosX) / mapSizeX;
             double ratioY = Convert.ToDouble(pixelPosY) / mapSizeY;

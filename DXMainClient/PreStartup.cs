@@ -203,7 +203,7 @@ namespace DTAClient
                 }
                 catch (Exception ex)
                 {
-                    LogException(ex);
+                    ExceptionLogger.LogException(ex);
 
                     string error = ("Deleting wsock32.dll failed! Please close any " +
                         "applications that could be using the file, and then start the client again." + "\n\n" +
@@ -232,26 +232,9 @@ namespace DTAClient
 
         }
 
-        public static void LogException(Exception ex, bool innerException = false)
-        {
-            if (!innerException)
-                Logger.Log("KABOOOOOOM!!! Info:");
-            else
-                Logger.Log("InnerException info:");
-
-            Logger.Log("Type: " + ex.GetType());
-            Logger.Log("Message: " + ex.Message);
-            Logger.Log("Source: " + ex.Source);
-            Logger.Log("TargetSite.Name: " + ex.TargetSite?.Name);
-            Logger.Log("Stacktrace: " + ex.StackTrace);
-
-            if (ex.InnerException is not null)
-                LogException(ex.InnerException, true);
-        }
-
         public static void HandleException(object sender, Exception ex)
         {
-            LogException(ex, innerException: false);
+            ExceptionLogger.LogException(ex, innerException: false);
 
             string errorLogPath = SafePath.CombineFilePath(ProgramConstants.ClientUserFilesPath, "ClientCrashLogs", FormattableString.Invariant($"ClientCrashLog{DateTime.Now.ToString("_yyyy_MM_dd_HH_mm")}.txt"));
             bool crashLogCopied = false;
