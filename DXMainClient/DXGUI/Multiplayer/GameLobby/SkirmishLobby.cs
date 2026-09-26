@@ -106,7 +106,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void MapPreviewBox_LocalStartingLocationSelected(object sender, LocalStartingLocationEventArgs e)
         {
-            Players[0].StartingLocation = e.StartingLocationIndex + 1;
+            // The index is already the start drop-down index: the waypoint + 1, or 0 when cleared
+            Players[0].StartingLocation = e.StartingLocationIndex;
             CopyPlayerDataToUI();
         }
 
