@@ -3,6 +3,7 @@ using System.Timers;
 using ClientCore;
 using ClientCore.Extensions;
 using ClientGUI;
+using ClientLogic.UI;
 using Rampastring.XNAUI;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
@@ -10,6 +11,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
     public class GameHostInactiveChecker
     {
         private readonly WindowManager windowManager;
+        private readonly IUiDispatcher uiDispatcher;
         private readonly Timer timer;
         private bool isWarningShown;
         private DateTime startTime;
@@ -18,17 +20,25 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public event EventHandler CloseEvent;
 
-        public GameHostInactiveChecker(WindowManager windowManager)
+        public GameHostInactiveChecker(WindowManager windowManager, IUiDispatcher uiDispatcher)
         {
             this.windowManager = windowManager;
+            this.uiDispatcher = uiDispatcher;
             timer = new Timer();
             timer.AutoReset = true;
             timer.Interval = 1000;
             timer.Elapsed += TimerOnElapsed;
         }
 
-        private void TimerOnElapsed(object sender, ElapsedEventArgs e)
+        // The timer ticks on a thread-pool thread; the check shows UI and closes the game, so it runs on the UI thread.
+        private void TimerOnElapsed(object sender, ElapsedEventArgs e) => uiDispatcher.Post(CheckInactivity);
+
+        private void CheckInactivity()
         {
+            // A tick can still be queued after Stop()
+            if (!timer.Enabled)
+                return;
+
             double secondsElapsed = (DateTime.UtcNow - startTime).TotalSeconds;
 
             if (secondsElapsed > WarningSeconds && !isWarningShown)

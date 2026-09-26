@@ -70,7 +70,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             tunnelSession.PlayerDataChanged += CopyPlayerDataToUI;
             tunnelSession.LaunchStatusChanged += () => UpdateLaunchGameButtonStatus();
 
-            gameHostInactiveChecker = ClientConfiguration.Instance.InactiveHostKickEnabled? new GameHostInactiveChecker(WindowManager) : null;
+            gameHostInactiveChecker = ClientConfiguration.Instance.InactiveHostKickEnabled? new GameHostInactiveChecker(WindowManager, uiDispatcher) : null;
 
             ctcpCommandHandlers = new CommandHandlerBase[]
             {
