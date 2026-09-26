@@ -1,6 +1,7 @@
 using ClientCore;
 using ClientCore.Statistics;
 using ClientLogic.Launch;
+using ClientLogic.Lobby;
 using ClientLogic.Options;
 using ClientLogic.Protocol;
 using ClientGUI;
@@ -150,6 +151,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected XNAClientButton btnPlayerExtraOptionsOpen;
         protected PlayerExtraOptionsPanel PlayerExtraOptionsPanel;
+
+        /// <summary>
+        /// The host's extra player options. They only apply when the theme has the extra options panel; without it
+        /// they stay at their defaults.
+        /// </summary>
+        protected PlayerExtraOptionsState ExtraOptions { get; } = new();
 
         protected XNAClientButton btnLeaveGame;
         protected GameLaunchButton btnLaunchGame;
@@ -666,30 +673,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (PlayerExtraOptionsPanel != null)
             {
-                if (playerExtraOptions.IsForceRandomSides != PlayerExtraOptionsPanel.ForcedRandomSides)
-                    AddPlayerExtraOptionForcedNotice(playerExtraOptions.IsForceRandomSides, "side selection".L10N("Client:Main:SideAsANoun"));
-
-                if (playerExtraOptions.IsForceRandomColors != PlayerExtraOptionsPanel.ForcedRandomColors)
-                    AddPlayerExtraOptionForcedNotice(playerExtraOptions.IsForceRandomColors, "color selection".L10N("Client:Main:ColorAsANoun"));
-
-                if (playerExtraOptions.IsForceRandomStarts != PlayerExtraOptionsPanel.ForcedRandomStarts)
-                    AddPlayerExtraOptionForcedNotice(playerExtraOptions.IsForceRandomStarts, "start selection".L10N("Client:Main:StartPositionAsANoun"));
-
-                if (playerExtraOptions.IsForceNoTeams != PlayerExtraOptionsPanel.ForcedNoTeams)
-                    AddPlayerExtraOptionForcedNotice(playerExtraOptions.IsForceNoTeams, "team selection".L10N("Client:Main:TeamAsANoun"));
-
-                if (playerExtraOptions.IsUseTeamStartMappings != PlayerExtraOptionsPanel.UseTeamStartMappings)
-                    AddPlayerExtraOptionForcedNotice(!playerExtraOptions.IsUseTeamStartMappings, "auto ally".L10N("Client:Main:AutoAllyAsANoun"));
+                foreach (string notice in ExtraOptions.ApplyFromHost(playerExtraOptions))
+                    AddNotice(notice);
             }
 
-            SetPlayerExtraOptions(playerExtraOptions);
             UpdateMapPreviewBoxEnabledStatus();
         }
-
-        private void AddPlayerExtraOptionForcedNotice(bool disabled, string type)
-            => AddNotice(disabled ?
-                string.Format("The game host has disabled {0}".L10N("Client:Main:HostDisableSection"), type) :
-                string.Format("The game host has enabled {0}".L10N("Client:Main:HostEnableSection"), type));
 
         protected List<GameModeMap> GetSortedGameModeMaps()
         {
@@ -1212,7 +1201,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
 
                 PlayerExtraOptionsPanel.Disable();
-                PlayerExtraOptionsPanel.OptionsChanged += PlayerExtraOptions_OptionsChanged;
+                PlayerExtraOptionsPanel.Bind(ExtraOptions);
+                ExtraOptions.Changed += PlayerExtraOptions_OptionsChanged;
                 btnPlayerExtraOptionsOpen.LeftClick += BtnPlayerExtraOptions_LeftClick;
             }
 
@@ -1266,6 +1256,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
 
             CopyPlayerDataToUI();
+            UpdateMapPreviewBoxEnabledStatus();
             RefreshBtnPlayerExtraOptionsOpenTexture();
         }
 
@@ -1287,10 +1278,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             return null;
         }
 
-        protected PlayerExtraOptions GetPlayerExtraOptions() =>
-            PlayerExtraOptionsPanel == null ? new PlayerExtraOptions() : PlayerExtraOptionsPanel.GetPlayerExtraOptions();
-
-        protected void SetPlayerExtraOptions(PlayerExtraOptions playerExtraOptions) => PlayerExtraOptionsPanel?.SetPlayerExtraOptions(playerExtraOptions);
+        protected PlayerExtraOptions GetPlayerExtraOptions() => ExtraOptions.ToPlayerExtraOptions();
 
         protected string GetTeamMappingsError() => GetPlayerExtraOptions()?.GetTeamMappingsError();
 
@@ -1676,11 +1664,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
-            var teamStartMappings = new List<TeamStartMapping>(0);
-            if (PlayerExtraOptionsPanel != null)
-            {
-                teamStartMappings = PlayerExtraOptionsPanel.GetTeamStartMappings();
-            }
+            List<TeamStartMapping> teamStartMappings = GetPlayerExtraOptions().TeamStartMappings;
 
             return new LaunchRequest
             {
@@ -1781,9 +1765,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 extraOptions.IsForceRandomStarts,
                 extraOptions.IsUseTeamStartMappings,
             };
-            inputs["TeamStartMappings"] = PlayerExtraOptionsPanel == null
-                ? new List<object>()
-                : PlayerExtraOptionsPanel.GetTeamStartMappings().Select(m => (object)new { m.Team, m.Start }).ToList();
+            inputs["TeamStartMappings"] = extraOptions.TeamStartMappings.Select(m => (object)new { m.Team, m.Start }).ToList();
         }
 
         private void GameProcessExited_Callback() => AddCallback(new Action(GameProcessExited), null);
@@ -2188,21 +2170,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     pInfo.TeamId = 1;
 
                 if (PlayerExtraOptionsPanel != null)
-                {
-                    PlayerExtraOptionsPanel.ForcedNoTeamsAllowChecking = false;
-                    PlayerExtraOptionsPanel.ForcedNoTeams = false;
-
-                    PlayerExtraOptionsPanel.UseTeamStartMappingsAllowChecking = false;
-                    PlayerExtraOptionsPanel.UseTeamStartMappings = false;
-                }
+                    ExtraOptions.SetTeamOptionsAllowed(false);
             }
             else
             {
                 if (PlayerExtraOptionsPanel != null)
-                {
-                    PlayerExtraOptionsPanel.ForcedNoTeamsAllowChecking = true;
-                    PlayerExtraOptionsPanel.UseTeamStartMappingsAllowChecking = true;
-                }
+                    ExtraOptions.SetTeamOptionsAllowed(true);
             }
 
             OnGameOptionChanged();
