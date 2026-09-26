@@ -4,6 +4,7 @@ using ClientLogic.Launch;
 using ClientLogic.Lobby;
 using ClientLogic.Options;
 using ClientLogic.Protocol;
+using ClientLogic.UI;
 using ClientGUI;
 using DTAClient.Domain;
 using DTAClient.Domain.Multiplayer;
@@ -187,6 +188,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         protected List<PlayerInfo> AIPlayers = new List<PlayerInfo>();
 
         private PlayerSlotsState slots;
+        private IDialogService dialogs;
+
+        /// <summary>Message boxes.</summary>
+        protected IDialogService Dialogs => dialogs ??= new XnaDialogService(WindowManager);
 
         /// <summary>The players and the changes that can be made to them; shares <see cref="Players"/> and <see cref="AIPlayers"/>.</summary>
         protected PlayerSlotsState Slots => slots ??= new PlayerSlotsState(Players, AIPlayers);
@@ -852,9 +857,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (Map == null)
                 return;
 
-            var messageBox = XNAMessageBox.ShowYesNoDialog(WindowManager, "Delete Confirmation".L10N("Client:Main:DeleteMapConfirmTitle"),
-                string.Format("Are you sure you wish to delete the custom map {0}?".L10N("Client:Main:DeleteMapConfirmText"), Map.Name));
-            messageBox.YesClickedAction = DeleteSelectedMap;
+            Dialogs.Confirm("Delete Confirmation".L10N("Client:Main:DeleteMapConfirmTitle"),
+                string.Format("Are you sure you wish to delete the custom map {0}?".L10N("Client:Main:DeleteMapConfirmText"), Map.Name),
+                DeleteSelectedMap);
         }
 
         private void ShowInFolder() => Map?.OpenContainingFolder();
@@ -908,7 +913,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 lbGameModeMapList.SelectedIndex = 0; // the map was removed while viewing favorites
         }
 
-        private void DeleteSelectedMap(XNAMessageBox messageBox)
+        private void DeleteSelectedMap()
         {
             try
             {
@@ -936,7 +941,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             catch (IOException ex)
             {
                 Logger.Log($"Deleting map {Map.BaseFilePath} failed! Message: {ex.ToString()}");
-                XNAMessageBox.Show(WindowManager, "Deleting Map Failed".L10N("Client:Main:DeleteMapFailedTitle"),
+                Dialogs.ShowMessage("Deleting Map Failed".L10N("Client:Main:DeleteMapFailedTitle"),
                     "Deleting map failed! Reason:".L10N("Client:Main:DeleteMapFailedText") + " " + ex.Message);
             }
         }

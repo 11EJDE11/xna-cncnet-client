@@ -392,7 +392,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 if (result.Outcome == ChatCommandOutcome.HostOnly)
                     AddNotice(result.Notice);
                 else if (result.Outcome == ChatCommandOutcome.Unknown)
-                    XNAMessageBox.Show(WindowManager, ChatBoxCommands.HelpTitle, ChatBoxCommands.HelpText(chatBoxCommands));
+                    Dialogs.ShowMessage(ChatBoxCommands.HelpTitle, ChatBoxCommands.HelpText(chatBoxCommands));
 
                 return;
             }

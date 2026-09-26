@@ -275,6 +275,7 @@ namespace DTAClient.DXGUI
                             .AddSingleton<CnCNetUserData>()
                             .AddSingleton<CnCNetManager>()
                             .AddSingleton<IUiDispatcher>(new XnaUiDispatcher(windowManager))
+                            .AddSingleton<IDialogService>(new XnaDialogService(windowManager))
                             .AddSingleton(serviceProvider =>
                             {
                                 var tunnelHandler = new TunnelHandler(serviceProvider.GetRequiredService<IUiDispatcher>());
