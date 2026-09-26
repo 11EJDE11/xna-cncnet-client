@@ -115,7 +115,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
 
             pInfo.HashReceived = true;
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
         }
 
         public event EventHandler<LobbyNotificationEventArgs> LobbyNotification;
@@ -193,7 +193,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             new Thread(HandleServerCommunication).Start();
 
             if (IsHost)
-                CopyPlayerDataToUI();
+                RefreshPlayerSlots();
 
             WindowManager.SelectedControl = tbChatInput;
             return true;
@@ -345,7 +345,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             lpInfo.StartReceiveLoop();
 
             OnGameOptionChanged();
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             BroadcastPlayerOptions();
             BroadcastPlayerExtraOptions();
             UpdateDiscordPresence();
@@ -363,7 +363,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             AddNotice(string.Format("{0} has left the game.".L10N("Client:Main:PlayerLeftGame"), lpInfo.Name));
 
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             BroadcastPlayerOptions();
 
             if (lpInfo.Name == ProgramConstants.PLAYERNAME)
@@ -769,7 +769,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 RandomSeed = random.Next();
                 OnGameOptionChanged();
                 ClearReadyStatuses();
-                CopyPlayerDataToUI();
+                RefreshPlayerSlots();
                 BroadcastPlayerOptions();
                 BroadcastPlayerExtraOptions();
 
@@ -790,7 +790,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 pInfo.IsInGame = false;
 
             sndReturnSound.Play();
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
         }
 
         public override void Update(GameTime gameTime)
@@ -805,7 +805,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         CleanUpPlayer(lpInfo);
                         Players.RemoveAt(i);
                         AddNotice(string.Format("{0} - connection timed out".L10N("Client:Main:PlayerTimeout"), lpInfo.Name));
-                        CopyPlayerDataToUI();
+                        RefreshPlayerSlots();
                         BroadcastPlayerOptions();
                         BroadcastPlayerExtraOptions();
                         UpdateDiscordPresence();
@@ -939,19 +939,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (!IsPlayerOptionsRequestAllowed(side, color, start, team))
                 return;
 
-            if (side != pInfo.SideId
-                || start != pInfo.StartingLocation
-                || team != pInfo.TeamId)
-            {
+            if (Slots.ApplyOptionsRequest(pInfo, side, color, start, team).ClearsReady)
                 ClearReadyStatuses();
-            }
 
-            pInfo.SideId = side;
-            pInfo.ColorId = color;
-            pInfo.StartingLocation = start;
-            pInfo.TeamId = team;
-
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             BroadcastPlayerOptions();
         }
 
@@ -1022,7 +1013,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 pInfo.IPAddress = ipAddress;
             }
 
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
 
             localPlayer = FindLocalPlayer();
             if (localPlayer != null && oldSideId != localPlayer.SideId)
@@ -1039,7 +1030,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             AddNotice(string.Format("{0} has left the game.".L10N("Client:Main:PlayerLeftGame"), pInfo.Name));
             Players.Remove(pInfo);
             ClearReadyStatuses();
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             BroadcastPlayerOptions();
             UpdateDiscordPresence();
         }
@@ -1077,7 +1068,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             pInfo.Ready = request.ReadyState > 0;
             pInfo.AutoReady = request.ReadyState > 1;
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             BroadcastPlayerOptions();
         }
 
@@ -1090,7 +1081,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             UniqueGameID = launch.GameId;
 
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             StartGame();
         }
 

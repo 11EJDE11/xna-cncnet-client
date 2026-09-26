@@ -81,7 +81,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 locked = value;
                 if (oldLocked != value)
                 {
-                    CopyPlayerDataToUI();
+                    RefreshPlayerSlots();
                     UpdateDiscordPresence();
                 }
             }
@@ -223,7 +223,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             chkAutoReady.Disable();
 
             MapPreviewBox.LocalStartingLocationSelected += MapPreviewBox_LocalStartingLocationSelected;
-            MapPreviewBox.StartingLocationApplied += MapPreviewBox_StartingLocationApplied;
 
             sndJoinSound = new EnhancedSoundEffect("joingame.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundGameLobbyJoinCooldown);
             sndLeaveSound = new EnhancedSoundEffect("leavegame.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundGameLobbyLeaveCooldown);
@@ -797,7 +796,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             IsHost = isHost;
             Locked = false;
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
 
             UpdateMapPreviewBoxEnabledStatus();
             PlayerExtraOptionsPanel?.SetIsHost(isHost);
@@ -928,10 +927,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             ddPlayerStarts[mTopIndex].SelectedIndex = e.StartingLocationIndex;
         }
 
-        private void MapPreviewBox_StartingLocationApplied(object sender, EventArgs e)
+        protected override void OnStartsChangedFromMapPreview()
         {
             ClearReadyStatuses();
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             BroadcastPlayerOptions();
         }
 
@@ -1144,42 +1143,60 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             base.OnGameOptionChanged();
 
             ClearReadyStatuses();
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
         }
 
         protected abstract void HostLaunchGame();
 
-        protected override void CopyPlayerDataFromUI(object sender, EventArgs e)
+        protected override void RequestSlotChange(int row, SlotField field, int index)
         {
-            if (PlayerUpdatingInProgress)
-                return;
-
             if (IsHost)
             {
-                base.CopyPlayerDataFromUI(sender, e);
+                base.RequestSlotChange(row, field, index);
                 BroadcastPlayerOptions();
                 return;
             }
 
+            // Players who aren't the host ask the host to change their own options
             int mTopIndex = Players.FindIndex(p => p.Name == ProgramConstants.PLAYERNAME);
 
             if (mTopIndex == -1)
                 return;
 
-            int requestedSide = ddPlayerSides[mTopIndex].SelectedIndex;
-            int requestedColor = ddPlayerColors[mTopIndex].SelectedIndex;
-            int requestedStart = ddPlayerStarts[mTopIndex].SelectedIndex;
-            int requestedTeam = ddPlayerTeams[mTopIndex].SelectedIndex;
+            PlayerInfo me = Players[mTopIndex];
+            int requestedSide = me.SideId;
+            int requestedColor = me.ColorId;
+            int requestedStart = me.StartingLocation;
+            int requestedTeam = me.TeamId;
+
+            if (row == mTopIndex)
+            {
+                switch (field)
+                {
+                    case SlotField.Side:
+                        requestedSide = index;
+                        break;
+                    case SlotField.Color:
+                        requestedColor = index;
+                        break;
+                    case SlotField.Start:
+                        requestedStart = index;
+                        break;
+                    case SlotField.Team:
+                        requestedTeam = index;
+                        break;
+                }
+            }
 
             RequestPlayerOptions(requestedSide, requestedColor, requestedStart, requestedTeam);
         }
 
-        protected override void CopyPlayerDataToUI()
+        protected override void RenderPlayerSlots()
         {
             if (Players.Count + AIPlayers.Count > MAX_PLAYER_COUNT)
                 return;
 
-            base.CopyPlayerDataToUI();
+            base.RenderPlayerSlots();
 
             ClearPingIndicators();
 

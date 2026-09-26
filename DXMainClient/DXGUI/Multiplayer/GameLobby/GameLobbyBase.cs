@@ -186,6 +186,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         protected List<PlayerInfo> Players = new List<PlayerInfo>();
         protected List<PlayerInfo> AIPlayers = new List<PlayerInfo>();
 
+        private PlayerSlotsState slots;
+
+        /// <summary>The players and the changes that can be made to them; shares <see cref="Players"/> and <see cref="AIPlayers"/>.</summary>
+        protected PlayerSlotsState Slots => slots ??= new PlayerSlotsState(Players, AIPlayers);
+
         protected virtual PlayerInfo FindLocalPlayer() => Players.Find(p => p.Name == ProgramConstants.PLAYERNAME);
 
         protected bool PlayerUpdatingInProgress { get; set; }
@@ -281,6 +286,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             MapPreviewBox = FindChild<MapPreviewBox>("MapPreviewBox");
             MapPreviewBox.SetFields(Players, AIPlayers, MPColors, GameOptionsIni.GetStringValue("General", "Sides", String.Empty).Split(','), GameOptionsIni);
             MapPreviewBox.ToggleFavorite += MapPreviewBox_ToggleFavorite;
+            MapPreviewBox.StartAssignRequested += MapPreviewBox_StartAssignRequested;
+            MapPreviewBox.StartClearRequested += MapPreviewBox_StartClearRequested;
 
             lblMapName = FindChild<XNALabel>(nameof(lblMapName));
             lblMapAuthor = FindChild<XNALabel>(nameof(lblMapAuthor));
@@ -1091,6 +1098,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             for (int i = MAX_PLAYER_COUNT - 1; i > -1; i--)
             {
+                int row = i;
+
                 var ddPlayerName = new XNAClientDropDown(WindowManager);
                 ddPlayerName.Name = "ddPlayerName" + i;
                 ddPlayerName.ClientRectangle = new Rectangle(locationX,
@@ -1099,9 +1108,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 ddPlayerName.AddItem(String.Empty);
                 ProgramConstants.AI_PLAYER_NAMES.ForEach(ddPlayerName.AddItem);
                 ddPlayerName.AllowDropDown = true;
-                ddPlayerName.SelectedIndexChanged += CopyPlayerDataFromUI;
+                ddPlayerName.SelectedIndexChanged += (sender, _) => PlayerSlotDropDown_Changed(row, SlotField.Name, (XNADropDown)sender);
                 ddPlayerName.RightClick += MultiplayerName_RightClick;
-                ddPlayerName.Tag = true;
 
                 var ddPlayerSide = new XNAClientDropDown(WindowManager);
                 ddPlayerSide.Name = "ddPlayerSide" + i;
@@ -1118,8 +1126,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     AddSideToDropDown(ddPlayerSide, sideName);
 
                 ddPlayerSide.AllowDropDown = false;
-                ddPlayerSide.SelectedIndexChanged += CopyPlayerDataFromUI;
-                ddPlayerSide.Tag = true;
+                ddPlayerSide.SelectedIndexChanged += (sender, _) => PlayerSlotDropDown_Changed(row, SlotField.Side, (XNADropDown)sender);
 
                 var ddPlayerColor = new XNAClientColorDropDown(WindowManager);
                 ddPlayerColor.Name = "ddPlayerColor" + i;
@@ -1130,8 +1137,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 foreach (MultiplayerColor mpColor in MPColors)
                     ddPlayerColor.AddItem(mpColor.Name, mpColor.ToXnaColor());
                 ddPlayerColor.AllowDropDown = false;
-                ddPlayerColor.SelectedIndexChanged += CopyPlayerDataFromUI;
-                ddPlayerColor.Tag = false;
+                ddPlayerColor.SelectedIndexChanged += (sender, _) => PlayerSlotDropDown_Changed(row, SlotField.Color, (XNADropDown)sender);
 
                 var ddPlayerTeam = new XNAClientDropDown(WindowManager);
                 ddPlayerTeam.Name = "ddPlayerTeam" + i;
@@ -1141,8 +1147,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 ddPlayerTeam.AddItem("-");
                 ProgramConstants.TEAMS.ForEach(ddPlayerTeam.AddItem);
                 ddPlayerTeam.AllowDropDown = false;
-                ddPlayerTeam.SelectedIndexChanged += CopyPlayerDataFromUI;
-                ddPlayerTeam.Tag = true;
+                ddPlayerTeam.SelectedIndexChanged += (sender, _) => PlayerSlotDropDown_Changed(row, SlotField.Team, (XNADropDown)sender);
 
                 var ddPlayerStart = new XNAClientDropDown(WindowManager);
                 ddPlayerStart.Name = "ddPlayerStart" + i;
@@ -1152,10 +1157,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 for (int j = 1; j <= MAX_PLAYER_COUNT; j++)
                     ddPlayerStart.AddItem(j.ToString());
                 ddPlayerStart.AllowDropDown = false;
-                ddPlayerStart.SelectedIndexChanged += CopyPlayerDataFromUI;
+                ddPlayerStart.SelectedIndexChanged += (sender, _) => PlayerSlotDropDown_Changed(row, SlotField.Start, (XNADropDown)sender);
                 ddPlayerStart.Visible = false;
                 ddPlayerStart.Enabled = false;
-                ddPlayerStart.Tag = true;
 
                 ddPlayerNames[i] = ddPlayerName;
                 ddPlayerSides[i] = ddPlayerSide;
@@ -1258,7 +1262,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 EnablePlayerOptionDropDown(ddPlayerStarts[i], i, !playerExtraOptions.IsForceRandomStarts);
             }
 
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             UpdateMapPreviewBoxEnabledStatus();
             RefreshBtnPlayerExtraOptionsOpenTexture();
         }
@@ -1695,83 +1699,63 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             ClearReadyStatuses();
 
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
 
             UpdateDiscordPresence(true);
         }
 
-        /// <summary>
-        /// "Copies" player information from the UI to internal memory,
-        /// applying users' player options changes.
-        /// </summary>
-        protected virtual void CopyPlayerDataFromUI(object sender, EventArgs e)
+        private void MapPreviewBox_StartAssignRequested(object sender, StartAssignRequestedEventArgs e)
+        {
+            if (Slots.AssignStart(e.PlayerRow, e.StartingLocationIndex, onePlayerPerStart: GameModeMap.EnforceMaxPlayers))
+                OnStartsChangedFromMapPreview();
+        }
+
+        private void MapPreviewBox_StartClearRequested(object sender, LocalStartingLocationEventArgs e)
+        {
+            Slots.ClearStart(e.StartingLocationIndex);
+            OnStartsChangedFromMapPreview();
+        }
+
+        /// <summary>Called after the host changed start locations in the map preview.</summary>
+        protected virtual void OnStartsChangedFromMapPreview() => RefreshPlayerSlots();
+
+        private void PlayerSlotDropDown_Changed(int row, SlotField field, XNADropDown dropDown)
         {
             if (PlayerUpdatingInProgress)
                 return;
 
-            var senderDropDown = (XNADropDown)sender;
-            if ((bool)senderDropDown.Tag)
-                ClearReadyStatuses();
+            RequestSlotChange(row, field, dropDown.SelectedIndex);
+        }
 
-            var oldSideId = Players.Find(p => p.Name == ProgramConstants.PLAYERNAME)?.SideId;
+        /// <summary>
+        /// Handles the local player's input on a player row: by default the change is applied at once (skirmish, or
+        /// the game host).
+        /// </summary>
+        protected virtual void RequestSlotChange(int row, SlotField field, int index) => ApplySlotChange(row, field, index);
 
+        /// <summary>
+        /// Applies a change to a player row, carries out a Kick or Ban picked from a name drop-down, clears the other
+        /// players' ready status when the change requires it and shows the result.
+        /// </summary>
+        protected void ApplySlotChange(int row, SlotField field, int index)
+        {
             if (Players.Count > MAX_PLAYER_COUNT)
                 throw new Exception($"Player count exceeds maximum of {MAX_PLAYER_COUNT}. How could this happen?");
 
-            for (int pId = 0; pId < Players.Count; pId++)
-            {
-                PlayerInfo pInfo = Players[pId];
+            var oldSideId = Players.Find(p => p.Name == ProgramConstants.PLAYERNAME)?.SideId;
 
-                pInfo.ColorId = ddPlayerColors[pId].SelectedIndex;
-                pInfo.SideId = ddPlayerSides[pId].SelectedIndex;
-                pInfo.StartingLocation = ddPlayerStarts[pId].SelectedIndex;
-                pInfo.TeamId = ddPlayerTeams[pId].SelectedIndex;
+            SlotChangeResult result = Slots.ApplyChange(row, field, index, SlotIndices,
+                isCoop: Map != null && GameModeMap.IsCoop);
 
-                if (pInfo.SideId == SideCount + RandomSelectorCount)
-                    pInfo.StartingLocation = 0;
+            if (result.ClearsReady)
+                ClearReadyStatuses();
 
-                XNADropDown ddName = ddPlayerNames[pId];
+            if (result.Command == SlotCommand.Kick)
+                KickPlayer(row);
+            else if (result.Command == SlotCommand.Ban)
+                BanPlayer(row);
 
-                switch (ddName.SelectedIndex)
-                {
-                    case 0:
-                        break;
-                    case 1:
-                        ddName.SelectedIndex = 0;
-                        break;
-                    case 2:
-                        KickPlayer(pId);
-                        break;
-                    case 3:
-                        BanPlayer(pId);
-                        break;
-                }
-            }
-
-            AIPlayers.Clear();
-            for (int cmbId = Players.Count; cmbId < MAX_PLAYER_COUNT; cmbId++)
-            {
-                XNADropDown dd = ddPlayerNames[cmbId];
-                dd.Items[0].Text = "-";
-
-                if (dd.SelectedIndex < 1)
-                    continue;
-
-                PlayerInfo aiPlayer = new PlayerInfo
-                {
-                    Name = dd.Items[dd.SelectedIndex].Text,
-                    AILevel = dd.SelectedIndex - 1,
-                    SideId = Math.Max(ddPlayerSides[cmbId].SelectedIndex, 0),
-                    ColorId = Math.Max(ddPlayerColors[cmbId].SelectedIndex, 0),
-                    StartingLocation = Math.Max(ddPlayerStarts[cmbId].SelectedIndex, 0),
-                    TeamId = Map != null && GameModeMap.IsCoop ? 1 : Math.Max(ddPlayerTeams[cmbId].SelectedIndex, 0),
-                    IsAI = true
-                };
-
-                AIPlayers.Add(aiPlayer);
-            }
-
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             btnLaunchGame.SetRank(GetRank());
 
             if (oldSideId != Players.Find(p => p.Name == ProgramConstants.PLAYERNAME)?.SideId)
@@ -1814,9 +1798,38 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         /// <summary>
-        /// Applies player information changes done in memory to the UI.
+        /// Applies the side rules to the players, then shows them in the player rows.
         /// </summary>
-        protected virtual void CopyPlayerDataToUI()
+        protected void RefreshPlayerSlots()
+        {
+            NormalisePlayerSlots();
+            RenderPlayerSlots();
+        }
+
+        /// <summary>
+        /// Numbers the players by row and applies the side rules (<see cref="CheckDisallowedSides"/>), which can move
+        /// players to another side. This is the only player data change a refresh makes.
+        /// </summary>
+        private void NormalisePlayerSlots()
+        {
+            if (Players.Count + AIPlayers.Count > MAX_PLAYER_COUNT)
+                return;
+
+            for (int i = 0; i < Players.Count; i++)
+                Players[i].Index = i;
+
+            for (int i = 0; i < AIPlayers.Count; i++)
+                AIPlayers[i].Index = Players.Count + i;
+
+            PlayerUpdatingInProgress = true;
+            CheckDisallowedSides();
+            PlayerUpdatingInProgress = false;
+        }
+
+        /// <summary>
+        /// Shows the players in the player rows. Doesn't change player data.
+        /// </summary>
+        protected virtual void RenderPlayerSlots()
         {
             PlayerUpdatingInProgress = true;
 
@@ -1830,8 +1843,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             for (int pId = 0; pId < Players.Count; pId++)
             {
                 PlayerInfo pInfo = Players[pId];
-
-                pInfo.Index = pId;
 
                 XNADropDown ddPlayerName = ddPlayerNames[pId];
                 ddPlayerName.Items[0].Text = pInfo.Name;
@@ -1866,8 +1877,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 PlayerInfo aiInfo = AIPlayers[aiId];
 
                 int index = Players.Count + aiId;
-
-                aiInfo.Index = index;
 
                 XNADropDown ddPlayerName = ddPlayerNames[index];
                 ddPlayerName.Items[0].Text = "-";
@@ -1925,8 +1934,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             MapPreviewBox.UpdateStartingLocationTexts();
             UpdateMapPreviewBoxEnabledStatus();
-
-            CheckDisallowedSides();
 
             PlayerUpdatingInProgress = false;
         }
@@ -2081,7 +2088,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             OnGameOptionChanged();
 
             MapPreviewBox.GameModeMap = GameModeMap;
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
 
             GameOptions.EndUpdate();
 

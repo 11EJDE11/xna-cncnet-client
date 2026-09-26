@@ -68,7 +68,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             tunnelSession.Start((TunnelMode)UserINISettings.Instance.TunnelMode.Value);
             tunnelSession.ModeChanged += TunnelSession_ModeChanged;
             tunnelSession.PlayerPingsChanged += players => players.ToList().ForEach(UpdatePlayerPingIndicator);
-            tunnelSession.PlayerDataChanged += CopyPlayerDataToUI;
+            tunnelSession.PlayerDataChanged += RefreshPlayerSlots;
             tunnelSession.LaunchStatusChanged += () => UpdateLaunchGameButtonStatus();
 
             gameHostInactiveChecker = ClientConfiguration.Instance.InactiveHostKickEnabled? new GameHostInactiveChecker(WindowManager, uiDispatcher) : null;
@@ -278,7 +278,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             sessionBindings?.Dispose();
             sessionBindings = new BindingScope(uiDispatcher);
             sessionBindings.Bind(roomSettings, nameof(GameRoomSettings.RoomName), () => channel.UIName = roomSettings.RoomName);
-            sessionBindings.Bind(roomSettings, nameof(GameRoomSettings.PlayerLimit), CopyPlayerDataToUI);
+            sessionBindings.Bind(roomSettings, nameof(GameRoomSettings.PlayerLimit), RefreshPlayerSlots);
             sessionBindings.OnUserInput<GameLobbySettingsEventArgs>(
                 h => gameLobbySettingsWindow.SettingsChanged += h,
                 h => gameLobbySettingsWindow.SettingsChanged -= h,
@@ -412,9 +412,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             UpdateDiscordPresence(true);
         }
 
-        protected override void CopyPlayerDataToUI()
+        protected override void RenderPlayerSlots()
         {
-            base.CopyPlayerDataToUI();
+            base.RenderPlayerSlots();
 
             for (int i = AIPlayers.Count + Players.Count; i < MAX_PLAYER_COUNT; i++)
             {
@@ -443,7 +443,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 // Derive the icon from the pair's merged status instead of the event that
                 // triggered this update. Events can arrive out of order (e.g. the peer's stale
                 // Succeeded report landing mid-renegotiation) and full UI refreshes like
-                // CopyPlayerDataToUI pass no status at all — both would flicker the icon
+                // RefreshPlayerSlots pass no status at all — both would flicker the icon
                 // between the negotiating icon and a ping icon while a negotiation runs.
                 negotiationStatus = _negotiator.NegotiationData.GetNegotiationStatus(ProgramConstants.PLAYERNAME, pInfo.Name);
             }
@@ -866,7 +866,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 _negotiator.RemovePlayer(e.UserName);
                 Players.RemoveAt(index);
-                CopyPlayerDataToUI();
+                RefreshPlayerSlots();
                 UpdateDiscordPresence();
                 ClearReadyStatuses();
             }
@@ -903,7 +903,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 #endif
 
             _negotiator.RegenerateV3PlayerInfos();
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
 
             if (IsHost)
             {
@@ -919,7 +919,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 else
                 {
                     Players[0].Ready = true;
-                    CopyPlayerDataToUI();
+                    RefreshPlayerSlots();
                 }
 
                 if (Players.Count >= roomSettings.PlayerLimit)
@@ -941,7 +941,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 _negotiator.RemovePlayer(playerName);
 
                 Players.Remove(pInfo);
-                CopyPlayerDataToUI();
+                RefreshPlayerSlots();
 
                 if (IsHost)
                     BroadcastPlayerOptions();
@@ -1171,7 +1171,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             UpdatePlayerPingIndicator(player, status);
 
             if (status == NegotiationStatus.Succeeded)
-                CopyPlayerDataToUI();
+                RefreshPlayerSlots();
         }
 
         void IV3NegotiationHost.OnRemoteNegotiationStatus(PlayerInfo player, NegotiationStatus status, int ping)
@@ -1180,7 +1180,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 RefreshV3PlayerPing(player, ping);
                 UpdatePlayerPingIndicator(player, status);
-                CopyPlayerDataToUI();
+                RefreshPlayerSlots();
             }
             else
             {
@@ -1303,19 +1303,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (!IsPlayerOptionsRequestAllowed(side, color, start, team))
                 return;
 
-            if (side != pInfo.SideId
-                || start != pInfo.StartingLocation
-                || team != pInfo.TeamId)
-            {
+            if (Slots.ApplyOptionsRequest(pInfo, side, color, start, team).ClearsReady)
                 ClearReadyStatuses();
-            }
 
-            pInfo.SideId = side;
-            pInfo.ColorId = color;
-            pInfo.StartingLocation = start;
-            pInfo.TeamId = team;
-
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             BroadcastPlayerOptions();
         }
 
@@ -1339,7 +1330,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             pInfo.Ready = readyStatus > 0;
             pInfo.AutoReady = readyStatus > 1;
 
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
             BroadcastPlayerOptions();
         }
 
@@ -1480,7 +1471,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             _negotiator.RegenerateV3PlayerInfos();
 
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
 
             // When you join a lobby, you get existing player information here.
             // Start negotiating with players that we haven't already negotiated with or in the middle of negotiating
@@ -1598,7 +1589,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 RandomSeed = random.Next();
                 OnGameOptionChanged();
                 ClearReadyStatuses();
-                CopyPlayerDataToUI();
+                RefreshPlayerSlots();
                 BroadcastPlayerOptions();
                 BroadcastPlayerExtraOptions();
                 StartInactiveCheck();
@@ -1914,7 +1905,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (pInfo != null)
                 pInfo.IsInGame = true;
 
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
         }
 
         private void ReturnNotification(string sender)
@@ -1927,7 +1918,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 pInfo.IsInGame = false;
 
             sndReturnSound.Play();
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
         }
 
         private void FileHashNotification(string sender, string filesHash)
@@ -1939,7 +1930,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             if (pInfo != null)
                 pInfo.HashReceived = true;
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
 
             if (filesHash != gameFilesHash)
             {

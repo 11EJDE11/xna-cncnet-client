@@ -55,13 +55,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             AddSideToDropDown(ddPlayerSides[0], spectatorName, spectatorName.L10N("Client:Sides:SpectatorSide"), AssetLoader.LoadTexture("spectatoricon.png"));
 
             MapPreviewBox.LocalStartingLocationSelected += MapPreviewBox_LocalStartingLocationSelected;
-            MapPreviewBox.StartingLocationApplied += MapPreviewBox_StartingLocationApplied;
 
             WindowManager.CenterControlOnScreen(this);
 
             LoadSettings();
 
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
 
             ProgramConstants.PlayerNameChanged += ProgramConstants_PlayerNameChanged;
             ddPlayerSides[0].SelectedIndexChanged += PlayerSideChanged;
@@ -96,19 +95,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private void ProgramConstants_PlayerNameChanged(object sender, EventArgs e)
         {
             Players[0].Name = ProgramConstants.PLAYERNAME;
-            CopyPlayerDataToUI();
-        }
-
-        private void MapPreviewBox_StartingLocationApplied(object sender, EventArgs e)
-        {
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
         }
 
         private void MapPreviewBox_LocalStartingLocationSelected(object sender, LocalStartingLocationEventArgs e)
         {
             // The index is already the start drop-down index: the waypoint + 1, or 0 when cleared
             Players[0].StartingLocation = e.StartingLocationIndex;
-            CopyPlayerDataToUI();
+            RefreshPlayerSlots();
         }
 
         private string CheckGameValidity()

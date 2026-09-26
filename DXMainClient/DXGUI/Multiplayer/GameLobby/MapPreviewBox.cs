@@ -46,7 +46,11 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public event EventHandler<LocalStartingLocationEventArgs> LocalStartingLocationSelected;
 
-        public event EventHandler StartingLocationApplied;
+        /// <summary>The host picked a player for a start location from the context menu.</summary>
+        public event EventHandler<StartAssignRequestedEventArgs> StartAssignRequested;
+
+        /// <summary>The host right-clicked a start location to clear it.</summary>
+        public event EventHandler<LocalStartingLocationEventArgs> StartClearRequested;
 
         private readonly MapLoader mapLoader;
 
@@ -286,31 +290,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             SoundPlayer.Play(sndDropdownSound);
 
-            if (GameModeMap.EnforceMaxPlayers)
-            {
-                foreach (PlayerInfo pInfo in players.Concat(aiPlayers))
-                {
-                    if (pInfo.StartingLocation == (int)contextMenu.Tag + 1)
-                        pInfo.StartingLocation = 0;
-                }
-            }
-
-            PlayerInfo player;
-
-            if (index >= players.Count)
-            {
-                int aiIndex = index - players.Count;
-                if (aiIndex >= aiPlayers.Count)
-                    return;
-
-                player = aiPlayers[aiIndex];
-            }
-            else
-                player = players[index];
-
-            player.StartingLocation = (int)contextMenu.Tag + 1;
-
-            StartingLocationApplied?.Invoke(this, EventArgs.Empty);
+            StartAssignRequested?.Invoke(this, new StartAssignRequestedEventArgs(index, (int)contextMenu.Tag + 1));
         }
 
         /// <summary>
@@ -394,13 +374,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            foreach (PlayerInfo pInfo in players.Union(aiPlayers))
-            {
-                if (pInfo.StartingLocation == (int)indicator.Tag + 1)
-                    pInfo.StartingLocation = 0;
-            }
-
-            StartingLocationApplied?.Invoke(this, EventArgs.Empty);
+            StartClearRequested?.Invoke(this, new LocalStartingLocationEventArgs((int)indicator.Tag + 1));
         }
 
         /// <summary>
@@ -718,6 +692,21 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 textureRectangle.Width, textureRectangle.Height),
                 Color.White);
         }
+    }
+
+    public class StartAssignRequestedEventArgs : EventArgs
+    {
+        public StartAssignRequestedEventArgs(int playerRow, int startingLocationIndex)
+        {
+            PlayerRow = playerRow;
+            StartingLocationIndex = startingLocationIndex;
+        }
+
+        /// <summary>The player's row: human players first, then AI players.</summary>
+        public int PlayerRow { get; }
+
+        /// <summary>The start drop-down index: the waypoint + 1.</summary>
+        public int StartingLocationIndex { get; }
     }
 
     public class LocalStartingLocationEventArgs : EventArgs
