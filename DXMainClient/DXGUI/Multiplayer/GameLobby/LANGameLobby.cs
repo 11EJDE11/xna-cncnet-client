@@ -1,4 +1,5 @@
 using ClientCore;
+using ClientLogic.Lobby;
 using ClientLogic.Protocol;
 using ClientGUI;
 using DTAClient.Domain;
@@ -1050,73 +1051,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            RandomSeed = gameOptions.RandomSeed;
+            GameOptionsUpdate update = GameOptionsApplier.Plan(gameOptions,
+                new LobbyGameSettings(FrameSendRate, MaxAhead, ProtocolVersion, GameModeMap),
+                (gameMode, mapSHA1) => GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1),
+                isMapSharingEnabled: false);
 
-            string mapSHA1 = gameOptions.MapSHA1;
-            string gameMode = gameOptions.GameModeName;
-
-            GameModeMap gameModeMap = GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1);
-
-            if (gameModeMap == null)
-            {
-                ChangeMap(null);
-                if (!string.IsNullOrEmpty(mapSHA1))
-                    AddNotice("The game host has selected a map that doesn't exist on your installation.".L10N("Client:Main:MapNotExist") + " " +
-                        "The host needs to change the map or you won't be able to play.".L10N("Client:Main:HostNeedChangeMapForYou"));
-
-                return;
-            }
-
-            if (GameModeMap != gameModeMap)
-                ChangeMap(gameModeMap);
-
-            int frameSendRate = gameOptions.FrameSendRate;
-            if (frameSendRate != FrameSendRate)
-            {
-                FrameSendRate = frameSendRate;
-                AddNotice(string.Format("The game host has changed FrameSendRate (order lag) to {0}".L10N("Client:Main:HostChangeFrameSendRate"), frameSendRate));
-            }
-
-            bool removeStartingLocations = gameOptions.RemoveStartingLocations;
-            SetRandomStartingLocations(removeStartingLocations);
-
-            for (int i = 0; i < CheckBoxes.Count; i++)
-            {
-                GameLobbyCheckBox chkBox = CheckBoxes[i];
-
-                bool oldValue = chkBox.Checked;
-                chkBox.Checked = gameOptions.CheckBoxValues[i];
-
-                if (chkBox.Checked != oldValue)
-                {
-                    if (chkBox.Checked)
-                        AddNotice(string.Format("The game host has enabled {0}".L10N("Client:Main:HostEnableOption"), chkBox.Text));
-                    else
-                        AddNotice(string.Format("The game host has disabled {0}".L10N("Client:Main:HostDisableOption"), chkBox.Text));
-                }
-            }
-
-            for (int i = 0; i < DropDowns.Count; i++)
-            {
-                int index = gameOptions.DropDownIndices[i];
-
-                GameLobbyDropDown dd = DropDowns[i];
-
-                if (index < 0 || index >= dd.Items.Count)
-                    return;
-
-                int oldValue = dd.SelectedIndex;
-                dd.SelectedIndex = index;
-
-                if (index != oldValue)
-                {
-                    string ddName = dd.OptionName;
-                    if (dd.OptionName == null)
-                        ddName = dd.Name;
-
-                    AddNotice(string.Format("The game host has set {0} to {1}".L10N("Client:Main:HostSetOption"), ddName, dd.SelectedItem.Text));
-                }
-            }
+            ApplyGameOptionsUpdate(update);
         }
 
         private void GameHost_HandleReadyRequest(string sender, string message)

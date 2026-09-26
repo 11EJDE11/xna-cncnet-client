@@ -5,6 +5,7 @@ using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using Microsoft.Xna.Framework;
 using ClientCore;
+using ClientLogic.Lobby;
 using System.IO;
 using Rampastring.Tools;
 using ClientCore.Statistics;
@@ -492,11 +493,86 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (newValue != RemoveStartingLocations)
             {
                 RemoveStartingLocations = newValue;
-                if (RemoveStartingLocations)
-                    AddNotice("The game host has enabled completely random starting locations (only works for regular maps).".L10N("Client:Main:HostEnabledRandomStartLocation"));
-                else
-                    AddNotice("The game host has disabled completely random starting locations.".L10N("Client:Main:HostDisabledRandomStartLocation"));
+                AddNotice(GameOptionNotices.RemoveStartingLocationsChanged(RemoveStartingLocations));
             }
+        }
+
+        /// <summary>
+        /// Applies the host's game options, planned by <see cref="GameOptionsApplier.Plan"/>.
+        /// CnCNet and LAN lobbies apply them in the same order.
+        /// </summary>
+        protected void ApplyGameOptionsUpdate(GameOptionsUpdate update)
+        {
+            FrameSendRate = update.FrameSendRate;
+            MaxAhead = update.MaxAhead;
+            ProtocolVersion = update.ProtocolVersion;
+
+            foreach (string notice in update.SettingNotices)
+                AddNotice(notice);
+
+            switch (update.MapAction)
+            {
+                case GameOptionsMapAction.None:
+                    break;
+                case GameOptionsMapAction.Change:
+                    ChangeMap(update.GameModeMap);
+                    break;
+                default:
+                    ChangeMap(null);
+                    HandleMissingHostMap(update);
+                    break;
+            }
+
+            // By changing the game options after changing the map, we know which
+            // game options were changed by the map and which were changed by the game host
+
+            // If the map doesn't exist on the local installation, it's impossible
+            // to know which options were set by the host and which were set by the
+            // map, so we'll just assume that the host has set all the options.
+            // Very few (if any) custom maps force options, so it'll be correct nearly always
+
+            for (int i = 0; i < CheckBoxes.Count; i++)
+            {
+                GameLobbyCheckBox checkBox = CheckBoxes[i];
+                bool isChecked = update.CheckBoxValues[i];
+
+                if (checkBox.Checked != isChecked)
+                    AddNotice(GameOptionNotices.CheckBoxChanged(checkBox.Text, isChecked));
+
+                checkBox.Checked = isChecked;
+            }
+
+            for (int i = 0; i < DropDowns.Count; i++)
+            {
+                int selectedIndex = update.DropDownIndices[i];
+
+                GameLobbyDropDown dd = DropDowns[i];
+
+                if (selectedIndex < 0 || selectedIndex >= dd.Items.Count)
+                    continue;
+
+                if (dd.SelectedIndex != selectedIndex)
+                    AddNotice(GameOptionNotices.DropDownChanged(dd.OptionName ?? dd.Name, dd.Items[selectedIndex].Text));
+
+                dd.SelectedIndex = selectedIndex;
+            }
+
+            SetRandomStartingLocations(update.RemoveStartingLocations);
+
+            RandomSeed = update.RandomSeed;
+        }
+
+        /// <summary>
+        /// Called after the map was cleared because the host's map isn't installed
+        /// (<see cref="GameOptionsUpdate.MapAction"/> says why).
+        /// </summary>
+        protected virtual void HandleMissingHostMap(GameOptionsUpdate update)
+        {
+            if (update.MapAction == GameOptionsMapAction.Clear)
+                return;
+
+            AddNotice("The game host has selected a map that doesn't exist on your installation.".L10N("Client:Main:MapNotExist") + " " +
+                "The host needs to change the map or you won't be able to play.".L10N("Client:Main:HostNeedChangeMapForYou"));
         }
 
         /// <summary>

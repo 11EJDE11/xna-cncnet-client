@@ -1,4 +1,5 @@
 using ClientCore;
+using ClientLogic.Lobby;
 using ClientLogic.Protocol;
 using ClientGUI;
 using DTAClient.Domain.Multiplayer;
@@ -1813,109 +1814,32 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            bool isMapOfficial = gameOptions.IsMapOfficial;
+            GameOptionsUpdate update = GameOptionsApplier.Plan(gameOptions,
+                new LobbyGameSettings(FrameSendRate, MaxAhead, ProtocolVersion, GameModeMap),
+                (gameMode, mapSHA1) => GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1),
+                UserINISettings.Instance.EnableMapSharing);
 
-            string mapSHA1 = gameOptions.MapSHA1;
+            lastGameMode = update.GameModeName;
+            lastMapSHA1 = update.MapSHA1;
+            lastMapName = update.MapName;
 
-            string gameMode = gameOptions.GameModeName;
+            ApplyGameOptionsUpdate(update);
 
-            int frameSendRate = gameOptions.FrameSendRate;
-            if (frameSendRate != FrameSendRate)
+            HandleTunnelModeChange((TunnelMode)update.TunnelMode, false);
+        }
+
+        protected override void HandleMissingHostMap(GameOptionsUpdate update)
+        {
+            switch (update.MapAction)
             {
-                FrameSendRate = frameSendRate;
-                AddNotice(string.Format("The game host has changed FrameSendRate (order lag) to {0}".L10N("Client:Main:HostChangeFrameSendRate"), frameSendRate));
+                case GameOptionsMapAction.ClearAndRequestDownload:
+                case GameOptionsMapAction.ClearAndReportMapSharingDisabled:
+                    RequestMap(update.MapSHA1);
+                    break;
+                case GameOptionsMapAction.ClearAndReportOfficialMapMissing:
+                    ShowOfficialMapMissingMessage(update.MapSHA1);
+                    break;
             }
-
-            int maxAhead = gameOptions.MaxAhead;
-            if (maxAhead != MaxAhead)
-            {
-                MaxAhead = maxAhead;
-                AddNotice(string.Format("The game host has changed MaxAhead to {0}".L10N("Client:Main:HostChangeMaxAhead"), maxAhead));
-            }
-
-            int protocolVersion = gameOptions.ProtocolVersion;
-            if (protocolVersion != ProtocolVersion)
-            {
-                ProtocolVersion = protocolVersion;
-                AddNotice(string.Format("The game host has changed ProtocolVersion to {0}".L10N("Client:Main:HostChangeProtocolVersion"), protocolVersion));
-            }
-
-            string mapName = gameOptions.MapName;
-            GameModeMap currentGameModeMap = GameModeMap;
-
-            lastGameMode = gameMode;
-            lastMapSHA1 = mapSHA1;
-            lastMapName = mapName;
-
-            GameModeMap = GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1);
-            if (GameModeMap == null)
-            {
-                ChangeMap(null);
-
-                if (!string.IsNullOrEmpty(mapSHA1))
-                {
-                    if (!isMapOfficial)
-                        RequestMap(mapSHA1);
-                    else
-                        ShowOfficialMapMissingMessage(mapSHA1);
-                }
-            }
-            else if (GameModeMap != currentGameModeMap)
-            {
-                ChangeMap(GameModeMap);
-            }
-
-            // By changing the game options after changing the map, we know which
-            // game options were changed by the map and which were changed by the game host
-
-            // If the map doesn't exist on the local installation, it's impossible
-            // to know which options were set by the host and which were set by the
-            // map, so we'll just assume that the host has set all the options.
-            // Very few (if any) custom maps force options, so it'll be correct nearly always
-
-            for (int gameOptionIndex = 0; gameOptionIndex < CheckBoxes.Count; gameOptionIndex++)
-            {
-                GameLobbyCheckBox checkBox = CheckBoxes[gameOptionIndex];
-                bool isChecked = gameOptions.CheckBoxValues[gameOptionIndex];
-
-                if (checkBox.Checked != isChecked)
-                {
-                    if (isChecked)
-                        AddNotice(string.Format("The game host has enabled {0}".L10N("Client:Main:HostEnableOption"), checkBox.Text));
-                    else
-                        AddNotice(string.Format("The game host has disabled {0}".L10N("Client:Main:HostDisableOption"), checkBox.Text));
-                }
-
-                checkBox.Checked = isChecked;
-            }
-
-            for (int i = 0; i < DropDowns.Count; i++)
-            {
-                int ddSelectedIndex = gameOptions.DropDownIndices[i];
-
-                GameLobbyDropDown dd = DropDowns[i];
-
-                if (ddSelectedIndex < 0 || ddSelectedIndex >= dd.Items.Count)
-                    continue;
-
-                if (dd.SelectedIndex != ddSelectedIndex)
-                {
-                    string ddName = dd.OptionName;
-                    if (dd.OptionName == null)
-                        ddName = dd.Name;
-
-                    AddNotice(string.Format("The game host has set {0} to {1}".L10N("Client:Main:HostSetOption"), ddName, dd.Items[ddSelectedIndex].Text));
-                }
-
-                dd.SelectedIndex = ddSelectedIndex;
-            }
-
-            bool removeStartingLocations = gameOptions.RemoveStartingLocations;
-            SetRandomStartingLocations(removeStartingLocations);
-
-            RandomSeed = gameOptions.RandomSeed;
-
-            HandleTunnelModeChange((TunnelMode)gameOptions.TunnelMode, false);
         }
 
         private void HandleTunnelModeChange(TunnelMode mode, bool isHostInitiated, bool autoSelectTunnel = true)
