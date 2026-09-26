@@ -771,7 +771,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 for (int i = 1; i < Players.Count; i++)
                 {
                     LANPlayerInfo lpInfo = (LANPlayerInfo)Players[i];
-                    if (!lpInfo.Update(gameTime))
+                    if (!lpInfo.Update(gameTime.ElapsedGameTime))
                     {
                         CleanUpPlayer(lpInfo);
                         Players.RemoveAt(i);

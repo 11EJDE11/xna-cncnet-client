@@ -2,9 +2,9 @@
 
 using DTAClient.Domain.Multiplayer.CnCNet;
 
-using Microsoft.Xna.Framework;
+using ClientLogic.UI;
+
 using Rampastring.Tools;
-using Rampastring.XNAUI;
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -57,12 +57,12 @@ namespace DTAClient.Domain.Multiplayer.LAN
         /// <summary>
         /// Updates logic timers for the player.
         /// </summary>
-        /// <param name="gameTime">Provides a snapshot of timing values.</param>
+        /// <param name="elapsed">The time since the previous update.</param>
         /// <returns>True if the player is still considered connected, otherwise false.</returns>
-        public bool Update(GameTime gameTime)
+        public bool Update(TimeSpan elapsed)
         {
-            TimeSinceLastReceivedMessage += gameTime.ElapsedGameTime;
-            TimeSinceLastSentMessage += gameTime.ElapsedGameTime;
+            TimeSinceLastReceivedMessage += elapsed;
+            TimeSinceLastSentMessage += elapsed;
 
             if (TimeSinceLastSentMessage > TimeSpan.FromSeconds(SEND_PING_TIMEOUT)
                 || TimeSinceLastReceivedMessage > TimeSpan.FromSeconds(SEND_PING_TIMEOUT))
@@ -195,7 +195,7 @@ namespace DTAClient.Domain.Multiplayer.LAN
             }
         }
 
-        public void UpdatePing(WindowManager wm)
+        public void UpdatePing(IUiDispatcher uiDispatcher)
         {
             using (Ping p = new Ping())
             {
@@ -205,7 +205,7 @@ namespace DTAClient.Domain.Multiplayer.LAN
                     if (reply.Status == IPStatus.Success)
                         Ping = PingValue.FromMs((int)reply.RoundtripTime);
 
-                    wm.AddCallback(PlayerPinged, this, EventArgs.Empty);
+                    uiDispatcher.Post(() => PlayerPinged?.Invoke(this, EventArgs.Empty));
                 }
                 catch (PingException ex)
                 {

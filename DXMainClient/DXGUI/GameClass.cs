@@ -27,6 +27,7 @@ using Rampastring.XNAUI.XNAControls;
 using MainMenu = DTAClient.DXGUI.Generic.MainMenu;
 using System.Threading.Tasks;
 using ClientCore.Display;
+using ClientLogic.UI;
 
 
 #if WINFORMS
@@ -273,7 +274,16 @@ namespace DTAClient.DXGUI
                             .AddSingleton<GameCollection>()
                             .AddSingleton<CnCNetUserData>()
                             .AddSingleton<CnCNetManager>()
-                            .AddSingleton<TunnelHandler>()
+                            .AddSingleton<IUiDispatcher>(new XnaUiDispatcher(windowManager))
+                            .AddSingleton(serviceProvider =>
+                            {
+                                var tunnelHandler = new TunnelHandler(serviceProvider.GetRequiredService<IUiDispatcher>());
+
+                                windowManager.Game.Components.Add(
+                                    new TunnelHandlerComponent(windowManager, serviceProvider.GetRequiredService<CnCNetManager>(), tunnelHandler));
+
+                                return tunnelHandler;
+                            })
                             .AddSingleton<DiscordHandler>()
                             .AddSingleton<PrivateMessageHandler>()
                             .AddSingleton<MapLoader>()

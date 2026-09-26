@@ -10,16 +10,18 @@ using System.Threading.Tasks;
 
 using ClientCore;
 
-using DTAClient.Online;
-
-using Microsoft.Xna.Framework;
+using ClientLogic.UI;
 
 using Rampastring.Tools;
-using Rampastring.XNAUI;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet
 {
-    public class TunnelHandler : GameComponent
+    /// <summary>
+    /// Keeps the list of CnCNet tunnel servers and their pings up to date and owns the V3 tunnel
+    /// communication for this client. A front end calls <see cref="Update"/> regularly while connected
+    /// to CnCNet, and <see cref="OnConnected"/> / <see cref="OnDisconnected"/> as the connection changes.
+    /// </summary>
+    public class TunnelHandler
     {
         /// <summary>
         /// Determines the time between pinging the current tunnel (if it's set).
@@ -46,21 +48,12 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private bool _refreshInProgress = false;
         private readonly V3TunnelCommunicator _tunnelCommunicator;
 
-        public TunnelHandler(WindowManager wm, CnCNetManager connectionManager) : base(wm.Game)
+        public TunnelHandler(IUiDispatcher uiDispatcher)
         {
-            this.wm = wm;
-            this.connectionManager = connectionManager;
-
-            wm.Game.Components.Add(this);
-
-            Enabled = false;
-
-            connectionManager.Connected += ConnectionManager_Connected;
-            connectionManager.Disconnected += ConnectionManager_Disconnected;
-            connectionManager.ConnectionLost += ConnectionManager_ConnectionLost;
+            this.uiDispatcher = uiDispatcher;
 
             _tunnelCommunicator = new V3TunnelCommunicator();
-            KeepAliveMonitor = new V3KeepAliveMonitor(_tunnelCommunicator, wm);
+            KeepAliveMonitor = new V3KeepAliveMonitor(_tunnelCommunicator, uiDispatcher);
             _p2pEndpointDiscovery = new P2PEndpointDiscovery(_tunnelCommunicator);
         }
 
@@ -91,8 +84,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         public event EventHandler CurrentTunnelPinged;
         public event Action<string, int> TunnelPinged; //address, port
 
-        private WindowManager wm;
-        private CnCNetManager connectionManager;
+        private readonly IUiDispatcher uiDispatcher;
 
         private readonly Stopwatch refreshTimer = Stopwatch.StartNew();
         private TimeSpan? lastTunnelRefreshTimestamp;
@@ -115,31 +107,24 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
         private void DoTunnelPinged(string address, int port)
         {
             if (TunnelPinged != null)
-                wm.AddCallback(TunnelPinged, address, port);
+                uiDispatcher.Post(() => TunnelPinged?.Invoke(address, port));
         }
 
         private void DoCurrentTunnelPinged()
         {
             if (CurrentTunnelPinged != null)
-                wm.AddCallback(CurrentTunnelPinged, this, EventArgs.Empty);
+                uiDispatcher.Post(() => CurrentTunnelPinged?.Invoke(this, EventArgs.Empty));
         }
 
-        private void ConnectionManager_Connected(object sender, EventArgs e)
+        /// <summary>Call when the client connects to CnCNet, before the first <see cref="Update"/>.</summary>
+        public void OnConnected()
         {
             InitializeTunnelCommunicator();
-            Enabled = true;
         }
 
-        private void ConnectionManager_ConnectionLost(object sender, Online.EventArguments.ConnectionLostEventArgs e)
+        /// <summary>Call when the client disconnects from CnCNet or loses the connection.</summary>
+        public void OnDisconnected()
         {
-            Enabled = false;
-            _tunnelCommunicator.Shutdown();
-            _p2pEndpointDiscovery.ClearCache();
-        }
-
-        private void ConnectionManager_Disconnected(object sender, EventArgs e)
-        {
-            Enabled = false;
             _tunnelCommunicator.Shutdown();
             _p2pEndpointDiscovery.ClearCache();
         }
@@ -158,7 +143,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
                 try
                 {
                     List<CnCNetTunnel> tunnels = RefreshTunnels();
-                    wm.AddCallback(new Action<List<CnCNetTunnel>>(HandleRefreshedTunnels), tunnels);
+                    uiDispatcher.Post(() => HandleRefreshedTunnels(tunnels));
                 }
                 finally
                 {
@@ -420,7 +405,11 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             return returnValue;
         }
 
-        public override void Update(GameTime gameTime)
+        /// <summary>
+        /// Refreshes the tunnel list or pings the current tunnel when due, and ticks the keepalive monitor.
+        /// Call on the UI thread while connected to CnCNet.
+        /// </summary>
+        public void Update()
         {
             TimeSpan currentTimestamp = refreshTimer.Elapsed;
             TimeSpan elapsedSinceLastRefresh = lastTunnelRefreshTimestamp.HasValue
@@ -444,8 +433,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
             }
 
             KeepAliveMonitor.Update(GameTunnelBridge != null && GameTunnelBridge.IsRunning);
-
-            base.Update(gameTime);
         }
 
         /// <summary>

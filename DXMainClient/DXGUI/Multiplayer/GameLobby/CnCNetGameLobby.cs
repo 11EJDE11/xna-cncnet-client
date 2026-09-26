@@ -1,6 +1,7 @@
 using ClientCore;
 using ClientLogic.Lobby;
 using ClientLogic.Protocol;
+using ClientLogic.UI;
 using ClientGUI;
 using DTAClient.Domain.Multiplayer;
 using DTAClient.Domain;
@@ -47,6 +48,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             TopBar topBar,
             CnCNetManager connectionManager,
             TunnelHandler tunnelHandler,
+            IUiDispatcher uiDispatcher,
             GameCollection gameCollection,
             CnCNetUserData cncnetUserData,
             MapLoader mapLoader,
@@ -63,7 +65,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             this.pmWindow = pmWindow;
             this.random = random;
             this._tunnelMode = (TunnelMode)UserINISettings.Instance.TunnelMode.Value;
-            _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler, windowManager);
+            _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler, uiDispatcher);
 
             gameHostInactiveChecker = ClientConfiguration.Instance.InactiveHostKickEnabled? new GameHostInactiveChecker(WindowManager) : null;
 
@@ -1243,7 +1245,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         void IV3NegotiationHost.SendNegotiationReport(string message)
             => channel.SendCTCPMessage(message, QueuedMessageType.GAME_NEGOTIATION_MESSAGE, 10);
 
-        void IV3NegotiationHost.AddNotice(string message, Color color) => AddNotice(message, color);
+        void INoticeSink.AddNotice(string message, NoticeSeverity severity) => AddNotice(message, severity.ToXnaColor());
 
         void IV3NegotiationHost.OnNegotiationStateChanged()
         {

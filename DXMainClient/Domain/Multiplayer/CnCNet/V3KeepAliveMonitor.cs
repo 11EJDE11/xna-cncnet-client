@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 using ClientCore;
 
-using Rampastring.XNAUI;
+using ClientLogic.UI;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 
@@ -43,7 +43,7 @@ public class V3KeepAliveMonitor
     private static int KEEPALIVE_MAX_MISSES => ClientConfiguration.Instance.V3KeepAliveMaxMisses;
 
     private readonly V3TunnelCommunicator _communicator;
-    private readonly WindowManager _windowManager;
+    private readonly IUiDispatcher _uiDispatcher;
 
     private uint _localId;
     // Snapshot list, replaced atomically by the negotiation manager (possibly from a
@@ -54,10 +54,10 @@ public class V3KeepAliveMonitor
     private long _lastRegistrationRefreshTicks;
     private readonly ConcurrentDictionary<uint, KeepAliveTracker> _trackers = new();
 
-    public V3KeepAliveMonitor(V3TunnelCommunicator communicator, WindowManager windowManager)
+    public V3KeepAliveMonitor(V3TunnelCommunicator communicator, IUiDispatcher uiDispatcher)
     {
         _communicator = communicator;
-        _windowManager = windowManager;
+        _uiDispatcher = uiDispatcher;
         _communicator.KeepAlivePongReceived = Communicator_KeepAlivePongReceived;
         _communicator.ProbeRequestReceived = Communicator_ProbeRequestReceived;
         _communicator.ProbeReportReceived = Communicator_ProbeReportReceived;
@@ -255,7 +255,7 @@ public class V3KeepAliveMonitor
         if (_trackers.TryGetValue(remoteId, out var tracker))
             tracker.RecordPong(Stopwatch.GetTimestamp());
 
-        _windowManager.AddCallback(new Action<uint, int>(DoPongReceived), remoteId, rttMs);
+        _uiDispatcher.Post(() => DoPongReceived(remoteId, rttMs));
     }
 
     private void DoPongReceived(uint remoteId, int rttMs)

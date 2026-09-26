@@ -1,7 +1,7 @@
 #nullable enable
 using System.Collections.Generic;
 
-using Microsoft.Xna.Framework;
+using ClientLogic.UI;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet;
 
@@ -11,7 +11,7 @@ namespace DTAClient.Domain.Multiplayer.CnCNet;
 /// state and protocol; the host provides the bits that differ between lobbies
 /// (player list, channel, message transport) and reacts to UI-affecting callbacks.
 /// </summary>
-public interface IV3NegotiationHost
+public interface IV3NegotiationHost : INoticeSink
 {
     /// <summary>The lobby's current player list.</summary>
     List<PlayerInfo> Players { get; }
@@ -29,9 +29,6 @@ public interface IV3NegotiationHost
     /// (replaces any previously queued report, so rapid state changes collapse to one wire message).
     /// </summary>
     void SendNegotiationReport(string message);
-
-    /// <summary>Adds a notice to the lobby chat.</summary>
-    void AddNotice(string message, Color color);
 
     /// <summary>
     /// Raised whenever the overall negotiation state may have changed, so the lobby can

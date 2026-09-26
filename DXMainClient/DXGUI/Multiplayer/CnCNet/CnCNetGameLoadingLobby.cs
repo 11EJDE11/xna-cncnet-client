@@ -1,5 +1,6 @@
 using ClientCore;
 using ClientLogic.Protocol;
+using ClientLogic.UI;
 using ClientGUI;
 using DTAClient.Domain;
 using DTAClient.Domain.Multiplayer;
@@ -44,6 +45,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             TopBar topBar,
             CnCNetManager connectionManager,
             TunnelHandler tunnelHandler,
+            IUiDispatcher uiDispatcher,
             MapLoader mapLoader,
             GameCollection gameCollection,
             DiscordHandler discordHandler,
@@ -57,7 +59,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             this.mapLoader = mapLoader;
             this.cncnetUserData = cncnetUserData;
 
-            _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler, windowManager);
+            _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler, uiDispatcher);
 
             ctcpCommandHandlers = new CommandHandlerBase[]
             {
@@ -926,7 +928,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         void IV3NegotiationHost.SendNegotiationReport(string message)
             => channel.SendCTCPMessage(message, QueuedMessageType.GAME_NEGOTIATION_MESSAGE, 10);
 
-        void IV3NegotiationHost.AddNotice(string message, Color color) => AddNotice(message, color);
+        void INoticeSink.AddNotice(string message, NoticeSeverity severity) => AddNotice(message, severity.ToXnaColor());
 
         void IV3NegotiationHost.OnNegotiationStateChanged() => UpdateLoadGameButtonStatus();
 
