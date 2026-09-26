@@ -33,6 +33,12 @@ public interface IGameSessionSetting
     /// <param name="spawnIni">The spawn.ini file.</param>
     void ApplySpawnIniCode(IniFile spawnIni);
 
+    /// <summary>
+    /// Marks the sides that this setting in its current state disallows.
+    /// </summary>
+    /// <param name="disallowedArray">An array that determines which sides are disabled.</param>
+    void ApplyDisallowedSideIndex(bool[] disallowedArray);
+
     /// <summary>Applies the associated code to the map INI file.</summary>
     /// <param name="mapIni">The map INI file.</param>
     /// <param name="gameMode">Currently selected gamemode, if applicable.</param>

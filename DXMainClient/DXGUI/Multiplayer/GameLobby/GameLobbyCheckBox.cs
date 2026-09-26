@@ -94,7 +94,7 @@ public class GameLobbyCheckBox : GameSessionCheckBox
     /// array that determines which sides are disabled.
     /// </summary>
     /// <param name="disallowedArray">An array that determines which sides are disabled.</param>
-    public void ApplyDisallowedSideIndex(bool[] disallowedArray)
+    public override void ApplyDisallowedSideIndex(bool[] disallowedArray)
     {
         if (DisallowedSideIndices == null || DisallowedSideIndices.Count == 0)
             return;

@@ -160,6 +160,11 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
         set => SelectedIndex = value;
     }
 
+    public void ApplyDisallowedSideIndex(bool[] disallowedArray)
+    {
+        // Drop-downs can't disallow sides
+    }
+
     public void ApplySpawnIniCode(IniFile spawnIni)
     {
         if (!AffectsSpawnIni || SelectedIndex < 0 || SelectedIndex >= Items.Count)

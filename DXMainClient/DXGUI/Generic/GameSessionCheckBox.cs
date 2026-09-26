@@ -193,6 +193,11 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
 
         spawnIni.SetStringValue("Settings", spawnIniOption, value);
     }
+
+    public virtual void ApplyDisallowedSideIndex(bool[] disallowedArray)
+    {
+        // Only game lobby check-boxes can disallow sides
+    }
         
     public void ApplyMapCode(IniFile mapIni, GameMode gameMode)
     {
