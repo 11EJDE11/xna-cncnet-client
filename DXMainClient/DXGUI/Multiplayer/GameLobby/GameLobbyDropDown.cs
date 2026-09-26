@@ -62,4 +62,13 @@ public class GameLobbyDropDown : GameSessionDropDown
         base.OnLeftClick(inputEventArgs);
         UserSelectedIndex = SelectedIndex;
     }
+
+    public override void OnMouseScrolled(InputEventArgs inputEventArgs)
+    {
+        base.OnMouseScrolled(inputEventArgs);
+
+        // Scrolling over a closed drop-down changes the selection like a click does
+        if (AllowDropDown)
+            UserSelectedIndex = SelectedIndex;
+    }
 }

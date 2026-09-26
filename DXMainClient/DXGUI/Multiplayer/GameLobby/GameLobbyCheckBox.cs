@@ -18,8 +18,6 @@ public class GameLobbyCheckBox : GameSessionCheckBox
 {
     public GameLobbyCheckBox(WindowManager windowManager) : base(windowManager) { }
 
-    public bool IsMultiplayer { get; set; }
-
     /// <summary>
     /// The last host-defined value for this check box.
     /// Defaults to the default value of Checked after the check-box
@@ -67,10 +65,6 @@ public class GameLobbyCheckBox : GameSessionCheckBox
     {
         switch (key)
         {
-            case "CheckedMP":
-                if (IsMultiplayer)
-                    Checked = Conversions.BooleanFromString(value, false);
-                return;
             case "Checked":
                 bool checkedValue = Conversions.BooleanFromString(value, false);
                 HostChecked = checkedValue;

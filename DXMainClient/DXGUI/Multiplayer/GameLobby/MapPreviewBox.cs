@@ -110,8 +110,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
                 AddChild(indicator);
             }
-
-            ClientRectangleUpdated += (s, e) => UpdateMap();
         }
 
 
