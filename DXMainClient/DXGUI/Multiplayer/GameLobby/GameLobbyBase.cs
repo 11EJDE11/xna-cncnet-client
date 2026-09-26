@@ -1,6 +1,7 @@
 using ClientCore;
 using ClientCore.Statistics;
 using ClientLogic.Launch;
+using ClientLogic.Protocol;
 using ClientGUI;
 using DTAClient.Domain;
 using DTAClient.Domain.Multiplayer;
@@ -101,30 +102,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             return result;
         }
 
-        protected string GetPackedGameOptionValuesString()
-        {
-            var values = new List<int>();
-
-            var broadcastCheckBoxes = CheckBoxes.Where(cb => cb.BroadcastToLobby).ToList();
-            if (broadcastCheckBoxes.Count > 0)
-            {
-                bool[] checkboxValues = broadcastCheckBoxes.Select(cb => cb.Checked).ToArray();
-
-                List<byte> byteList = Conversions.BoolArrayIntoBytes(checkboxValues).ToList();
-                while (byteList.Count % 4 != 0)
-                    byteList.Add(0);
-                byte[] byteArray = byteList.ToArray();
-
-                for (int i = 0; i < byteArray.Length / 4; i++)
-                    values.Add(BinaryPrimitives.ReadInt32LittleEndian(byteArray.AsSpan(i * 4)));
-            }
-
-            var broadcastDropDowns = DropDowns.Where(dd => dd.BroadcastToLobby).ToList();
-            if (broadcastDropDowns.Count > 0)
-                values.AddRange(broadcastDropDowns.Select(dd => dd.SelectedIndex));
-
-            return values.Count > 0 ? string.Join(",", values) : string.Empty;
-        }
+        protected string GetPackedGameOptionValuesString() =>
+            BroadcastedGameOptionValues.Encode(
+                CheckBoxes.Where(cb => cb.BroadcastToLobby).Select(cb => cb.Checked).ToList(),
+                DropDowns.Where(dd => dd.BroadcastToLobby).Select(dd => dd.SelectedIndex).ToList());
 
         protected DiscordHandler discordHandler;
 

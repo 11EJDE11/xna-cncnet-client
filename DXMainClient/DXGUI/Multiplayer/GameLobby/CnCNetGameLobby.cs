@@ -1,4 +1,5 @@
 using ClientCore;
+using ClientLogic.Protocol;
 using ClientGUI;
 using DTAClient.Domain.Multiplayer;
 using DTAClient.Domain;
@@ -26,8 +27,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
     public class CnCNetGameLobby : MultiplayerGameLobby, IV3NegotiationHost
     {
-        private const int HUMAN_PLAYER_OPTIONS_LENGTH = 3;
-        private const int AI_PLAYER_OPTIONS_LENGTH = 2;
 
         private const double GAME_BROADCAST_INTERVAL = 30.0;
         private const double GAME_BROADCAST_ACCELERATION = 10.0;
@@ -69,8 +68,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             ctcpCommandHandlers = new CommandHandlerBase[]
             {
-                new IntCommandHandler("OR", HandleOptionsRequest),
-                new IntCommandHandler("R", HandleReadyRequest),
+                new StringCommandHandler("OR", HandleOptionsRequest),
+                new StringCommandHandler("R", HandleReadyRequest),
                 new StringCommandHandler("PO", ApplyPlayerOptions),
                 new StringCommandHandler(PlayerExtraOptions.CNCNET_MESSAGE_KEY, ApplyPlayerExtraOptions),
                 new StringCommandHandler("GO", ApplyGameOptions),
@@ -733,16 +732,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (!IsHost)
                 return;
 
-            StringBuilder sb = new StringBuilder("GSETTINGS ");
-            sb.Append(gameRoomName);
-            sb.Append(";");
-            sb.Append(playerLimit);
-            sb.Append(";");
-            sb.Append(skillLevel);
-            sb.Append(";");
-            sb.Append(Convert.ToInt32(isCustomPassword));
+            var message = new GameRoomSettingsMessage(gameRoomName, playerLimit, skillLevel, isCustomPassword);
 
-            channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.GAME_SETTINGS_MESSAGE, 11);
+            channel.SendCTCPMessage("GSETTINGS " + message.Encode(), QueuedMessageType.GAME_SETTINGS_MESSAGE, 11);
         }
 
         private void ApplyGameLobbySettings(string sender, string message)
@@ -750,16 +742,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (IsHost)
                 return;
 
-            string[] parts = message.Split(';');
-
-            if (parts.Length < 4)
+            if (!GameRoomSettingsMessage.TryDecode(message, out GameRoomSettingsMessage settings))
                 return;
 
-            string newGameRoomName = parts[0];
-            int newMaxPlayers = Conversions.IntFromString(parts[1], playerLimit);
-            int newSkillLevel = ClientConfiguration.Instance.NormalizeSkillLevel(
-                Conversions.IntFromString(parts[2], skillLevel));
-            bool newIsCustomPassword = Convert.ToBoolean(Conversions.IntFromString(parts[3], 0));
+            string newGameRoomName = settings.RoomName;
+            int newMaxPlayers = settings.PlayerLimit;
+            int newSkillLevel = ClientConfiguration.Instance.NormalizeSkillLevel(settings.SkillLevel);
+            bool newIsCustomPassword = settings.IsCustomPassword;
 
             bool gameNameChanged = gameRoomName != newGameRoomName;
             bool maxPlayersChanged = playerLimit != newMaxPlayers;
@@ -1204,26 +1193,23 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void SendStartV2ToPlayers(List<int> playerPorts)
         {
-            StringBuilder sb = new("STARTV2 ");
-            sb.Append(UniqueGameID);
+            var entries = new List<StartV2Entry>(Players.Count);
             for (int pId = 0; pId < Players.Count; pId++)
             {
                 Players[pId].Port = playerPorts[pId];
-                sb.Append(";");
-                sb.Append(Players[pId].Name);
-                sb.Append(";");
+
                 // Carry the tunnel address so clients can verify/correct their tunnel at start —
                 // a client that joined around a tunnel change may still have the old one selected.
-                sb.Append(tunnelHandler.CurrentTunnel.Address + ":");
-                sb.Append(playerPorts[pId]);
+                entries.Add(new StartV2Entry(Players[pId].Name, tunnelHandler.CurrentTunnel.Address, playerPorts[pId]));
             }
-            channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.SYSTEM_MESSAGE, 10);
+
+            channel.SendCTCPMessage("STARTV2 " + new StartV2Message(UniqueGameID, entries).Encode(), QueuedMessageType.SYSTEM_MESSAGE, 10);
         }
 
         private void SendStartV3ToPlayers()
         {
-            //STARTV3 345353;1234567891;Player1;[tunnelIP]:[tunnelPort];9876543210;Player2;[tunnelIP]:[tunnelPort]
-            channel.SendCTCPMessage($"STARTV3 {UniqueGameID};{_negotiator.GenerateV3StartPayload()}", QueuedMessageType.SYSTEM_MESSAGE, 10);
+            var message = new StartV3Message(UniqueGameID, _negotiator.GenerateV3StartEntries());
+            channel.SendCTCPMessage("STARTV3 " + message.Encode(), QueuedMessageType.SYSTEM_MESSAGE, 10);
         }
 
         private void ShowFailedNegotiations()
@@ -1307,19 +1293,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void RequestPlayerOptions(int side, int color, int start, int team)
         {
-            byte[] value = new byte[]
-            {
-                (byte)side,
-                (byte)color,
-                (byte)start,
-                (byte)team
-            };
+            var message = new PlayerOptionsRequestMessage(new PackedPlayerOptions(side, color, start, team));
 
-            int intValue = BinaryPrimitives.ReadInt32LittleEndian(value);
-
-            channel.SendCTCPMessage(
-                string.Format("OR {0}", intValue),
-                QueuedMessageType.GAME_SETTINGS_MESSAGE, 6);
+            channel.SendCTCPMessage("OR " + message.Encode(), QueuedMessageType.GAME_SETTINGS_MESSAGE, 6);
         }
 
         protected override void RequestReadyStatus()
@@ -1330,7 +1306,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     "you will be unable to participate in the match.").L10N("Client:Main:HostMustReplaceMap"));
 
                 if (chkAutoReady.Checked)
-                    channel.SendCTCPMessage("R 0", QueuedMessageType.GAME_PLAYERS_READY_STATUS_MESSAGE, 5);
+                    channel.SendCTCPMessage("R " + new ReadyRequestMessage(0).Encode(), QueuedMessageType.GAME_PLAYERS_READY_STATUS_MESSAGE, 5);
 
                 return;
             }
@@ -1346,7 +1322,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             else if (!pInfo.Ready)
                 readyState = 1;
 
-            channel.SendCTCPMessage($"R {readyState}", QueuedMessageType.GAME_PLAYERS_READY_STATUS_MESSAGE, 5);
+            channel.SendCTCPMessage("R " + new ReadyRequestMessage(readyState).Encode(), QueuedMessageType.GAME_PLAYERS_READY_STATUS_MESSAGE, 5);
         }
 
         protected override void AddNotice(string message, Color color) => channel.AddMessage(new ChatMessage(color, message));
@@ -1354,7 +1330,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// <summary>
         /// Handles player option requests received from non-host players.
         /// </summary>
-        private void HandleOptionsRequest(string playerName, int options)
+        private void HandleOptionsRequest(string playerName, string message)
         {
             if (!IsHost)
                 return;
@@ -1367,13 +1343,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (pInfo == null)
                 return;
 
-            byte[] bytes = new byte[sizeof(int)];
-            BinaryPrimitives.WriteInt32LittleEndian(bytes, options);
+            if (!PlayerOptionsRequestMessage.TryDecode(message, out PlayerOptionsRequestMessage request))
+                return;
 
-            int side = bytes[0];
-            int color = bytes[1];
-            int start = bytes[2];
-            int team = bytes[3];
+            int side = request.Options.Side;
+            int color = request.Options.Color;
+            int start = request.Options.Start;
+            int team = request.Options.Team;
 
             if (side < 0 || side > SideCount + RandomSelectorCount)
                 return;
@@ -1427,7 +1403,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// <summary>
         /// Handles "I'm ready" messages received from non-host players.
         /// </summary>
-        private void HandleReadyRequest(string playerName, int readyStatus)
+        private void HandleReadyRequest(string playerName, string message)
         {
             if (!IsHost)
                 return;
@@ -1437,6 +1413,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (pInfo == null)
                 return;
 
+            if (!ReadyRequestMessage.TryDecode(message, out ReadyRequestMessage request))
+                return;
+
+            int readyStatus = request.ReadyState;
             pInfo.Ready = readyStatus > 0;
             pInfo.AutoReady = readyStatus > 1;
 
@@ -1450,40 +1430,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         protected override void BroadcastPlayerOptions()
         {
             // Broadcast player options
-            StringBuilder sb = new StringBuilder("PO ");
-            foreach (PlayerInfo pInfo in Players.Concat(AIPlayers))
-            {
-                if (pInfo.IsAI)
-                    sb.Append(pInfo.AILevel);
-                else
-                    sb.Append(pInfo.Name);
-                sb.Append(";");
+            var entries = Players.Concat(AIPlayers).Select(pInfo => new PlayerOptionsEntry(
+                pInfo.IsAI ? string.Empty : pInfo.Name,
+                pInfo.IsAI ? pInfo.AILevel : -1,
+                new PackedPlayerOptions(pInfo.SideId, pInfo.ColorId, pInfo.StartingLocation, pInfo.TeamId),
+                pInfo.IsAI ? 1 : pInfo.AutoReady && !pInfo.IsInGame && !LastMapChangeWasInvalid ? 2 : Convert.ToInt32(pInfo.Ready),
+                string.Empty)).ToList();
 
-                // Combine the options into one integer to save bandwidth in
-                // cases where the player uses default options (this is common for AI players)
-                // Will hopefully make GameSurge kicking people a bit less common
-                byte[] byteArray = new byte[]
-                {
-                    (byte)pInfo.TeamId,
-                    (byte)pInfo.StartingLocation,
-                    (byte)pInfo.ColorId,
-                    (byte)pInfo.SideId,
-                };
-
-                int value = BinaryPrimitives.ReadInt32LittleEndian(byteArray);
-                sb.Append(value);
-                sb.Append(";");
-                if (!pInfo.IsAI)
-                {
-                    if (pInfo.AutoReady && !pInfo.IsInGame && !LastMapChangeWasInvalid)
-                        sb.Append(2);
-                    else
-                        sb.Append(Convert.ToInt32(pInfo.Ready));
-                    sb.Append(';');
-                }
-            }
-
-            channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.GAME_PLAYERS_MESSAGE, 11);
+            var message = new PlayerOptionsMessage(entries);
+            channel.SendCTCPMessage("PO " + message.Encode(), QueuedMessageType.GAME_PLAYERS_MESSAGE, 11);
         }
 
         protected override void PlayerExtraOptions_OptionsChanged(object sender, EventArgs e)
@@ -1510,6 +1465,27 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (sender != hostName)
                 return;
 
+            if (!PlayerOptionsMessage.TryDecode(message, out PlayerOptionsMessage playerOptions))
+                return;
+
+            // Check every player before touching the player list, so a bad message changes nothing
+            foreach (PlayerOptionsEntry entry in playerOptions.Players)
+            {
+                PackedPlayerOptions options = entry.Options;
+
+                if (options.Side > SideCount + RandomSelectorCount)
+                    return;
+
+                if (options.Color > MPColors.Count)
+                    return;
+
+                if (options.Start > MAX_PLAYER_COUNT)
+                    return;
+
+                if (options.Team > 4)
+                    return;
+            }
+
             var savedPings = Players.ToDictionary(p => p.Name, p => p.Ping);
 
             // "PO" rebuilds the player list from scratch, so carry over locally tracked
@@ -1520,82 +1496,41 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             Players.Clear();
             AIPlayers.Clear();
 
-            string[] parts = message.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < parts.Length;)
+            foreach (PlayerOptionsEntry entry in playerOptions.Players)
             {
                 PlayerInfo pInfo = new PlayerInfo();
 
-                string pName = parts[i];
-                int converted = Conversions.IntFromString(pName, -1);
-
-                if (converted > -1)
+                if (entry.IsAI)
                 {
                     pInfo.IsAI = true;
-                    pInfo.AILevel = converted;
-                    pInfo.Name = AILevelToName(converted);
+                    pInfo.AILevel = entry.AILevel;
+                    pInfo.Name = AILevelToName(entry.AILevel);
                 }
                 else
                 {
-                    pInfo.Name = pName;
+                    pInfo.Name = entry.Name;
 
                     // If we can't find the player from the channel user list,
                     // ignore the player
                     // They've either left the channel or got kicked before the
                     // player options message reached us
-                    if (channel.Users.Find(pName) == null)
-                    {
-                        i += HUMAN_PLAYER_OPTIONS_LENGTH;
+                    if (channel.Users.Find(entry.Name) == null)
                         continue;
-                    }
                 }
 
-                if (parts.Length <= i + 1)
-                    return;
-
-                int playerOptions = Conversions.IntFromString(parts[i + 1], -1);
-                if (playerOptions == -1)
-                    return;
-
-                byte[] byteArray = new byte[sizeof(int)];
-                BinaryPrimitives.WriteInt32LittleEndian(byteArray, playerOptions);
-
-                int team = byteArray[0];
-                int start = byteArray[1];
-                int color = byteArray[2];
-                int side = byteArray[3];
-
-                if (side < 0 || side > SideCount + RandomSelectorCount)
-                    return;
-
-                if (color < 0 || color > MPColors.Count)
-                    return;
-
-                if (start < 0 || start > MAX_PLAYER_COUNT)
-                    return;
-
-                if (team < 0 || team > 4)
-                    return;
-
-                pInfo.TeamId = byteArray[0];
-                pInfo.StartingLocation = byteArray[1];
-                pInfo.ColorId = byteArray[2];
-                pInfo.SideId = byteArray[3];
+                pInfo.TeamId = entry.Options.Team;
+                pInfo.StartingLocation = entry.Options.Start;
+                pInfo.ColorId = entry.Options.Color;
+                pInfo.SideId = entry.Options.Side;
 
                 if (pInfo.IsAI)
                 {
                     pInfo.Ready = true;
                     AIPlayers.Add(pInfo);
-                    i += AI_PLAYER_OPTIONS_LENGTH;
                 }
                 else
                 {
-                    if (parts.Length <= i + 2)
-                        return;
-
-                    int readyStatus = Conversions.IntFromString(parts[i + 2], -1);
-
-                    if (readyStatus == -1)
-                        return;
+                    int readyStatus = entry.ReadyState;
 
                     pInfo.Ready = readyStatus > 0;
                     pInfo.AutoReady = readyStatus > 1;
@@ -1610,7 +1545,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         pInfo.IsInGame = savedInGame;
 
                     Players.Add(pInfo);
-                    i += HUMAN_PLAYER_OPTIONS_LENGTH;
                 }
             }
 
@@ -1830,43 +1764,23 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (!IsHost)
                 return;
 
-            bool[] optionValues = new bool[CheckBoxes.Count];
-            for (int i = 0; i < CheckBoxes.Count; i++)
-                optionValues[i] = CheckBoxes[i].Checked;
+            var message = new GameOptionsMessage
+            {
+                CheckBoxValues = CheckBoxes.Select(chkBox => chkBox.Checked).ToList(),
+                DropDownIndices = DropDowns.Select(dd => dd.SelectedIndex).ToList(),
+                IsMapOfficial = Map?.Official ?? false,
+                MapSHA1 = Map?.SHA1 ?? string.Empty,
+                GameModeName = GameMode?.Name ?? string.Empty,
+                FrameSendRate = FrameSendRate,
+                MaxAhead = MaxAhead,
+                ProtocolVersion = ProtocolVersion,
+                RandomSeed = RandomSeed,
+                RemoveStartingLocations = RemoveStartingLocations,
+                MapName = Map?.UntranslatedName ?? string.Empty,
+                TunnelMode = (int)_tunnelMode,
+            };
 
-            // Let's pack the booleans into bytes
-            List<byte> byteList = Conversions.BoolArrayIntoBytes(optionValues).ToList();
-
-            while (byteList.Count % 4 != 0)
-                byteList.Add(0);
-
-            int integerCount = byteList.Count / 4;
-            byte[] byteArray = byteList.ToArray();
-
-            ExtendedStringBuilder sb = new ExtendedStringBuilder("GO ", true, ';');
-
-            for (int i = 0; i < integerCount; i++)
-                sb.Append(BinaryPrimitives.ReadInt32LittleEndian(byteArray.AsSpan(i * 4)));
-
-            // We don't gain much in most cases by packing the drop-down values
-            // (because they're bytes to begin with, and usually non-zero),
-            // so let's just transfer them as usual
-
-            foreach (GameLobbyDropDown dd in DropDowns)
-                sb.Append(dd.SelectedIndex);
-
-            sb.Append(Convert.ToInt32(Map?.Official ?? false));
-            sb.Append(Map?.SHA1 ?? string.Empty);
-            sb.Append(GameMode?.Name ?? string.Empty);
-            sb.Append(FrameSendRate);
-            sb.Append(MaxAhead);
-            sb.Append(ProtocolVersion);
-            sb.Append(RandomSeed);
-            sb.Append(Convert.ToInt32(RemoveStartingLocations));
-            sb.Append(Map?.UntranslatedName ?? string.Empty);
-            sb.Append((int)_tunnelMode);
-
-            channel.SendCTCPMessage(sb.ToString(), QueuedMessageType.GAME_SETTINGS_MESSAGE, 11);
+            channel.SendCTCPMessage("GO " + message.Encode(), QueuedMessageType.GAME_SETTINGS_MESSAGE, 11);
         }
 
         /// <summary>
@@ -1877,48 +1791,41 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (sender != hostName)
                 return;
 
-            string[] parts = message.Split(';');
-
-            int checkBoxIntegerCount = (CheckBoxes.Count / 32) + 1;
-
-            int partIndex = checkBoxIntegerCount + DropDowns.Count;
-
-            if (parts.Length < partIndex + 10)
+            if (!GameOptionsMessage.TryDecode(message, CheckBoxes.Count, DropDowns.Count, out GameOptionsMessage gameOptions))
             {
                 AddNotice(("The game host has sent an invalid game options message! " +
                     "The game host's game version might be different from yours.").L10N("Client:Main:HostGameOptionInvalid"), Color.Red);
                 return;
             }
 
-            string mapOfficial = parts[partIndex];
-            bool isMapOfficial = Conversions.BooleanFromString(mapOfficial, true);
+            bool isMapOfficial = gameOptions.IsMapOfficial;
 
-            string mapSHA1 = parts[partIndex + 1];
+            string mapSHA1 = gameOptions.MapSHA1;
 
-            string gameMode = parts[partIndex + 2];
+            string gameMode = gameOptions.GameModeName;
 
-            int frameSendRate = Conversions.IntFromString(parts[partIndex + 3], FrameSendRate);
+            int frameSendRate = gameOptions.FrameSendRate;
             if (frameSendRate != FrameSendRate)
             {
                 FrameSendRate = frameSendRate;
                 AddNotice(string.Format("The game host has changed FrameSendRate (order lag) to {0}".L10N("Client:Main:HostChangeFrameSendRate"), frameSendRate));
             }
 
-            int maxAhead = Conversions.IntFromString(parts[partIndex + 4], MaxAhead);
+            int maxAhead = gameOptions.MaxAhead;
             if (maxAhead != MaxAhead)
             {
                 MaxAhead = maxAhead;
                 AddNotice(string.Format("The game host has changed MaxAhead to {0}".L10N("Client:Main:HostChangeMaxAhead"), maxAhead));
             }
 
-            int protocolVersion = Conversions.IntFromString(parts[partIndex + 5], ProtocolVersion);
+            int protocolVersion = gameOptions.ProtocolVersion;
             if (protocolVersion != ProtocolVersion)
             {
                 ProtocolVersion = protocolVersion;
                 AddNotice(string.Format("The game host has changed ProtocolVersion to {0}".L10N("Client:Main:HostChangeProtocolVersion"), protocolVersion));
             }
 
-            string mapName = parts[partIndex + 8];
+            string mapName = gameOptions.MapName;
             GameModeMap currentGameModeMap = GameModeMap;
 
             lastGameMode = gameMode;
@@ -1951,68 +1858,29 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             // map, so we'll just assume that the host has set all the options.
             // Very few (if any) custom maps force options, so it'll be correct nearly always
 
-            for (int i = 0; i < checkBoxIntegerCount; i++)
+            for (int gameOptionIndex = 0; gameOptionIndex < CheckBoxes.Count; gameOptionIndex++)
             {
-                if (parts.Length <= i)
-                    return;
+                GameLobbyCheckBox checkBox = CheckBoxes[gameOptionIndex];
+                bool isChecked = gameOptions.CheckBoxValues[gameOptionIndex];
 
-                int checkBoxStatusInt;
-                bool success = int.TryParse(parts[i], out checkBoxStatusInt);
-
-                if (!success)
+                if (checkBox.Checked != isChecked)
                 {
-                    AddNotice(("Failed to parse check box options sent by game host!" +
-                        "The game host's game version might be different from yours.").L10N("Client:Main:HostCheckBoxParseError"), Color.Red);
-                    return;
+                    if (isChecked)
+                        AddNotice(string.Format("The game host has enabled {0}".L10N("Client:Main:HostEnableOption"), checkBox.Text));
+                    else
+                        AddNotice(string.Format("The game host has disabled {0}".L10N("Client:Main:HostDisableOption"), checkBox.Text));
                 }
 
-                byte[] byteArray = new byte[sizeof(int)];
-                BinaryPrimitives.WriteInt32LittleEndian(byteArray, checkBoxStatusInt);
-                bool[] boolArray = Conversions.BytesIntoBoolArray(byteArray);
-
-                for (int optionIndex = 0; optionIndex < boolArray.Length; optionIndex++)
-                {
-                    int gameOptionIndex = i * 32 + optionIndex;
-
-                    if (gameOptionIndex >= CheckBoxes.Count)
-                        break;
-
-                    GameLobbyCheckBox checkBox = CheckBoxes[gameOptionIndex];
-
-                    if (checkBox.Checked != boolArray[optionIndex])
-                    {
-                        if (boolArray[optionIndex])
-                            AddNotice(string.Format("The game host has enabled {0}".L10N("Client:Main:HostEnableOption"), checkBox.Text));
-                        else
-                            AddNotice(string.Format("The game host has disabled {0}".L10N("Client:Main:HostDisableOption"), checkBox.Text));
-                    }
-
-                    CheckBoxes[gameOptionIndex].Checked = boolArray[optionIndex];
-                }
+                checkBox.Checked = isChecked;
             }
 
-            for (int i = checkBoxIntegerCount; i < DropDowns.Count + checkBoxIntegerCount; i++)
+            for (int i = 0; i < DropDowns.Count; i++)
             {
-                if (parts.Length <= i)
-                {
-                    AddNotice(("The game host has sent an invalid game options message! " +
-                    "The game host's game version might be different from yours.").L10N("Client:Main:HostGameOptionInvalid"), Color.Red);
-                    return;
-                }
+                int ddSelectedIndex = gameOptions.DropDownIndices[i];
 
-                int ddSelectedIndex;
-                bool success = int.TryParse(parts[i], out ddSelectedIndex);
+                GameLobbyDropDown dd = DropDowns[i];
 
-                if (!success)
-                {
-                    AddNotice(("Failed to parse drop down options sent by game host (2)! " +
-                        "The game host's game version might be different from yours.").L10N("Client:Main:HostDropDownParseError"), Color.Red);
-                    return;
-                }
-
-                GameLobbyDropDown dd = DropDowns[i - checkBoxIntegerCount];
-
-                if (ddSelectedIndex < -1 || ddSelectedIndex >= dd.Items.Count)
+                if (ddSelectedIndex < 0 || ddSelectedIndex >= dd.Items.Count)
                     continue;
 
                 if (dd.SelectedIndex != ddSelectedIndex)
@@ -2024,29 +1892,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     AddNotice(string.Format("The game host has set {0} to {1}".L10N("Client:Main:HostSetOption"), ddName, dd.Items[ddSelectedIndex].Text));
                 }
 
-                DropDowns[i - checkBoxIntegerCount].SelectedIndex = ddSelectedIndex;
+                dd.SelectedIndex = ddSelectedIndex;
             }
 
-            int randomSeed;
-            bool parseSuccess = int.TryParse(parts[partIndex + 6], out randomSeed);
-
-            if (!parseSuccess)
-            {
-                AddNotice(("Failed to parse random seed from game options message! " +
-                    "The game host's game version might be different from yours.").L10N("Client:Main:HostRandomSeedError"), Color.Red);
-            }
-
-            bool removeStartingLocations = Convert.ToBoolean(Conversions.IntFromString(parts[partIndex + 7],
-                Convert.ToInt32(RemoveStartingLocations)));
+            bool removeStartingLocations = gameOptions.RemoveStartingLocations;
             SetRandomStartingLocations(removeStartingLocations);
 
-            RandomSeed = randomSeed;
+            RandomSeed = gameOptions.RandomSeed;
 
-            if (parts.Length > partIndex + 9)
-            {
-                int tunnelMode = Conversions.IntFromString(parts[partIndex + 9], (int)TunnelMode.V3Static);
-                HandleTunnelModeChange((TunnelMode)tunnelMode, false);
-            }
+            HandleTunnelModeChange((TunnelMode)gameOptions.TunnelMode, false);
         }
 
         private void HandleTunnelModeChange(TunnelMode mode, bool isHostInitiated, bool autoSelectTunnel = true)
@@ -2199,46 +2053,31 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            string[] parts = message.Split(';');
-
-            if (parts.Length < 1)
+            if (!StartV2Message.TryDecode(message, out StartV2Message start))
                 return;
 
-            UniqueGameID = Conversions.IntFromString(parts[0], -1);
-            if (UniqueGameID < 0)
-                return;
+            UniqueGameID = start.GameId;
 
             var recentPlayers = new List<string>();
 
-            for (int i = 1; i < parts.Length; i += 2)
+            foreach (StartV2Entry entry in start.Players)
             {
-                if (parts.Length <= i + 1)
-                    return;
-
-                string pName = parts[i];
-                string[] ipAndPort = parts[i + 1].Split(':');
-
-                if (ipAndPort.Length < 2)
-                    return;
-
-                int port;
-                bool success = int.TryParse(ipAndPort[1], out port);
-
-                if (!success)
-                    return;
+                string pName = entry.Name;
+                string tunnelAddress = entry.TunnelAddress;
+                int port = entry.Port;
 
                 // The host's tunnel address is authoritative: if our CurrentTunnel is out of
                 // sync (e.g. we joined around a tunnel change and missed the CHTNL message),
                 // playing on the wrong tunnel would silently break the match for us.
                 if (pName == ProgramConstants.PLAYERNAME &&
-                    !string.Equals(tunnelHandler.CurrentTunnel?.Address, ipAndPort[0], StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(tunnelHandler.CurrentTunnel?.Address, tunnelAddress, StringComparison.OrdinalIgnoreCase))
                 {
                     var matchedTunnel = tunnelHandler.Tunnels.FirstOrDefault(t => t.Version == 2 &&
-                        string.Equals(t.Address, ipAndPort[0], StringComparison.OrdinalIgnoreCase));
+                        string.Equals(t.Address, tunnelAddress, StringComparison.OrdinalIgnoreCase));
 
                     if (matchedTunnel != null)
                     {
-                        Logger.Log($"NonHostLaunchGameV2: Correcting tunnel to host-specified {matchedTunnel.Name} ({ipAndPort[0]}).");
+                        Logger.Log($"NonHostLaunchGameV2: Correcting tunnel to host-specified {matchedTunnel.Name} ({tunnelAddress}).");
                         tunnelHandler.CurrentTunnel = matchedTunnel;
                     }
                     else
@@ -2246,7 +2085,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                         AddNotice(("Failed to match the tunnel address provided by the host to any " +
                             "available tunnel server. The game cannot be started.").L10N("Client:Main:TunnelErrorMessage"),
                             ERROR_MESSAGE_COLOR);
-                        Logger.Log("NonHostLaunchGameV2: Failed to match tunnel address: " + ipAndPort[0]);
+                        Logger.Log("NonHostLaunchGameV2: Failed to match tunnel address: " + tunnelAddress);
                         return;
                     }
                 }
@@ -2285,36 +2124,34 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            string[] parts = message.Split(';');
-
-            if (parts.Length != (Players.Count * 3) + 1)
+            if (!StartV3Message.TryDecode(message, out StartV3Message start))
             {
-                Logger.Log($"NonHostLaunchGameV3: Invalid start message: expected {(Players.Count * 3) + 1} parts for {Players.Count} players, got {parts.Length}.");
+                Logger.Log("NonHostLaunchGameV3: Invalid start message.");
                 NotifyStartFailed();
                 return;
             }
 
-            UniqueGameID = Conversions.IntFromString(parts[0], -1);
-            if (UniqueGameID < 0)
+            if (start.Players.Count != Players.Count)
             {
-                Logger.Log("NonHostLaunchGameV3: Invalid game ID in start message.");
+                Logger.Log($"NonHostLaunchGameV3: Invalid start message: expected {Players.Count} players, got {start.Players.Count}.");
                 NotifyStartFailed();
                 return;
             }
+
+            UniqueGameID = start.GameId;
 
             var recentPlayers = new List<string>();
 
             for (int i = 0; i < Players.Count; i++)
             {
-                int offset = 1 + i * 3;
-                if (!_negotiator.ApplyV3StartEntry(parts, offset, i))
+                if (!_negotiator.ApplyV3StartEntry(start.Players[i], i))
                 {
                     Logger.Log($"NonHostLaunchGameV3: Could not apply start entry for player at position {i}.");
                     NotifyStartFailed();
                     return;
                 }
 
-                recentPlayers.Add(parts[offset + 1]);
+                recentPlayers.Add(start.Players[i].Name);
             }
 
             cncnetUserData.AddRecentPlayers(recentPlayers, channel.UIName);

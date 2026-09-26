@@ -1,4 +1,5 @@
 using ClientCore;
+using ClientLogic.Protocol;
 using ClientGUI;
 using DTAClient.Domain;
 using DTAClient.Domain.Multiplayer;
@@ -620,18 +621,16 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return;
             }
 
-            string[] parts = data.Split(';');
-
-            if (parts.Length != Players.Count * 3)
+            if (!StartV3Message.TryDecode(data, out StartV3Message start) || start.Players.Count != Players.Count)
             {
-                Logger.Log($"HandleStartGameV3Command: Invalid start message: expected {Players.Count * 3} parts for {Players.Count} players, got {parts.Length}.");
+                Logger.Log($"HandleStartGameV3Command: Invalid start message for {Players.Count} players.");
                 NotifyStartFailed();
                 return;
             }
 
             for (int i = 0; i < Players.Count; i++)
             {
-                if (!_negotiator.ApplyV3StartEntry(parts, i * 3, i))
+                if (!_negotiator.ApplyV3StartEntry(start.Players[i], i))
                 {
                     Logger.Log($"HandleStartGameV3Command: Could not apply start entry for player at position {i}.");
                     NotifyStartFailed();
@@ -955,7 +954,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         }
 
         private void SendStartV3ToPlayers()
-            => channel.SendCTCPMessage($"{START_GAME_V3_CTCP_COMMAND} {_negotiator.GenerateV3StartPayload()}",
+            => channel.SendCTCPMessage($"{START_GAME_V3_CTCP_COMMAND} {new StartV3Message(0, _negotiator.GenerateV3StartEntries()).Encode()}",
                 QueuedMessageType.SYSTEM_MESSAGE, 9);
 
         private void StartV3Game()

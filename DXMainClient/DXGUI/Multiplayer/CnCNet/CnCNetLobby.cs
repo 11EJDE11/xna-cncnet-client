@@ -1,4 +1,5 @@
 ﻿using ClientCore;
+using ClientLogic.Protocol;
 using ClientGUI;
 using DTAClient.Domain.Multiplayer;
 using DTAClient.Domain.Multiplayer.CnCNet;
@@ -1670,37 +1671,11 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                     {
                         gameOptionValues = null;
                     }
-                    else if (!string.IsNullOrEmpty(splitMessage[13]))
+                    else
                     {
-                        gameOptionValues = new int[broadcastableSettings.Count];
-                        string[] allValueStrings = splitMessage[13].Split(',');
-
-                        int checkboxCount = gameLobby.CheckBoxes.Count(cb => cb.BroadcastToLobby);
-                        int packedCheckboxCount = (checkboxCount + 31) / 32;
-
-                        // packed checkbox values
-                        if (checkboxCount > 0 && allValueStrings.Length >= packedCheckboxCount)
-                        {
-                            int[] packedCheckboxes = new int[packedCheckboxCount];
-                            for (int i = 0; i < packedCheckboxCount; i++)
-                                packedCheckboxes[i] = int.Parse(allValueStrings[i]);
-
-                            for (int i = 0; i < checkboxCount; i++)
-                            {
-                                int packedIndex = i / 32;
-                                int bitIndex = i % 32;
-                                gameOptionValues[i] = (packedCheckboxes[packedIndex] & (1 << bitIndex)) != 0 ? 1 : 0;
-                            }
-                        }
-
-                        // dropdown indices
-                        int dropdownCount = gameLobby.DropDowns.Count(dd => dd.BroadcastToLobby);
-                        if (dropdownCount > 0)
-                        {
-                            int count = Math.Min(allValueStrings.Length - packedCheckboxCount, dropdownCount);
-                            for (int i = 0; i < count; i++)
-                                gameOptionValues[checkboxCount + i] = int.Parse(allValueStrings[packedCheckboxCount + i]);
-                        }
+                        gameOptionValues = BroadcastedGameOptionValues.Decode(splitMessage[13],
+                            gameLobby.CheckBoxes.Count(cb => cb.BroadcastToLobby),
+                            gameLobby.DropDowns.Count(dd => dd.BroadcastToLobby));
                     }
                 }
 

@@ -11,6 +11,8 @@ using System.Threading.Tasks;
 using ClientCore;
 using ClientCore.Extensions;
 
+using ClientLogic.Protocol;
+
 using Microsoft.Xna.Framework;
 
 using Rampastring.Tools;
@@ -743,22 +745,15 @@ public class V3TunnelNegotiationManager
     }
 
     /// <summary>
-    /// Parses one STARTV3 player entry (3 semicolon-delimited fields: id;name;ip:port) from
-    /// <paramref name="parts"/> starting at <paramref name="offset"/>, derives the game id
-    /// from <paramref name="playerPosition"/>, and updates both the <see cref="PlayerInfo"/>
-    /// and <see cref="V3PlayerInfo"/> for that player.
+    /// Applies one STARTV3 player entry: derives the game id from <paramref name="playerPosition"/>,
+    /// and updates both the <see cref="PlayerInfo"/> and <see cref="V3PlayerInfo"/> for that player.
     /// </summary>
-    /// <returns>False if any field is malformed or the player name is not found.</returns>
-    public bool ApplyV3StartEntry(string[] parts, int offset, int playerPosition)
+    /// <returns>False if the player or (in static mode) the tunnel is not found.</returns>
+    public bool ApplyV3StartEntry(StartV3Entry entry, int playerPosition)
     {
-        if (!uint.TryParse(parts[offset], out uint id))
-            return false;
-
-        string pName = parts[offset + 1];
-        string[] ipAndPort = parts[offset + 2].Split(':');
-
-        if (ipAndPort.Length != 2 || !int.TryParse(ipAndPort[1], out int tunnelPort))
-            return false;
+        uint id = entry.Id;
+        string pName = entry.Name;
+        int tunnelPort = entry.TunnelPort;
 
         PlayerInfo? pInfo = host.Players.Find(p => p.Name == pName);
         if (pInfo == null)
@@ -776,7 +771,7 @@ public class V3TunnelNegotiationManager
 
         if (host.TunnelMode != TunnelMode.V3Dynamic)
         {
-            v3PlayerInfo.Tunnel = tunnelHandler.Tunnels.Find(t => t.Address == ipAndPort[0] && t.Port == tunnelPort);
+            v3PlayerInfo.Tunnel = tunnelHandler.Tunnels.Find(t => t.Address == entry.TunnelAddress && t.Port == tunnelPort);
             if (v3PlayerInfo.Tunnel == null)
                 return false;
         }
@@ -788,14 +783,14 @@ public class V3TunnelNegotiationManager
     }
 
     /// <summary>
-    /// Assigns final game ids/tunnels to every player and builds the "id;name;address;..."
-    /// payload used in the STARTV3 message. The player order here defines each player's
-    /// in-game id; all clients must iterate in this same order (the handler keys the id off
-    /// message position via <see cref="ApplyV3StartEntry"/>).
+    /// Assigns final game ids/tunnels to every player and returns the player entries of the
+    /// STARTV3 message. The player order here defines each player's in-game id; all clients
+    /// must iterate in this same order (the handler keys the id off message position via
+    /// <see cref="ApplyV3StartEntry"/>).
     /// </summary>
-    public string GenerateV3StartPayload()
+    public List<StartV3Entry> GenerateV3StartEntries()
     {
-        var sb = new StringBuilder();
+        var entries = new List<StartV3Entry>(host.Players.Count);
 
         for (int i = 0; i < host.Players.Count; i++)
         {
@@ -804,7 +799,8 @@ public class V3TunnelNegotiationManager
             int port = 48000 - i;
             player.Port = port;
 
-            string address = IPAddress.Any + ":0";
+            string address = IPAddress.Any.ToString();
+            int tunnelPort = 0;
             var v3PlayerInfo = FindPlayer(player.Name);
             if (v3PlayerInfo != null)
             {
@@ -817,21 +813,21 @@ public class V3TunnelNegotiationManager
 
                 // In dynamic mode each client uses its own per-peer negotiated tunnel, so this
                 // address is informational only; it is only consumed by clients in V3 static mode.
-                address = v3PlayerInfo.Tunnel == null
-                    ? IPAddress.Any + ":0"
-                    : v3PlayerInfo.Tunnel.Address + ":" + v3PlayerInfo.Tunnel.Port;
+                if (v3PlayerInfo.Tunnel != null)
+                {
+                    address = v3PlayerInfo.Tunnel.Address;
+                    tunnelPort = v3PlayerInfo.Tunnel.Port;
+                }
             }
             else
             {
-                Logger.Log($"GenerateV3StartPayload: Missing V3 player info for {player.Name}, using fallback tunnel address.");
+                Logger.Log($"GenerateV3StartEntries: Missing V3 player info for {player.Name}, using fallback tunnel address.");
             }
 
-            sb.Append(id).Append(';')
-              .Append(player.Name).Append(';')
-              .Append(address).Append(';');
+            entries.Add(new StartV3Entry(id, player.Name, address, tunnelPort));
         }
 
-        return sb.ToString().TrimEnd(';');
+        return entries;
     }
 
     /// <summary>

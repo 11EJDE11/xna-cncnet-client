@@ -1,4 +1,5 @@
 using ClientCore;
+using ClientLogic.Protocol;
 using ClientGUI;
 using DTAClient.Domain;
 using DTAClient.Domain.LAN;
@@ -25,8 +26,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
     public class LANGameLobby : MultiplayerGameLobby
     {
-        private const int GAME_OPTION_SPECIAL_FLAG_COUNT = 5;
-
         private const double DROPOUT_TIMEOUT = 20.0;
         private const double GAME_BROADCAST_INTERVAL = 2.0;
 
@@ -577,27 +576,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (!IsHost)
                 return;
 
-            var sb = new ExtendedStringBuilder(PLAYER_OPTIONS_BROADCAST_COMMAND + " ", true);
-            sb.Separator = ProgramConstants.LAN_DATA_SEPARATOR;
-            foreach (PlayerInfo pInfo in Players.Concat(AIPlayers))
-            {
-                sb.Append(pInfo.Name);
-                sb.Append(pInfo.SideId);
-                sb.Append(pInfo.ColorId);
-                sb.Append(pInfo.StartingLocation);
-                sb.Append(pInfo.TeamId);
-                if (pInfo.AutoReady && !pInfo.IsInGame && !LastMapChangeWasInvalid)
-                    sb.Append(2);
-                else
-                    sb.Append(Convert.ToInt32(pInfo.IsAI || pInfo.Ready));
-                sb.Append(pInfo.IPAddress);
-                if (pInfo.IsAI)
-                    sb.Append(pInfo.AILevel);
-                else
-                    sb.Append("-1");
-            }
+            var entries = Players.Concat(AIPlayers).Select(pInfo => new PlayerOptionsEntry(
+                pInfo.IsAI ? string.Empty : pInfo.Name,
+                pInfo.IsAI ? pInfo.AILevel : -1,
+                new PackedPlayerOptions(pInfo.SideId, pInfo.ColorId, pInfo.StartingLocation, pInfo.TeamId),
+                pInfo.AutoReady && !pInfo.IsInGame && !LastMapChangeWasInvalid ? 2 : Convert.ToInt32(pInfo.IsAI || pInfo.Ready),
+                pInfo.IPAddress)).ToList();
 
-            BroadcastMessage(sb.ToString());
+            BroadcastMessage(PLAYER_OPTIONS_BROADCAST_COMMAND + " " + new PlayerOptionsMessage(entries).Encode());
         }
 
         protected override void BroadcastPlayerExtraOptions()
@@ -607,7 +593,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             BroadcastMessage(playerExtraOptions.ToLanMessage(), true);
         }
 
-        protected override void HostLaunchGame() => BroadcastMessage(LAUNCH_GAME_COMMAND + " " + UniqueGameID);
+        protected override void HostLaunchGame() => BroadcastMessage(LAUNCH_GAME_COMMAND + " " + new LaunchMessage(UniqueGameID).Encode());
 
         protected override string GetIPAddressForPlayer(PlayerInfo player)
         {
@@ -617,17 +603,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void RequestPlayerOptions(int side, int color, int start, int team)
         {
-            var sb = new ExtendedStringBuilder(PLAYER_OPTIONS_REQUEST_COMMAND + " ", true);
-            sb.Separator = ProgramConstants.LAN_DATA_SEPARATOR;
-            sb.Append(side);
-            sb.Append(color);
-            sb.Append(start);
-            sb.Append(team);
-            SendMessageToHost(sb.ToString());
+            var message = new PlayerOptionsRequestMessage(new PackedPlayerOptions(side, color, start, team));
+            SendMessageToHost(PLAYER_OPTIONS_REQUEST_COMMAND + " " + message.Encode());
         }
 
         protected override void RequestReadyStatus() =>
-            SendMessageToHost(PLAYER_READY_REQUEST + " " + Convert.ToInt32(chkAutoReady.Checked));
+            SendMessageToHost(PLAYER_READY_REQUEST + " " + new ReadyRequestMessage(chkAutoReady.Checked ? 2 : 1).Encode());
 
         protected override void SendChatMessage(string message)
         {
@@ -645,25 +626,22 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (!IsHost)
                 return;
 
-            var sb = new ExtendedStringBuilder(GAME_OPTIONS_COMMAND + " ", true);
-            sb.Separator = ProgramConstants.LAN_DATA_SEPARATOR;
-            foreach (GameLobbyCheckBox chkBox in CheckBoxes)
+            var message = new GameOptionsMessage
             {
-                sb.Append(Convert.ToInt32(chkBox.Checked));
-            }
+                CheckBoxValues = CheckBoxes.Select(chkBox => chkBox.Checked).ToList(),
+                DropDownIndices = DropDowns.Select(dd => dd.SelectedIndex).ToList(),
+                IsMapOfficial = Map?.Official ?? false,
+                MapSHA1 = Map?.SHA1 ?? string.Empty,
+                GameModeName = GameMode?.Name ?? string.Empty,
+                FrameSendRate = FrameSendRate,
+                MaxAhead = MaxAhead,
+                ProtocolVersion = ProtocolVersion,
+                RandomSeed = RandomSeed,
+                RemoveStartingLocations = RemoveStartingLocations,
+                MapName = Map?.UntranslatedName ?? string.Empty,
+            };
 
-            foreach (GameLobbyDropDown dd in DropDowns)
-            {
-                sb.Append(dd.SelectedIndex);
-            }
-
-            sb.Append(RandomSeed);
-            sb.Append(Map?.SHA1 ?? string.Empty);
-            sb.Append(GameMode?.Name ?? string.Empty);
-            sb.Append(FrameSendRate);
-            sb.Append(Convert.ToInt32(RemoveStartingLocations));
-
-            BroadcastMessage(sb.ToString());
+            BroadcastMessage(GAME_OPTIONS_COMMAND + " " + message.Encode());
         }
 
         protected override void GetReadyNotification()
@@ -920,15 +898,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (pInfo == null)
                 return;
 
-            string[] parts = data.Split(ProgramConstants.LAN_DATA_SEPARATOR);
-
-            if (parts.Length != 4)
+            if (!PlayerOptionsRequestMessage.TryDecode(data, out PlayerOptionsRequestMessage request))
                 return;
 
-            int side = Conversions.IntFromString(parts[0], -1);
-            int color = Conversions.IntFromString(parts[1], -1);
-            int start = Conversions.IntFromString(parts[2], -1);
-            int team = Conversions.IntFromString(parts[3], -1);
+            int side = request.Options.Side;
+            int color = request.Options.Color;
+            int start = request.Options.Start;
+            int team = request.Options.Team;
 
             if (side < 0 || side > SideCount + RandomSelectorCount)
                 return;
@@ -979,12 +955,26 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (IsHost)
                 return;
 
-            string[] parts = data.Split(ProgramConstants.LAN_DATA_SEPARATOR);
-
-            int playerCount = parts.Length / 8;
-
-            if (parts.Length != playerCount * 8)
+            if (!PlayerOptionsMessage.TryDecode(data, out PlayerOptionsMessage playerOptions))
                 return;
+
+            // Check every player before touching the player list, so a bad message changes nothing
+            foreach (PlayerOptionsEntry entry in playerOptions.Players)
+            {
+                PackedPlayerOptions options = entry.Options;
+
+                if (options.Side > SideCount + RandomSelectorCount)
+                    return;
+
+                if (options.Color > MPColors.Count)
+                    return;
+
+                if (options.Start > MAX_PLAYER_COUNT)
+                    return;
+
+                if (options.Team > 4)
+                    return;
+            }
 
             PlayerInfo localPlayer = FindLocalPlayer();
             int oldSideId = localPlayer == null ? -1 : localPlayer.SideId;
@@ -992,61 +982,36 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             Players.Clear();
             AIPlayers.Clear();
 
-            for (int i = 0; i < playerCount; i++)
+            foreach (PlayerOptionsEntry entry in playerOptions.Players)
             {
-                int baseIndex = i * 8;
-
-                string name = parts[baseIndex];
-                int side = Conversions.IntFromString(parts[baseIndex + 1], -1);
-                int color = Conversions.IntFromString(parts[baseIndex + 2], -1);
-                int start = Conversions.IntFromString(parts[baseIndex + 3], -1);
-                int team = Conversions.IntFromString(parts[baseIndex + 4], -1);
-                int readyStatus = Conversions.IntFromString(parts[baseIndex + 5], -1);
-                string ipAddress = parts[baseIndex + 6];
-                int aiLevel = Conversions.IntFromString(parts[baseIndex + 7], -1);
-
-                if (side < 0 || side > SideCount + RandomSelectorCount)
-                    return;
-
-                if (color < 0 || color > MPColors.Count)
-                    return;
-
-                if (start < 0 || start > MAX_PLAYER_COUNT)
-                    return;
-
-                if (team < 0 || team > 4)
-                    return;
+                string ipAddress = entry.Address;
 
                 if (ipAddress == "127.0.0.1")
                     ipAddress = hostEndPoint.Address.ToString();
 
-                bool isAi = aiLevel > -1;
-                if (aiLevel > 2)
-                    return;
-
                 PlayerInfo pInfo;
 
-                if (!isAi)
+                if (!entry.IsAI)
                 {
                     pInfo = new LANPlayerInfo(encoding);
-                    pInfo.Name = name;
+                    pInfo.Name = entry.Name;
                     Players.Add(pInfo);
                 }
                 else
                 {
                     pInfo = new PlayerInfo();
-                    pInfo.Name = AILevelToName(aiLevel);
+                    pInfo.Name = AILevelToName(entry.AILevel);
                     pInfo.IsAI = true;
-                    pInfo.AILevel = aiLevel;
+                    pInfo.AILevel = entry.AILevel;
                     AIPlayers.Add(pInfo);
                 }
 
-                pInfo.SideId = side;
-                pInfo.ColorId = color;
-                pInfo.StartingLocation = start;
-                pInfo.TeamId = team;
-                pInfo.Ready = readyStatus > 0;
-                pInfo.AutoReady = readyStatus > 1;
+                pInfo.SideId = entry.Options.Side;
+                pInfo.ColorId = entry.Options.Color;
+                pInfo.StartingLocation = entry.Options.Start;
+                pInfo.TeamId = entry.Options.Team;
+                pInfo.Ready = entry.ReadyState > 0;
+                pInfo.AutoReady = entry.ReadyState > 1;
                 pInfo.IPAddress = ipAddress;
             }
 
@@ -1077,9 +1042,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (IsHost)
                 return;
 
-            string[] parts = data.Split(ProgramConstants.LAN_DATA_SEPARATOR);
-
-            if (parts.Length != CheckBoxes.Count + DropDowns.Count + GAME_OPTION_SPECIAL_FLAG_COUNT)
+            if (!GameOptionsMessage.TryDecode(data, CheckBoxes.Count, DropDowns.Count, out GameOptionsMessage gameOptions))
             {
                 AddNotice(("The game host has sent an invalid game options message! " +
                     "The game host's game version might be different from yours.").L10N("Client:Main:HostGameOptionInvalid"));
@@ -1087,14 +1050,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            int randomSeed = Conversions.IntFromString(parts[parts.Length - GAME_OPTION_SPECIAL_FLAG_COUNT], -1);
-            if (randomSeed == -1)
-                return;
+            RandomSeed = gameOptions.RandomSeed;
 
-            RandomSeed = randomSeed;
-
-            string mapSHA1 = parts[parts.Length - (GAME_OPTION_SPECIAL_FLAG_COUNT - 1)];
-            string gameMode = parts[parts.Length - (GAME_OPTION_SPECIAL_FLAG_COUNT - 2)];
+            string mapSHA1 = gameOptions.MapSHA1;
+            string gameMode = gameOptions.GameModeName;
 
             GameModeMap gameModeMap = GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1);
 
@@ -1111,15 +1070,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (GameModeMap != gameModeMap)
                 ChangeMap(gameModeMap);
 
-            int frameSendRate = Conversions.IntFromString(parts[parts.Length - (GAME_OPTION_SPECIAL_FLAG_COUNT - 3)], FrameSendRate);
+            int frameSendRate = gameOptions.FrameSendRate;
             if (frameSendRate != FrameSendRate)
             {
                 FrameSendRate = frameSendRate;
                 AddNotice(string.Format("The game host has changed FrameSendRate (order lag) to {0}".L10N("Client:Main:HostChangeFrameSendRate"), frameSendRate));
             }
 
-            bool removeStartingLocations = Convert.ToBoolean(Conversions.IntFromString(
-                parts[parts.Length - (GAME_OPTION_SPECIAL_FLAG_COUNT - 4)], Convert.ToInt32(RemoveStartingLocations)));
+            bool removeStartingLocations = gameOptions.RemoveStartingLocations;
             SetRandomStartingLocations(removeStartingLocations);
 
             for (int i = 0; i < CheckBoxes.Count; i++)
@@ -1127,7 +1085,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 GameLobbyCheckBox chkBox = CheckBoxes[i];
 
                 bool oldValue = chkBox.Checked;
-                chkBox.Checked = Conversions.IntFromString(parts[i], -1) > 0;
+                chkBox.Checked = gameOptions.CheckBoxValues[i];
 
                 if (chkBox.Checked != oldValue)
                 {
@@ -1140,7 +1098,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             for (int i = 0; i < DropDowns.Count; i++)
             {
-                int index = Conversions.IntFromString(parts[CheckBoxes.Count + i], -1);
+                int index = gameOptions.DropDownIndices[i];
 
                 GameLobbyDropDown dd = DropDowns[i];
 
@@ -1161,25 +1119,30 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
         }
 
-        private void GameHost_HandleReadyRequest(string sender, string autoReady)
+        private void GameHost_HandleReadyRequest(string sender, string message)
         {
             PlayerInfo pInfo = Players.Find(p => p.Name == sender);
 
             if (pInfo == null)
                 return;
 
-            pInfo.Ready = true;
-            pInfo.AutoReady = Convert.ToBoolean(Conversions.IntFromString(autoReady, 0));
+            if (!ReadyRequestMessage.TryDecode(message, out ReadyRequestMessage request))
+                return;
+
+            pInfo.Ready = request.ReadyState > 0;
+            pInfo.AutoReady = request.ReadyState > 1;
             CopyPlayerDataToUI();
             BroadcastPlayerOptions();
         }
 
-        private void HandleGameLaunchCommand(string gameId)
+        private void HandleGameLaunchCommand(string message)
         {
             Players.ForEach(pInfo => pInfo.IsInGame = true);
-            UniqueGameID = Conversions.IntFromString(gameId, -1);
-            if (UniqueGameID < 0)
+
+            if (!LaunchMessage.TryDecode(message, out LaunchMessage launch))
                 return;
+
+            UniqueGameID = launch.GameId;
 
             CopyPlayerDataToUI();
             StartGame();
