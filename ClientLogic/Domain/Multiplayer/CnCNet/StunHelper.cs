@@ -30,7 +30,9 @@ public static class StunHelper
     public static byte[] CreateRequest()
     {
         var request = new byte[REQUEST_SIZE];
+#pragma warning disable RS0030 // STUN request IDs must be unpredictable; they never affect the game
         Random.Shared.NextBytes(request);
+#pragma warning restore RS0030
         BinaryPrimitives.WriteInt16BigEndian(request, STUN_ID);
         return request;
     }

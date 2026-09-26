@@ -1,0 +1,4 @@
+﻿N:Microsoft.Xna.Framework; ClientLogic must not depend on XNA/MonoGame. Keep UI types in the front end.
+N:Rampastring.XNAUI; ClientLogic must not depend on the XNA UI. Keep UI code in the front end.
+M:System.Random.#ctor; Use new Random(seed) with a seed passed in, so every client produces the same game.
+P:System.Random.Shared; Use new Random(seed) with a seed passed in, so every client produces the same game.

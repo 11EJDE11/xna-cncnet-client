@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>CnCNet Client Logic Library</Description>
+    <RootNamespace>ClientLogic</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Keeps this assembly's polyfills hidden from the client assemblies, which see its internals. -->
+    <PolyUseEmbeddedAttribute>true</PolyUseEmbeddedAttribute>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="lzo.net" />
+    <PackageReference Include="OpenMcdf" />
+    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Code moved from DXMainClient keeps its internal members; the client assemblies still use them. -->
+    <InternalsVisibleTo Include="clientdx" />
+    <InternalsVisibleTo Include="clientogl" />
+    <InternalsVisibleTo Include="clientxna" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ClientCore\ClientCore.csproj" />
+    <ProjectReference Include="..\Rampastring.XNAUI\Rampastring.Tools\Rampastring.Tools.csproj" />
+  </ItemGroup>
+
+  <!-- ClientLogic must stay usable by any front end: no UI frameworks, no XNA, no front-end projects. -->
+  <ItemGroup>
+    <AdditionalFiles Include="BannedSymbols.txt" />
+  </ItemGroup>
+  <Target Name="ForbidUiReferences" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <_ForbiddenReference Include="@(ProjectReference)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Filename)', '^(Rampastring\.XNAUI|ClientGUI|DXMainClient)$'))" />
+      <_ForbiddenReference Include="@(PackageReference)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '^(MonoGame\.|Microsoft\.Xna\.)'))" />
+      <_ForbiddenReference Include="@(Reference)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '^(MonoGame\.|Microsoft\.Xna\.|Rampastring\.XNAUI|ClientGUI|clientdx|clientogl|clientxna)'))" />
+    </ItemGroup>
+    <Error Condition="'@(_ForbiddenReference)' != ''" Text="ClientLogic must not reference UI or XNA assemblies: @(_ForbiddenReference)" />
+  </Target>
+</Project>
