@@ -6,6 +6,8 @@ using Rampastring.XNAUI.XNAControls;
 using Microsoft.Xna.Framework;
 using ClientCore;
 using ClientLogic.Lobby;
+using ClientLogic.MapSharing;
+using ClientLogic.UI;
 using System.IO;
 using Rampastring.Tools;
 using ClientCore.Statistics;
@@ -25,7 +27,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
     /// <summary>
     /// A generic base class for multiplayer game lobbies (CnCNet and LAN).
     /// </summary>
-    public abstract class MultiplayerGameLobby : GameLobbyBase, ISwitchable
+    public abstract class MultiplayerGameLobby : GameLobbyBase, ISwitchable, IMapSharingLobby, INoticeSink
     {
         private const int MAX_DICE = 10;
         private const int MAX_DIE_SIDES = 100;
@@ -123,11 +125,45 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// <param name="command">The command to add.</param>
         protected void AddChatBoxCommand(ChatBoxCommand command) => chatBoxCommands.Add(command);
 
+        /// <summary>Shares custom maps with the other players; set by the lobby's constructor.</summary>
+        protected MapSharingService MapSharing { get; set; }
+
+        private MapSharingConfirmationPanel mapSharingConfirmationPanel;
+
+        /// <summary>The name the host's map sharing messages come from.</summary>
+        protected abstract string MapSharingHostName { get; }
+
+        bool IMapSharingLobby.IsHost => IsHost;
+
+        string IMapSharingLobby.HostName => MapSharingHostName;
+
+        Map IMapSharingLobby.Map => Map;
+
+        Map IMapSharingLobby.FindMap(string sha1)
+        {
+            foreach (GameMode gm in GameModeMaps.GameModes)
+            {
+                Map map = gm.Maps.Find(m => m.SHA1 == sha1);
+
+                if (map != null)
+                    return map;
+            }
+
+            return null;
+        }
+
+        void INoticeSink.AddNotice(string message, NoticeSeverity severity) => AddNotice(message, severity.ToXnaColor());
+
         public override void Initialize()
         {
             Name = nameof(MultiplayerGameLobby);
 
             base.Initialize();
+
+            mapSharingConfirmationPanel = new MapSharingConfirmationPanel(WindowManager);
+            MapPreviewBox.AddChild(mapSharingConfirmationPanel);
+            mapSharingConfirmationPanel.MapDownloadConfirmed += MapSharingConfirmationPanel_MapDownloadConfirmed;
+            MapSharing.DownloadFailed += () => mapSharingConfirmationPanel.SetFailedStatus();
 
             // Init default game network settings
             FrameSendRate = ClientConfiguration.Instance.DefaultFrameSendRate;
@@ -503,6 +539,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         protected void ApplyGameOptionsUpdate(GameOptionsUpdate update)
         {
+            MapSharing.SetHostMap(update.MapSHA1, update.MapName);
+
             FrameSendRate = update.FrameSendRate;
             MaxAhead = update.MaxAhead;
             ProtocolVersion = update.ProtocolVersion;
@@ -566,13 +604,71 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// Called after the map was cleared because the host's map isn't installed
         /// (<see cref="GameOptionsUpdate.MapAction"/> says why).
         /// </summary>
-        protected virtual void HandleMissingHostMap(GameOptionsUpdate update)
+        private void HandleMissingHostMap(GameOptionsUpdate update)
         {
-            if (update.MapAction == GameOptionsMapAction.Clear)
-                return;
+            switch (update.MapAction)
+            {
+                case GameOptionsMapAction.ClearAndRequestDownload:
+                    AddNotice("The game host has selected a map that doesn't exist on your installation.".L10N("Client:Main:MapNotExist"));
+                    mapSharingConfirmationPanel.ShowForMapDownload();
+                    break;
+                case GameOptionsMapAction.ClearAndReportMapSharingDisabled:
+                    MapSharing.ReportMapSharingDisabled();
+                    break;
+                case GameOptionsMapAction.ClearAndReportOfficialMapMissing:
+                    MapSharing.ReportOfficialMapMissing(update.MapSHA1);
+                    break;
+            }
+        }
 
-            AddNotice("The game host has selected a map that doesn't exist on your installation.".L10N("Client:Main:MapNotExist") + " " +
-                "The host needs to change the map or you won't be able to play.".L10N("Client:Main:HostNeedChangeMapForYou"));
+        private void MapSharingConfirmationPanel_MapDownloadConfirmed(object sender, EventArgs e)
+        {
+            mapSharingConfirmationPanel.SetDownloadingStatus();
+            MapSharing.DownloadHostMap();
+        }
+
+        protected override void HandleMapAdded(Map addedMap)
+        {
+            // If this is a map we downloaded, select it
+            if (MapSharing.IsExpectedDownload(addedMap.SHA1))
+            {
+                AddNotice($"Map {addedMap.Name} loaded successfully.");
+
+                RefreshGameModeFilter();
+
+                GameModeMap gameModeMap = GameModeMaps.FirstOrDefault(gmm => gmm.Map.SHA1 == addedMap.SHA1);
+
+                if (gameModeMap != null)
+                {
+                    // select game mode
+                    int gameModeIndex = ddGameModeMapFilter.Items.FindIndex(item =>
+                        (item.Tag as GameModeMapFilter)?.GetGameModeMaps().Any(gmm => gmm.GameMode.Name == gameModeMap.GameMode.Name) ?? false);
+
+                    if (gameModeIndex >= 0)
+                        ddGameModeMapFilter.SelectedIndex = gameModeIndex;
+
+                    ListMaps();
+
+                    // select map
+                    for (int i = 0; i < lbGameModeMapList.ItemCount; i++)
+                    {
+                        var item = lbGameModeMapList.GetItem(1, i);
+                        if ((item.Tag as GameModeMap)?.Map.SHA1 == addedMap.SHA1)
+                        {
+                            lbGameModeMapList.SelectedIndex = i;
+                            break;
+                        }
+                    }
+
+                    ChangeMap(gameModeMap);
+                }
+
+                MapSharing.OnDownloadedMapInstalled(addedMap.SHA1);
+            }
+            else
+            {
+                base.HandleMapAdded(addedMap);
+            }
         }
 
         /// <summary>
@@ -1235,6 +1331,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void ChangeMap(GameModeMap gameModeMap)
         {
+            mapSharingConfirmationPanel?.Disable();
             base.ChangeMap(gameModeMap);
 
             bool resetAutoReady = gameModeMap?.GameMode == null || gameModeMap?.Map == null;

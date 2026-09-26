@@ -1,5 +1,7 @@
 using ClientCore;
 using ClientLogic.Lobby;
+using ClientLogic.MapSharing;
+using ClientLogic.UI;
 using ClientLogic.Protocol;
 using ClientGUI;
 using DTAClient.Domain;
@@ -25,7 +27,7 @@ using DTAClient.DXGUI.Multiplayer.CnCNet;
 
 namespace DTAClient.DXGUI.Multiplayer.GameLobby
 {
-    public class LANGameLobby : MultiplayerGameLobby
+    public class LANGameLobby : MultiplayerGameLobby, IMapSharingTransport
     {
         private const double DROPOUT_TIMEOUT = 20.0;
         private const double GAME_BROADCAST_INTERVAL = 2.0;
@@ -44,8 +46,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private const string DICE_ROLL_COMMAND = "DR";
         public const string PING = "PING";
 
+        /// <summary>
+        /// The sender of map sharing messages from the host. LAN messages from the host have no sender name,
+        /// and this can't be a player name.
+        /// </summary>
+        private const string LAN_HOST_SENDER = "\u0001host";
+
         public LANGameLobby(WindowManager windowManager, string iniName,
-            TopBar topBar, LANColor[] chatColors, MapLoader mapLoader, DiscordHandler discordHandler, PrivateMessagingWindow pmWindow, Random random) :
+            TopBar topBar, LANColor[] chatColors, MapLoader mapLoader, DiscordHandler discordHandler, PrivateMessagingWindow pmWindow, Random random,
+            IUiDispatcher uiDispatcher) :
             base(windowManager, iniName, topBar, mapLoader, discordHandler, pmWindow, random)
         {
             this.chatColors = chatColors;
@@ -59,6 +68,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new StringCommandHandler(PLAYER_READY_REQUEST, GameHost_HandleReadyRequest),
                 new StringCommandHandler(FILE_HASH_COMMAND, HandleFileHashCommand),
                 new StringCommandHandler(DICE_ROLL_COMMAND, Host_HandleDiceRoll),
+                new StringCommandHandler(MapSharingService.MAP_SHARING_UPLOAD_REQUEST, (sender, sha1) => MapSharing.HandleMapUploadRequest(sender, sha1)),
+                new StringCommandHandler(MapSharingService.MAP_SHARING_FAIL_MESSAGE, (sender, sha1) => MapSharing.HandleMapTransferFailMessage(sender, sha1)),
+                new NoParamCommandHandler(MapSharingService.MAP_SHARING_DISABLED_MESSAGE, sender => MapSharing.HandleMapSharingBlockedMessage(sender)),
                 new NoParamCommandHandler(PING, s => { }),
             };
 
@@ -74,9 +86,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new ClientStringCommandHandler(GAME_OPTIONS_COMMAND, HandleGameOptionsMessage),
                 new ClientStringCommandHandler(DICE_ROLL_COMMAND, Client_HandleDiceRoll),
                 new ClientNoParamCommandHandler(PING, HandlePing),
+                new ClientStringCommandHandler(MapSharingService.MAP_SHARING_DOWNLOAD_REQUEST, sha1 => MapSharing.HandleMapDownloadRequest(LAN_HOST_SENDER, sha1)),
+                new ClientStringCommandHandler(MapSharingService.MAP_SHARING_FAIL_MESSAGE, sha1 => MapSharing.HandleMapTransferFailMessage(LAN_HOST_SENDER, sha1)),
             };
 
             localGame = ClientConfiguration.Instance.LocalGame;
+
+            MapSharing = new MapSharingService(uiDispatcher, this, this, this, localGame);
 
             WindowManager.GameClosing += WindowManager_GameClosing;
 
@@ -146,6 +162,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             leaving = false;
             sessionId++;
+            MapSharing.Start();
             Refresh(isHost);
 
             this.hostEndPoint = hostEndPoint;
@@ -539,6 +556,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public override void Clear()
         {
+            MapSharing.Stop();
+
             if (IsHost)
             {
                 GameBroadcast?.Invoke(this, new GameBroadcastEventArgs("GAMECLOSED"));
@@ -592,6 +611,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             var playerExtraOptions = GetPlayerExtraOptions();
 
             BroadcastMessage(playerExtraOptions.ToLanMessage(), true);
+        }
+
+        protected override string MapSharingHostName => IsHost ? ProgramConstants.PLAYERNAME : LAN_HOST_SENDER;
+
+        void IMapSharingTransport.SendMapSharingMessage(string message)
+        {
+            if (IsHost)
+                BroadcastMessage(message, otherPlayersOnly: true);
+            else
+                SendMessageToHost(message);
         }
 
         protected override void HostLaunchGame() => BroadcastMessage(LAUNCH_GAME_COMMAND + " " + new LaunchMessage(UniqueGameID).Encode());
@@ -1054,7 +1083,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             GameOptionsUpdate update = GameOptionsApplier.Plan(gameOptions,
                 new LobbyGameSettings(FrameSendRate, MaxAhead, ProtocolVersion, GameModeMap),
                 (gameMode, mapSHA1) => GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1),
-                isMapSharingEnabled: false);
+                UserINISettings.Instance.EnableMapSharing);
 
             ApplyGameOptionsUpdate(update);
         }

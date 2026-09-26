@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 
 using ClientCore;
+using ClientLogic.UI;
 using ClientCore.Extensions;
 
 using ClientGUI;
@@ -46,14 +47,18 @@ namespace DTAClient.DXGUI.Multiplayer
             GameCollection gameCollection,
             MapLoader mapLoader,
             DiscordHandler discordHandler,
-            Random random
+            Random random,
+            IUiDispatcher uiDispatcher
         ) : base(windowManager)
         {
+            this.uiDispatcher = uiDispatcher;
             this.gameCollection = gameCollection;
             this.mapLoader = mapLoader;
             this.discordHandler = discordHandler;
             this.random = random;
         }
+
+        private readonly IUiDispatcher uiDispatcher;
 
         public event EventHandler Exited;
 
@@ -262,7 +267,7 @@ namespace DTAClient.DXGUI.Multiplayer
             gameCreationPanel.SetPositionAndSize();
 
             lanGameLobby = new LANGameLobby(WindowManager, "MultiplayerGameLobby",
-                null, chatColors, mapLoader, discordHandler, pmWindow, random);
+                null, chatColors, mapLoader, discordHandler, pmWindow, random, uiDispatcher);
             DarkeningPanel.AddAndInitializeWithControl(WindowManager, lanGameLobby);
             lanGameLobby.Disable();
 
