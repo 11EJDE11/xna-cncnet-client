@@ -18,6 +18,7 @@ using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
+using System.Globalization;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
@@ -2051,56 +2052,31 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (ProgramConstants.IsInGame && broadcastChannel.Users.Count > 500)
                 return;
 
-            StringBuilder sb = new StringBuilder("GAME ");
-            sb.Append(ProgramConstants.CNCNET_PROTOCOL_REVISION);
-            sb.Append(";");
-            sb.Append(ProgramConstants.GAME_VERSION);
-            sb.Append(";");
-            sb.Append(roomSettings.PlayerLimit);
-            sb.Append(";");
-            sb.Append(channel.ChannelName);
-            sb.Append(";");
-            sb.Append(roomSettings.RoomName);
-            sb.Append(";");
-            if (Locked)
-                sb.Append("1");
-            else
-                sb.Append("0");
-            sb.Append(Convert.ToInt32(roomSettings.IsCustomPassword));
-            sb.Append(Convert.ToInt32(closed));
-            sb.Append("0"); // IsLoadedGame
-            sb.Append("0"); // IsLadder
-            sb.Append(";");
-            foreach (PlayerInfo pInfo in Players)
-            {
-                sb.Append(pInfo.Name);
-                sb.Append(",");
-            }
+            var message = new GameBroadcastMessage(
+                Revision: ProgramConstants.CNCNET_PROTOCOL_REVISION,
+                GameVersion: ProgramConstants.GAME_VERSION,
+                MaxPlayers: roomSettings.PlayerLimit,
+                ChannelName: channel.ChannelName,
+                RoomName: roomSettings.RoomName,
+                Locked: Locked,
+                IsCustomPassword: roomSettings.IsCustomPassword,
+                IsClosed: closed,
+                IsLoadedGame: false,
+                IsLadder: false,
+                Players: Players.Select(p => p.Name).ToList(),
+                MapName: Map?.UntranslatedName ?? string.Empty,
+                GameMode: GameMode?.UntranslatedUIName ?? string.Empty,
+                Tunnel: tunnelSession.Mode == TunnelMode.V3Dynamic
+                    ? GameBroadcastMessage.DYNAMIC_TUNNELS
+                    : tunnelHandler.CurrentTunnel != null
+                        ? tunnelHandler.CurrentTunnel.Address + ":" + tunnelHandler.CurrentTunnel.Port
+                        : "0.0.0.0:0",
+                LoadedGameId: "0",
+                SkillLevel: roomSettings.SkillLevel.ToString(CultureInfo.InvariantCulture),
+                MapHash: Map?.SHA1 ?? string.Empty,
+                GameOptionValues: GetPackedGameOptionValuesString());
 
-            sb.Remove(sb.Length - 1, 1);
-            sb.Append(";");
-            sb.Append(Map?.UntranslatedName ?? string.Empty);
-            sb.Append(";");
-            sb.Append(GameMode?.UntranslatedUIName ?? string.Empty);
-            sb.Append(";");
-            if (tunnelSession.Mode == TunnelMode.V3Dynamic)
-                sb.Append("[DYN]");
-            else
-                sb.Append(tunnelHandler.CurrentTunnel != null
-                    ? tunnelHandler.CurrentTunnel.Address + ":" + tunnelHandler.CurrentTunnel.Port
-                    : "0.0.0.0:0");
-            sb.Append(";");
-            sb.Append(0); // LoadedGameId
-            sb.Append(";");
-            sb.Append(roomSettings.SkillLevel); // SkillLevel
-            sb.Append(";");
-            sb.Append(Map?.SHA1);
-
-            string gameOptionValues = GetPackedGameOptionValuesString();
-            sb.Append(";");
-            sb.Append(gameOptionValues);
-
-            broadcastChannel.SendCTCPMessage(sb.ToString(), QueuedMessageType.SYSTEM_MESSAGE, 20);
+            broadcastChannel.SendCTCPMessage(message.Encode(), QueuedMessageType.SYSTEM_MESSAGE, 20);
         }
 
         #endregion

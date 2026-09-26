@@ -15,6 +15,7 @@ using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
+using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -840,53 +841,31 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (broadcastChannel == null)
                 return;
 
-            StringBuilder sb = new StringBuilder("GAME ");
-            sb.Append(ProgramConstants.CNCNET_PROTOCOL_REVISION);
-            sb.Append(";");
-            sb.Append(ProgramConstants.GAME_VERSION);
-            sb.Append(";");
-            sb.Append(SGPlayers.Count);
-            sb.Append(";");
-            sb.Append(channel.ChannelName);
-            sb.Append(";");
-            sb.Append(channel.UIName);
-            sb.Append(";");
-            if (started || Players.Count == SGPlayers.Count)
-                sb.Append("1");
-            else
-                sb.Append("0");
-            sb.Append("0"); // IsCustomPassword
-            sb.Append("0"); // Closed
-            sb.Append("1"); // IsLoadedGame
-            sb.Append("0"); // IsLadder
-            sb.Append(";");
-            foreach (SavedGamePlayer sgPlayer in SGPlayers)
-            {
-                sb.Append(sgPlayer.Name);
-                sb.Append(",");
-            }
+            var message = new GameBroadcastMessage(
+                Revision: ProgramConstants.CNCNET_PROTOCOL_REVISION,
+                GameVersion: ProgramConstants.GAME_VERSION,
+                MaxPlayers: SGPlayers.Count,
+                ChannelName: channel.ChannelName,
+                RoomName: channel.UIName,
+                Locked: started || Players.Count == SGPlayers.Count,
+                IsCustomPassword: false,
+                IsClosed: false,
+                IsLoadedGame: true,
+                IsLadder: false,
+                Players: SGPlayers.Select(p => p.Name).ToList(),
+                MapName: (string)lblMapNameValue.Tag,
+                GameMode: (string)lblGameModeValue.Tag,
+                Tunnel: _tunnelMode == TunnelMode.V3Dynamic
+                    ? GameBroadcastMessage.DYNAMIC_TUNNELS
+                    : tunnelHandler.CurrentTunnel != null
+                        ? tunnelHandler.CurrentTunnel.Address + ":" + tunnelHandler.CurrentTunnel.Port
+                        : "0.0.0.0:0",
+                LoadedGameId: "0",
+                SkillLevel: ClientConfiguration.Instance.DefaultSkillLevelIndex.ToString(CultureInfo.InvariantCulture), // we don't know the original skill level
+                MapHash: savedMapSHA1,
+                GameOptionValues: savedBroadcastOptionValues);
 
-            sb.Remove(sb.Length - 1, 1);
-            sb.Append(";");
-            sb.Append((string)lblMapNameValue.Tag);
-            sb.Append(";");
-            sb.Append((string)lblGameModeValue.Tag);
-            sb.Append(";");
-            sb.Append(_tunnelMode == TunnelMode.V3Dynamic
-                ? "[DYN]"
-                : tunnelHandler.CurrentTunnel != null
-                    ? tunnelHandler.CurrentTunnel.Address + ":" + tunnelHandler.CurrentTunnel.Port
-                    : "0.0.0.0:0");
-            sb.Append(";");
-            sb.Append(0); // LoadedGameId
-            sb.Append(";");
-            sb.Append(ClientConfiguration.Instance.DefaultSkillLevelIndex); // we don't know the original skill level
-            sb.Append(";");
-            sb.Append(savedMapSHA1);
-            sb.Append(";");
-            sb.Append(savedBroadcastOptionValues);
-
-            broadcastChannel.SendCTCPMessage(sb.ToString(), QueuedMessageType.SYSTEM_MESSAGE, 20);
+            broadcastChannel.SendCTCPMessage(message.Encode(), QueuedMessageType.SYSTEM_MESSAGE, 20);
         }
 
         public override string GetSwitchName() => "Load Game".L10N("Client:Main:LoadGame");

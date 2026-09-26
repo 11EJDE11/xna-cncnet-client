@@ -1572,9 +1572,20 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return;
 
             string msg = e.Message.Substring(5); // Cut out GAME part
-            string[] splitMessage = msg.Split(new char[] { ';' });
+            GameBroadcastMessage broadcast;
 
-            if (splitMessage.Length != 14)
+            try
+            {
+                if (!GameBroadcastMessage.TryDecode(msg, out broadcast))
+                    broadcast = null;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Game parsing error: " + ex.ToString());
+                return;
+            }
+
+            if (broadcast == null)
             {
                 Logger.Log("Ignoring CTCP game message because of an invalid amount of parameters.");
 
@@ -1595,24 +1606,24 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             try
             {
-                string revision = splitMessage[0];
+                string revision = broadcast.Revision;
                 if (revision != ProgramConstants.CNCNET_PROTOCOL_REVISION)
                     return;
-                string gameVersion = splitMessage[1];
-                int maxPlayers = Conversions.IntFromString(splitMessage[2], 0);
-                string gameRoomChannelName = splitMessage[3];
-                string gameRoomDisplayName = splitMessage[4];
-                bool locked = Conversions.BooleanFromString(splitMessage[5].Substring(0, 1), true);
-                bool isCustomPassword = Conversions.BooleanFromString(splitMessage[5].Substring(1, 1), false);
-                bool isClosed = Conversions.BooleanFromString(splitMessage[5].Substring(2, 1), true);
-                bool isLoadedGame = Conversions.BooleanFromString(splitMessage[5].Substring(3, 1), false);
-                bool isLadder = Conversions.BooleanFromString(splitMessage[5].Substring(4, 1), false);
-                string[] players = splitMessage[6].Split(new char[1] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                List<string> playerNames = players.ToList();
-                string mapName = splitMessage[7];
-                string gameMode = splitMessage[8];
 
-                bool isDynamicTunnels = splitMessage[9] == "[DYN]";
+                string gameVersion = broadcast.GameVersion;
+                int maxPlayers = broadcast.MaxPlayers;
+                string gameRoomChannelName = broadcast.ChannelName;
+                string gameRoomDisplayName = broadcast.RoomName;
+                bool locked = broadcast.Locked;
+                bool isCustomPassword = broadcast.IsCustomPassword;
+                bool isClosed = broadcast.IsClosed;
+                bool isLoadedGame = broadcast.IsLoadedGame;
+                bool isLadder = broadcast.IsLadder;
+                string[] players = broadcast.Players.ToArray();
+                List<string> playerNames = players.ToList();
+                string mapName = broadcast.MapName;
+                string gameMode = broadcast.GameMode;
+                bool isDynamicTunnels = broadcast.IsDynamicTunnels;
                 CnCNetTunnel tunnel = null;
                 if (!isDynamicTunnels)
                 {
@@ -1632,7 +1643,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                         return;
                     }
 
-                    string[] tunnelAddressAndPort = splitMessage[9].Split(':');
+                    string[] tunnelAddressAndPort = broadcast.Tunnel.Split(':');
                     string tunnelAddress = tunnelAddressAndPort[0];
                     int tunnelPort = int.Parse(tunnelAddressAndPort[1]);
                     tunnel = tunnelHandler.Tunnels.Find(t => t.Address == tunnelAddress && t.Port == tunnelPort);
@@ -1656,10 +1667,10 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                     }
                 }
 
-                string loadedGameId = splitMessage[10];
+                string loadedGameId = broadcast.LoadedGameId;
                 int skillLevel = ClientConfiguration.Instance.NormalizeSkillLevel(
-                    Conversions.IntFromString(splitMessage[11], ClientConfiguration.Instance.DefaultSkillLevelIndex));
-                string mapHash = splitMessage[12];
+                    Conversions.IntFromString(broadcast.SkillLevel, ClientConfiguration.Instance.DefaultSkillLevelIndex));
+                string mapHash = broadcast.MapHash;
 
                 int[] gameOptionValues = null;
 
@@ -1673,7 +1684,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                     }
                     else
                     {
-                        gameOptionValues = BroadcastedGameOptionValues.Decode(splitMessage[13],
+                        gameOptionValues = BroadcastedGameOptionValues.Decode(broadcast.GameOptionValues,
                             gameLobby.CheckBoxes.Count(cb => cb.BroadcastToLobby),
                             gameLobby.DropDowns.Count(dd => dd.BroadcastToLobby));
                     }
