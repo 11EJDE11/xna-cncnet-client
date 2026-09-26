@@ -97,11 +97,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         // protected bool DisableSpectatorReadyChecking = false;
 
-        protected EnhancedSoundEffect sndJoinSound;
-        protected EnhancedSoundEffect sndLeaveSound;
-        protected EnhancedSoundEffect sndMessageSound;
-        protected EnhancedSoundEffect sndGetReadySound;
-        protected EnhancedSoundEffect sndReturnSound;
+        /// <summary>The lobby sounds; created in Initialize.</summary>
+        protected ISoundService Sounds;
 
         protected Texture2D[] PingTextures;
         protected Texture2D[] NegotiationTextures;
@@ -232,11 +229,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             MapPreviewBox.LocalStartingLocationSelected += MapPreviewBox_LocalStartingLocationSelected;
 
-            sndJoinSound = new EnhancedSoundEffect("joingame.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundGameLobbyJoinCooldown);
-            sndLeaveSound = new EnhancedSoundEffect("leavegame.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundGameLobbyLeaveCooldown);
-            sndMessageSound = new EnhancedSoundEffect("message.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundMessageCooldown);
-            sndGetReadySound = new EnhancedSoundEffect("getready.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundGameLobbyGetReadyCooldown);
-            sndReturnSound = new EnhancedSoundEffect("return.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundGameLobbyReturnCooldown);
+            Sounds = new XnaLobbySoundService();
 
             if (SavedGameManager.AreSavedGamesAvailable())
             {
@@ -321,7 +314,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 fsw.EnableRaisingEvents = true;
 
             if (UserINISettings.Instance.StopGameLobbyMessageAudio)
-                sndMessageSound.Enabled = false;
+                Sounds.SetEnabled(LobbySound.Message, false);
 
             base.StartGame();
         }
@@ -337,7 +330,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             pInfo.IsInGame = false;
 
             if (UserINISettings.Instance.StopGameLobbyMessageAudio)
-                sndMessageSound.Enabled = true;
+                Sounds.SetEnabled(LobbySound.Message, true);
 
             base.GameProcessExited();
 
@@ -956,7 +949,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             AddNotice("The host wants to start the game but cannot because not all players are ready!".L10N("Client:Main:GetReadyNotification"));
             if (!IsHost && !Players.Find(p => p.Name == ProgramConstants.PLAYERNAME).Ready)
-                sndGetReadySound.Play();
+                Sounds.Play(LobbySound.GetReady);
         }
 
         protected virtual void InsufficientPlayersNotification()

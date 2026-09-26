@@ -1,4 +1,5 @@
 ﻿using ClientCore;
+using ClientLogic.UI;
 using ClientGUI;
 using DTAClient.Domain;
 using DTAClient.Domain.LAN;
@@ -175,7 +176,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 Logger.Log("Failed to start hosting the LAN game loading lobby: " + ex.ToString());
                 listener?.Stop();
                 this.client?.Close();
-                XNAMessageBox.Show(WindowManager, "Error".L10N("Client:Main:Error"),
+                new XnaDialogService(WindowManager).ShowMessage("Error".L10N("Client:Main:Error"),
                     string.Format("Unable to host the game because TCP port {0} could not be opened. It may already be in use by another program.".L10N("Client:Main:LANListenerStartFailed"),
                     ProgramConstants.LAN_GAME_LOBBY_PORT));
                 return false;
@@ -280,7 +281,7 @@ namespace DTAClient.DXGUI.Multiplayer
             lpInfo.MessageReceived += LpInfo_MessageReceived;
             lpInfo.ConnectionLost += LpInfo_ConnectionLost;
 
-            sndJoinSound.Play();
+            Sounds.Play(LobbySound.PlayerJoined);
 
             AddNotice(string.Format("{0} connected from {1}".L10N("Client:Main:PlayerFromIP"), lpInfo.Name, lpInfo.IPAddress));
             lpInfo.StartReceiveLoop();
@@ -302,7 +303,7 @@ namespace DTAClient.DXGUI.Multiplayer
 
             AddNotice(string.Format("{0} has left the game.".L10N("Client:Main:PlayerLeftGame"), lpInfo.Name));
 
-            sndLeaveSound.Play();
+            Sounds.Play(LobbySound.PlayerLeft);
 
             CopyPlayerDataToUI();
             BroadcastOptions();
@@ -510,7 +511,7 @@ namespace DTAClient.DXGUI.Multiplayer
             SendMessageToHost(CHAT_COMMAND + " " + chatColorIndex +
                 ProgramConstants.LAN_DATA_SEPARATOR + message);
 
-            sndMessageSound.Play();
+            Sounds.Play(LobbySound.Message);
         }
 
         #region Server's command handlers
@@ -570,7 +571,7 @@ namespace DTAClient.DXGUI.Multiplayer
             lbChatMessages.AddMessage(new ChatMessage(playerName,
                 chatColors[colorIndex].XNAColor, DateTime.Now, parts[2]));
 
-            sndMessageSound.Play();
+            Sounds.Play(LobbySound.Message);
         }
 
         private void Client_HandleOptionsMessage(string data)

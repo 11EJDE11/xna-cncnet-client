@@ -226,7 +226,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 Logger.Log("Failed to start hosting the LAN game lobby: " + ex.ToString());
                 listener?.Stop();
                 this.client?.Close();
-                XNAMessageBox.Show(WindowManager, "Error".L10N("Client:Main:Error"),
+                Dialogs.ShowMessage("Error".L10N("Client:Main:Error"),
                     string.Format("Unable to host the game because TCP port {0} could not be opened. It may already be in use by another program.".L10N("Client:Main:LANListenerStartFailed"),
                     ProgramConstants.LAN_GAME_LOBBY_PORT));
                 return false;
@@ -781,7 +781,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (pInfo != null)
                 pInfo.IsInGame = false;
 
-            sndReturnSound.Play();
+            Sounds.Play(LobbySound.PlayerReturned);
             RefreshPlayerSlots();
         }
 

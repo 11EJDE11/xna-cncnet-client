@@ -1,4 +1,5 @@
 ﻿using ClientCore;
+using ClientLogic.UI;
 using ClientCore.Statistics;
 using ClientGUI;
 using DTAClient.Domain;
@@ -45,10 +46,8 @@ namespace DTAClient.DXGUI.Multiplayer
         protected ChatListBox lbChatMessages;
         protected XNATextBox tbChatInput;
 
-        protected EnhancedSoundEffect sndGetReadySound;
-        protected EnhancedSoundEffect sndJoinSound;
-        protected EnhancedSoundEffect sndLeaveSound;
-        protected EnhancedSoundEffect sndMessageSound;
+        /// <summary>The lobby sounds; created in Initialize.</summary>
+        protected ISoundService Sounds;
 
         protected XNALabel lblDescription;
         protected XNAPanel panelPlayers;
@@ -193,10 +192,7 @@ namespace DTAClient.DXGUI.Multiplayer
 
             base.Initialize();
 
-            sndJoinSound = new EnhancedSoundEffect("joingame.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundGameLobbyJoinCooldown);
-            sndLeaveSound = new EnhancedSoundEffect("leavegame.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundGameLobbyLeaveCooldown);
-            sndMessageSound = new EnhancedSoundEffect("message.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundMessageCooldown);
-            sndGetReadySound = new EnhancedSoundEffect("getready.wav", 0.0, 0.0, ClientConfiguration.Instance.SoundGameLobbyGetReadyCooldown);
+            Sounds = new XnaLobbySoundService();
 
             MPColors = MultiplayerColor.LoadColors();
 
@@ -273,7 +269,7 @@ namespace DTAClient.DXGUI.Multiplayer
             AddNotice("The game host wants to load the game but cannot because not all players are ready!".L10N("Client:Main:GetReadyPlease"));
 
             if (!IsHost && !Players.Find(p => p.Name == ProgramConstants.PLAYERNAME).Ready)
-                sndGetReadySound.Play();
+                Sounds.Play(LobbySound.GetReady);
 #if WINFORMS
 
             WindowManager.FlashWindow();

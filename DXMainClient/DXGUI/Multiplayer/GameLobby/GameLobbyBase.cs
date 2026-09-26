@@ -863,7 +863,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
             catch (Exception)
             {
-                XNAMessageBox.Show(WindowManager, "Error".L10N("Client:Main:Error"), "Unable to copy map name to clipboard.".L10N("Client:Main:ClipboardCopyMapNameFailed"));
+                Dialogs.ShowMessage("Error".L10N("Client:Main:Error"), "Unable to copy map name to clipboard.".L10N("Client:Main:ClipboardCopyMapNameFailed"));
             }
         }
 
@@ -875,7 +875,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
             catch (Exception)
             {
-                XNAMessageBox.Show(WindowManager, "Error".L10N("Client:Main:Error"), "Unable to copy map name to clipboard.".L10N("Client:Main:ClipboardCopyMapNameFailed"));
+                Dialogs.ShowMessage("Error".L10N("Client:Main:Error"), "Unable to copy map name to clipboard.".L10N("Client:Main:ClipboardCopyMapNameFailed"));
             }
         }
 
@@ -1525,7 +1525,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     string errorMessage = "Unable to copy supplemental map file".L10N("Client:Main:SupplementalFileCopyError") + $" {file}";
                     Logger.Log(errorMessage);
                     Logger.Log(ex.ToString());
-                    XNAMessageBox.Show(WindowManager, "Error".L10N("Client:Main:Error"), errorMessage);
+                    Dialogs.ShowMessage("Error".L10N("Client:Main:Error"), errorMessage);
 
                 }
             }
@@ -1554,7 +1554,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     string errorMessage = "Unable to delete supplemental map file".L10N("Client:Main:SupplementalFileDeleteError") + $" {supplementalMapFilename}";
                     Logger.Log(errorMessage);
                     Logger.Log(ex.ToString());
-                    XNAMessageBox.Show(WindowManager, "Error".L10N("Client:Main:Error"), errorMessage);
+                    Dialogs.ShowMessage("Error".L10N("Client:Main:Error"), errorMessage);
                 }
             }
         }

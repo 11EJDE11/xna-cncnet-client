@@ -300,7 +300,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             Players.Add(pInfo);
 
-            sndJoinSound.Play();
+            Sounds.Play(LobbySound.PlayerJoined);
 
             _negotiator.RegenerateV3PlayerInfos();
 
@@ -330,7 +330,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (index == -1)
                 return;
 
-            sndLeaveSound.Play();
+            Sounds.Play(LobbySound.PlayerLeft);
 
             _negotiator.RemovePlayer(playerName);
 
@@ -359,7 +359,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             else
             {
                 lbChatMessages.AddMessage(e.Message);
-                sndMessageSound.Play();
+                Sounds.Play(LobbySound.Message);
             }
         }
 
@@ -391,7 +391,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         protected override void SendChatMessage(string message)
         {
-            sndMessageSound.Play();
+            Sounds.Play(LobbySound.Message);
 
             channel.SendChatMessage(message, chatColor);
         }

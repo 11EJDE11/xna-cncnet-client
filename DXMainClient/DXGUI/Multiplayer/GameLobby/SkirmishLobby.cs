@@ -80,7 +80,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void AddNotice(string message, Color color)
         {
-            XNAMessageBox.Show(WindowManager, "Message".L10N("Client:Main:MessageTitle"), message);
+            Dialogs.ShowMessage("Message".L10N("Client:Main:MessageTitle"), message);
         }
 
         protected override void OnEnabledChanged(object sender, EventArgs args)
@@ -167,7 +167,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            XNAMessageBox.Show(WindowManager, "Cannot launch game".L10N("Client:Main:LaunchGameErrorTitle"), error);
+            Dialogs.ShowMessage("Cannot launch game".L10N("Client:Main:LaunchGameErrorTitle"), error);
         }
 
         protected override void BtnLeaveGame_LeftClick(object sender, EventArgs e)

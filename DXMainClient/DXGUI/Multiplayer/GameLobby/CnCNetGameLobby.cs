@@ -899,7 +899,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             while (Players.Count + AIPlayers.Count > MAX_PLAYER_COUNT && AIPlayers.Count > 0)
                 AIPlayers.RemoveAt(AIPlayers.Count - 1);
 
-            sndJoinSound.Play();
+            Sounds.Play(LobbySound.PlayerJoined);
 #if WINFORMS
             WindowManager.FlashWindow();
 #endif
@@ -949,7 +949,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     BroadcastPlayerOptions();
             }
 
-            sndLeaveSound.Play();
+            Sounds.Play(LobbySound.PlayerLeft);
 
             if (IsHost && Locked && !ProgramConstants.IsInGame)
             {
@@ -1009,7 +1009,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 lbChatMessages.AddMessage(e.Message);
 
                 if (e.Message.SenderName != null)
-                    sndMessageSound.Play();
+                    Sounds.Play(LobbySound.Message);
             }
         }
 
@@ -1916,7 +1916,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (pInfo != null)
                 pInfo.IsInGame = false;
 
-            sndReturnSound.Play();
+            Sounds.Play(LobbySound.PlayerReturned);
             RefreshPlayerSlots();
         }
 
