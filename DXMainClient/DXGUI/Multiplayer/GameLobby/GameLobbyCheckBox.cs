@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-using ClientCore.Extensions;
+using ClientLogic.Options;
 
 using DTAClient.DXGUI.Generic;
 
@@ -19,24 +19,26 @@ public class GameLobbyCheckBox : GameSessionCheckBox
     public GameLobbyCheckBox(WindowManager windowManager) : base(windowManager) { }
 
     /// <summary>
-    /// The last host-defined value for this check box.
+    /// The last host-defined value for this check box (<see cref="GameOption.HostValue"/>).
     /// Defaults to the default value of Checked after the check-box
     /// has been initialized, but its value is only changed by user interaction.
     /// </summary>
-    public bool HostChecked { get; set; }
+    public bool HostChecked
+    {
+        get => Option.HostValue != 0;
+        set => Option.HostValue = value ? 1 : 0;
+    }
 
     /// <summary>
-    /// The last value that the local player gave for this check box.
+    /// The last value that the local player gave for this check box (<see cref="GameOption.UserValue"/>).
     /// Defaults to the default value of Checked after the check-box
     /// has been initialized, but its value is only changed by user interaction.
     /// </summary>
-    public bool UserChecked { get; set; }
-
-    /// <summary>
-    /// The side indices that this check box disallows when checked.
-    /// Defaults to -1, which means none.
-    /// </summary>
-    public List<int> DisallowedSideIndices = new();
+    public bool UserChecked
+    {
+        get => Option.UserValue != 0;
+        set => Option.UserValue = value ? 1 : 0;
+    }
 
     public override void Initialize()
     {
@@ -52,6 +54,7 @@ public class GameLobbyCheckBox : GameSessionCheckBox
             if (parent is GameLobbyBase configView)
             {
                 configView.CheckBoxes.Add(this);
+                configView.GameOptions.Add(Option);
                 break;
             }
 
@@ -59,48 +62,6 @@ public class GameLobbyCheckBox : GameSessionCheckBox
         }
 
         base.Initialize();
-    }
-
-    protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
-    {
-        switch (key)
-        {
-            case "Checked":
-                bool checkedValue = Conversions.BooleanFromString(value, false);
-                HostChecked = checkedValue;
-                UserChecked = checkedValue;
-                break;  // let base method handle it too as we're not replacing it fully
-            case "DisallowedSideIndex":
-            case "DisallowedSideIndices":
-                List<int> sides = value.SplitWithCleanup()
-                    .Select(s => Conversions.IntFromString(s, -1))
-                    .Distinct()
-                    .ToList();
-                DisallowedSideIndices.AddRange(sides.Where(s => !DisallowedSideIndices.Contains(s)));
-                return;
-        }
-
-        base.ParseControlINIAttribute(iniFile, key, value);
-    }
-
-    /// <summary>
-    /// Applies the check-box's disallowed side index to a bool
-    /// array that determines which sides are disabled.
-    /// </summary>
-    /// <param name="disallowedArray">An array that determines which sides are disabled.</param>
-    public override void ApplyDisallowedSideIndex(bool[] disallowedArray)
-    {
-        if (DisallowedSideIndices == null || DisallowedSideIndices.Count == 0)
-            return;
-
-        if (Checked != reversed)
-        {
-            for (int i = 0; i < DisallowedSideIndices.Count; i++)
-            {
-                int sideNotAllowed = DisallowedSideIndices[i];
-                disallowedArray[sideNotAllowed] = true;
-            }
-        }
     }
 
     public override void OnLeftClick(InputEventArgs inputEventArgs)

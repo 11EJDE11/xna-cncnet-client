@@ -658,8 +658,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             var message = new GameOptionsMessage
             {
-                CheckBoxValues = CheckBoxes.Select(chkBox => chkBox.Checked).ToList(),
-                DropDownIndices = DropDowns.Select(dd => dd.SelectedIndex).ToList(),
+                CheckBoxValues = GameOptions.CheckBoxes.Select(o => o.IsChecked).ToList(),
+                DropDownIndices = GameOptions.DropDowns.Select(o => o.Value).ToList(),
                 IsMapOfficial = Map?.Official ?? false,
                 MapSHA1 = Map?.SHA1 ?? string.Empty,
                 GameModeName = GameMode?.Name ?? string.Empty,

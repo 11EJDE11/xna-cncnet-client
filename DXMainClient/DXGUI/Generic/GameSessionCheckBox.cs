@@ -1,6 +1,10 @@
-﻿using System;
+using System;
+
+using ClientCore.I18N;
 
 using ClientGUI;
+
+using ClientLogic.Options;
 
 using DTAClient.Domain.Multiplayer;
 using DTAClient.DXGUI.Multiplayer.GameLobby;
@@ -10,168 +14,113 @@ using Rampastring.XNAUI;
 
 namespace DTAClient.DXGUI.Generic;
 
-public enum CheckBoxMapScoringMode
-{
-    /// <summary>
-    /// The value of the check box makes no difference for scoring maps.
-    /// </summary>
-    Irrelevant = 0,
-
-    /// <summary>
-    /// The check box prevents map scoring when it's checked.
-    /// </summary>
-    DenyWhenChecked = 1,
-
-    /// <summary>
-    /// The check box prevents map scoring when it's unchecked.
-    /// </summary>
-    DenyWhenUnchecked = 2
-}
-
 /// <summary>
-/// A game option check box for the game lobby or campaign.
+/// A game option check box for the game lobby or campaign. The option itself is <see cref="Option"/>; the check
+/// box shows it and changes it.
 /// </summary>
-// TODO split the logic between descendants better and clean up
 public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
 {
-    private const int DEFAULT_SORT_ORDER = 0;
-
     public GameSessionCheckBox(WindowManager windowManager) : base (windowManager) { }
+
+    private GameOptionDefinitionBuilder builder;
+    private GameOption option;
 
     public bool AllowChanges { get; set; } = true;
 
-    public bool AffectsSpawnIni => !string.IsNullOrWhiteSpace(spawnIniOption);
-    public bool AffectsMapCode => !string.IsNullOrWhiteSpace(customIniPath);
+    /// <summary>
+    /// The game option this check box shows. Created from the check box's INI section the first time it is used,
+    /// which must be after the section has been read.
+    /// </summary>
+    public GameOption Option => option ??= CreateOption();
 
-    public bool AllowScoring
-        => !((mapScoringMode == CheckBoxMapScoringMode.DenyWhenChecked && Checked)
-             || (mapScoringMode == CheckBoxMapScoringMode.DenyWhenUnchecked && !Checked));
-
-    private CheckBoxMapScoringMode mapScoringMode = CheckBoxMapScoringMode.Irrelevant;
-
-    private string spawnIniOption;
-
-    private string customIniPath;
-
-    protected bool reversed;
-
-    private string enabledSpawnIniValue = "True";
-    private string disabledSpawnIniValue = "False";
-
-    private bool DefaultChecked { get; set; }
+    public bool AffectsSpawnIni => Option.AffectsSpawnIni;
+    public bool AffectsMapCode => Option.AffectsMapCode;
+    public bool AllowScoring => Option.AllowScoring;
 
     /// <summary>
     /// Whether this checkbox should be included in the GAME broadcast.
     /// </summary>
-    public bool BroadcastToLobby { get; private set; }
+    public bool BroadcastToLobby => Option.Definition.BroadcastToLobby;
 
     /// <summary>
     /// Whether the icon/text should be shown in the game list.
     /// </summary>
-    public bool ShowInGameList { get; private set; }
+    public bool ShowInGameList => Option.Definition.ShowInGameList;
 
     /// <summary>
     /// Whether the icon should be shown on the right side of the game list.
     /// Only applies if ShowInGameList is true.
     /// </summary>
-    public bool ShowInGameListOnRight { get; private set; }
+    public bool ShowInGameListOnRight => Option.Definition.ShowInGameListOnRight;
 
     /// <summary>
     /// Whether the icon/text should be shown in the game information panel.
     /// </summary>
-    public bool ShowInGameInformationPanel { get; private set; }
+    public bool ShowInGameInformationPanel => Option.Definition.ShowInGameInformationPanel;
 
     /// <summary>
     /// Whether to show only the icon (without text) in the game information panel.
     /// Only applies if ShowInGameInformationPanel is true.
     /// </summary>
-    public bool ShowInGameInformationPanelAsIconOnly { get; private set; }
+    public bool ShowInGameInformationPanelAsIconOnly => Option.Definition.ShowInGameInformationPanelAsIconOnly;
 
     /// <summary>
     /// Whether the icon should be shown in the game lobby control itself.
     /// </summary>
-    public bool ShowIconInGameLobby { get; private set; }
+    public bool ShowIconInGameLobby => Option.Definition.ShowIconInGameLobby;
 
     /// <summary>
     /// Whether this setting should be filterable and shown in the filters panel.
     /// </summary>
-    public bool ShowInFilters { get; private set; }
+    public bool ShowInFilters => Option.Definition.ShowInFilters;
 
     /// <summary>
     /// The texture name for the icon when setting is enabled.
     /// </summary>
-    public string EnabledIcon { get; private set; }
+    public string EnabledIcon => Option.Definition.EnabledIcon;
 
     /// <summary>
     /// The texture name for the icon when setting is disabled.
     /// </summary>
-    public string DisabledIcon { get; private set; }
+    public string DisabledIcon => Option.Definition.DisabledIcon;
 
     /// <summary>
     /// Sort order for displaying icons in the GameInformationPanel and GameListBox.
     /// Lower values appear first.
     /// </summary>
-    public int SortOrder { get; private set; } = DEFAULT_SORT_ORDER;
+    public int SortOrder => Option.Definition.SortOrder;
+
+    private GameOptionDefinitionBuilder Builder => builder ??= new GameOptionDefinitionBuilder(
+        Name, GameOptionKind.CheckBox, isLobbyOption: this is GameLobbyCheckBox,
+        (attributeName, defaultValue) => Translation.Instance.LookUp(this, attributeName, defaultValue));
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
-        switch (key)
+        if (Builder.TryParse(iniFile, key, value))
         {
-            case "SpawnIniOption":
-                spawnIniOption = value;
-                return;
-            case "EnabledSpawnIniValue":
-                enabledSpawnIniValue = value;
-                return;
-            case "DisabledSpawnIniValue":
-                disabledSpawnIniValue = value;
-                return;
-            case "CustomIniPath":
-                customIniPath = value;
-                return;
-            case "Reversed":
-                reversed = Conversions.BooleanFromString(value, false);
-                return;
-            case "Checked":
-                bool checkedValue = Conversions.BooleanFromString(value, false);
-                DefaultChecked = Checked = checkedValue;
-                return;
-            case "MapScoringMode":
-                mapScoringMode = (CheckBoxMapScoringMode)Enum.Parse(typeof(CheckBoxMapScoringMode), value);
-                return;
-            case "BroadcastToLobby":
-                BroadcastToLobby = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInGameList":
-                ShowInGameList = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInGameListOnRight":
-                ShowInGameListOnRight = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInGameInformationPanel":
-                ShowInGameInformationPanel = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInGameInformationPanelAsIconOnly":
-                ShowInGameInformationPanelAsIconOnly = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowIconInGameLobby":
-                ShowIconInGameLobby = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInFilters":
-                ShowInFilters = Conversions.BooleanFromString(value, false);
-                return;
-            case "EnabledIcon":
-                EnabledIcon = value;
-                return;
-            case "DisabledIcon":
-                DisabledIcon = value;
-                return;
-            case "SortOrder":
-                SortOrder = int.Parse(value);
-                return;
+            if (key == "Checked")
+                Checked = Builder.DefaultValue != 0;
+
+            return;
         }
 
         base.ParseControlINIAttribute(iniFile, key, value);
+    }
+
+    private GameOption CreateOption()
+    {
+        Builder.Label = Text;
+        var created = new GameOption(Builder.Build(), Checked ? 1 : 0);
+
+        // Keep the option and the check box in sync both ways; each only raises its event on a real change
+        CheckedChanged += (s, e) => created.Value = Checked ? 1 : 0;
+        created.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(GameOption.Value) && Checked != created.IsChecked)
+                Checked = created.IsChecked;
+        };
+
+        return created;
     }
 
     public int Value
@@ -180,39 +129,18 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
         set => Checked = value != 0;  // 0 = unchecked/off, 1 = checked/on
     }
 
-    public void ApplySpawnIniCode(IniFile spawnIni)
-    {
-        if (!AffectsSpawnIni)
-            return;
+    public void ApplySpawnIniCode(IniFile spawnIni) => Option.ApplySpawnIniCode(spawnIni);
 
-        string value = disabledSpawnIniValue;
-        if (Checked != reversed)
-        {
-            value = enabledSpawnIniValue;
-        }
+    public void ApplyDisallowedSideIndex(bool[] disallowedArray) => Option.ApplyDisallowedSideIndex(disallowedArray);
 
-        spawnIni.SetStringValue("Settings", spawnIniOption, value);
-    }
-
-    public virtual void ApplyDisallowedSideIndex(bool[] disallowedArray)
-    {
-        // Only game lobby check-boxes can disallow sides
-    }
-        
-    public void ApplyMapCode(IniFile mapIni, GameMode gameMode)
-    {
-        if (!AffectsMapCode || Checked == reversed)
-            return;
-
-        MapCodeHelper.ApplyMapCode(mapIni, customIniPath, gameMode);
-    }
+    public void ApplyMapCode(IniFile mapIni, GameMode gameMode) => Option.ApplyMapCode(mapIni, gameMode);
 
     public override void OnLeftClick(InputEventArgs inputEventArgs)
     {
         // FIXME there's a discrepancy with how base XNAUI handles this
         // it doesn't set handled if changing the setting is not allowed
         inputEventArgs.Handled = true;
-            
+
         if (!AllowChanges)
             return;
 
@@ -224,6 +152,6 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
         if (!AllowChanges)
             throw new InvalidOperationException("Cannot reset to default when changes are not allowed.");
 
-        Checked = DefaultChecked;
+        Checked = Option.Definition.DefaultValue != 0;
     }
 }

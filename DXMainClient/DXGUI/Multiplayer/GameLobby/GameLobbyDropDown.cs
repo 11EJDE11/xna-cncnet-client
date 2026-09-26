@@ -1,3 +1,5 @@
+using ClientLogic.Options;
+
 using DTAClient.DXGUI.Generic;
 
 using Rampastring.Tools;
@@ -10,9 +12,19 @@ public class GameLobbyDropDown : GameSessionDropDown
 {
     public GameLobbyDropDown(WindowManager windowManager) : base(windowManager) { }
 
-    public int HostSelectedIndex { get; set; }
+    /// <summary>The last host-defined selection (<see cref="GameOption.HostValue"/>).</summary>
+    public int HostSelectedIndex
+    {
+        get => Option.HostValue;
+        set => Option.HostValue = value;
+    }
 
-    public int UserSelectedIndex { get; set; }
+    /// <summary>The last selection the local player made (<see cref="GameOption.UserValue"/>).</summary>
+    public int UserSelectedIndex
+    {
+        get => Option.UserValue;
+        set => Option.UserValue = value;
+    }
 
     public override void Initialize()
     {
@@ -28,6 +40,7 @@ public class GameLobbyDropDown : GameSessionDropDown
             if (parent is GameLobbyBase configView)
             {
                 configView.DropDowns.Add(this);
+                configView.GameOptions.Add(Option);
                 break;
             }
 
@@ -35,19 +48,6 @@ public class GameLobbyDropDown : GameSessionDropDown
         }
 
         base.Initialize();
-    }
-
-    protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
-    {
-        if (key == "DefaultIndex")
-        {
-            int index = int.Parse(value);
-            HostSelectedIndex = index;
-            UserSelectedIndex = index;
-            // don't return, let base method handle it's part too
-        }
-
-        base.ParseControlINIAttribute(iniFile, key, value);
     }
 
     public override void OnLeftClick(InputEventArgs inputEventArgs)

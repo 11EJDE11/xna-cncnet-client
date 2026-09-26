@@ -1,12 +1,10 @@
-﻿using System;
-
-using ClientCore.Extensions;
 using ClientCore.I18N;
 
 using ClientGUI;
 
+using ClientLogic.Options;
+
 using DTAClient.Domain.Multiplayer;
-using DTAClient.DXGUI.Multiplayer.GameLobby;
 
 using Rampastring.Tools;
 using Rampastring.XNAUI;
@@ -15,143 +13,119 @@ using Rampastring.XNAUI.XNAControls;
 namespace DTAClient.DXGUI.Generic;
 
 /// <summary>
-/// A game option drop-down for the game lobby or campaign.
+/// A game option drop-down for the game lobby or campaign. The option itself is <see cref="Option"/>; the
+/// drop-down shows it and changes it.
 /// </summary>
-// TODO split the logic between descendants better and clean up
 public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
 {
-
-    private const int DEFAULT_SORT_ORDER = 0;
-
     public GameSessionDropDown(WindowManager windowManager) : base(windowManager) { }
 
-    public string OptionName { get; private set; }
-    public bool AffectsSpawnIni => dataWriteMode != DropDownDataWriteMode.MAPCODE;
-    public bool AffectsMapCode => dataWriteMode == DropDownDataWriteMode.MAPCODE;
-    public bool AllowScoring => true;  // TODO
+    private GameOptionDefinitionBuilder builder;
+    private GameOption option;
 
-    private DropDownDataWriteMode dataWriteMode = DropDownDataWriteMode.BOOLEAN;
+    /// <summary>
+    /// The game option this drop-down shows. Created from the drop-down's INI section the first time it is used,
+    /// which must be after the section has been read.
+    /// </summary>
+    public GameOption Option => option ??= CreateOption();
 
-    private string spawnIniOption = string.Empty;
-
-    private int defaultIndex;
+    public string OptionName => Option.Definition.OptionName;
+    public bool AffectsSpawnIni => Option.AffectsSpawnIni;
+    public bool AffectsMapCode => Option.AffectsMapCode;
+    public bool AllowScoring => Option.AllowScoring;
 
     /// <summary>
     /// Whether this dropdown should be included in the GAME broadcast.
     /// </summary>
-    public bool BroadcastToLobby { get; private set; }
+    public bool BroadcastToLobby => Option.Definition.BroadcastToLobby;
 
     /// <summary>
     /// Whether the icon/text should be shown in the game list.
     /// </summary>
-    public bool ShowInGameList { get; private set; }
+    public bool ShowInGameList => Option.Definition.ShowInGameList;
 
     /// <summary>
     /// Whether the icon should be shown on the right side of the game list.
     /// Only applies if ShowInGameList is true.
     /// </summary>
-    public bool ShowInGameListOnRight { get; private set; }
+    public bool ShowInGameListOnRight => Option.Definition.ShowInGameListOnRight;
 
     /// <summary>
     /// Whether the icon/text should be shown in the game information panel.
     /// </summary>
-    public bool ShowInGameInformationPanel { get; private set; }
+    public bool ShowInGameInformationPanel => Option.Definition.ShowInGameInformationPanel;
 
     /// <summary>
     /// Whether to show only the icon (without text) in the game information panel.
     /// Only applies if ShowInGameInformationPanel is true.
     /// </summary>
-    public bool ShowInGameInformationPanelAsIconOnly { get; private set; }
+    public bool ShowInGameInformationPanelAsIconOnly => Option.Definition.ShowInGameInformationPanelAsIconOnly;
 
     /// <summary>
     /// Whether the icon should be shown in the game lobby control itself.
     /// </summary>
-    public bool ShowIconInGameLobby { get; private set; }
+    public bool ShowIconInGameLobby => Option.Definition.ShowIconInGameLobby;
 
     /// <summary>
     /// Whether this setting should be filterable and shown in the filters panel.
     /// </summary>
-    public bool ShowInFilters { get; private set; }
+    public bool ShowInFilters => Option.Definition.ShowInFilters;
 
     /// <summary>
     /// Sort order for displaying icons in the GameInformationPanel and GameListBox.
     /// Lower values appear first.
     /// </summary>
-    public int SortOrder { get; private set; } = DEFAULT_SORT_ORDER;
+    public int SortOrder => Option.Definition.SortOrder;
+
+    private GameOptionDefinitionBuilder Builder => builder ??= new GameOptionDefinitionBuilder(
+        Name, GameOptionKind.DropDown, isLobbyOption: false,
+        (attributeName, defaultValue) => Translation.Instance.LookUp(this, attributeName, defaultValue));
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
-        // shorthand for localization function
-        static string Localize(XNAControl control, string attributeName, string defaultValue, TranslationNotificationLevel notificationLevel = TranslationNotificationLevel.Default)
-            => Translation.Instance.LookUp(control, attributeName, defaultValue, notificationLevel);
+        int itemCount = Builder.Items.Count;
 
-        switch (key)
+        if (Builder.TryParse(iniFile, key, value))
         {
-            case "Items":
-                string[] items = value.SplitWithCleanup();
-                string[] itemLabels = iniFile.GetStringListValue(Name, "ItemLabels", "");
-                string[] iconNames = iniFile.GetStringListValue(Name, "Icons", "");
-                for (int i = 0; i < items.Length; i++)
-                {
-                    bool hasLabel = itemLabels.Length > i && !string.IsNullOrEmpty(itemLabels[i]);
-                    string iconName = iconNames.Length > i ? iconNames[i] : null;
-                    XNADropDownItem item = new()
+            switch (key)
+            {
+                case "Items":
+                    for (int i = itemCount; i < Builder.Items.Count; i++)
                     {
-                        Text = Localize(this, $"Item{i}",
-                            hasLabel ? itemLabels[i] : items[i]),
-                        Tag = items[i],
-                        Texture = !string.IsNullOrEmpty(iconName) ? AssetLoader.LoadTexture(iconName) : null,
-                    };
-                    AddItem(item);
-                }
-                return;
-            case "DataWriteMode":
-                if (value.ToUpper() == "INDEX")
-                    dataWriteMode = DropDownDataWriteMode.INDEX;
-                else if (value.ToUpper() == "BOOLEAN")
-                    dataWriteMode = DropDownDataWriteMode.BOOLEAN;
-                else if (value.ToUpper() == "MAPCODE")
-                    dataWriteMode = DropDownDataWriteMode.MAPCODE;
-                else
-                    dataWriteMode = DropDownDataWriteMode.STRING;
-                return;
-            case "SpawnIniOption":
-                spawnIniOption = value;
-                return;
-            case "DefaultIndex":
-                SelectedIndex = int.Parse(value);
-                defaultIndex = SelectedIndex;
-                return;
-            case "OptionName":
-                OptionName = Localize(this, "OptionName", value);
-                return;
-            case "BroadcastToLobby":
-                BroadcastToLobby = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInGameList":
-                ShowInGameList = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInGameListOnRight":
-                ShowInGameListOnRight = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInGameInformationPanel":
-                ShowInGameInformationPanel = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInGameInformationPanelAsIconOnly":
-                ShowInGameInformationPanelAsIconOnly = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowIconInGameLobby":
-                ShowIconInGameLobby = Conversions.BooleanFromString(value, false);
-                return;
-            case "ShowInFilters":
-                ShowInFilters = Conversions.BooleanFromString(value, false);
-                return;
-            case "SortOrder":
-                SortOrder = int.Parse(value);
-                return;
+                        GameOptionItem item = Builder.Items[i];
+                        AddItem(new XNADropDownItem()
+                        {
+                            Text = item.Label,
+                            Tag = item.Value,
+                            Texture = item.IconName != null ? AssetLoader.LoadTexture(item.IconName) : null,
+                        });
+                    }
+
+                    break;
+                case "DefaultIndex":
+                    SelectedIndex = Builder.DefaultValue;
+                    break;
+            }
+
+            return;
         }
 
         base.ParseControlINIAttribute(iniFile, key, value);
+    }
+
+    private GameOption CreateOption()
+    {
+        var created = new GameOption(Builder.Build(), SelectedIndex);
+
+        // Keep the option and the drop-down in sync both ways; each only raises its event on a real change
+        SelectedIndexChanged += (s, e) => created.Value = SelectedIndex;
+        created.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(GameOption.Value) && SelectedIndex != created.Value)
+                SelectedIndex = created.Value;
+        };
+
+        return created;
     }
 
     public int Value
@@ -160,53 +134,18 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
         set => SelectedIndex = value;
     }
 
-    public void ApplyDisallowedSideIndex(bool[] disallowedArray)
-    {
-        // Drop-downs can't disallow sides
-    }
+    public void ApplyDisallowedSideIndex(bool[] disallowedArray) => Option.ApplyDisallowedSideIndex(disallowedArray);
 
-    public void ApplySpawnIniCode(IniFile spawnIni)
-    {
-        if (!AffectsSpawnIni || SelectedIndex < 0 || SelectedIndex >= Items.Count)
-            return;
+    public void ApplySpawnIniCode(IniFile spawnIni) => Option.ApplySpawnIniCode(spawnIni);
 
-        if (String.IsNullOrEmpty(spawnIniOption))
-        {
-            Logger.Log("GameLobbyDropDown.WriteSpawnIniCode: " + Name + " has no associated spawn INI option!");
-            return;
-        }
-
-        switch (dataWriteMode)
-        {
-            case DropDownDataWriteMode.BOOLEAN:
-                spawnIni.SetBooleanValue("Settings", spawnIniOption, SelectedIndex > 0);
-                break;
-            case DropDownDataWriteMode.INDEX:
-                spawnIni.SetIntValue("Settings", spawnIniOption, SelectedIndex);
-                break;
-            default:
-            case DropDownDataWriteMode.STRING:
-                spawnIni.SetStringValue("Settings", spawnIniOption, Items[SelectedIndex].Tag.ToString());
-                break;
-        }
-    }
-
-    public void ApplyMapCode(IniFile mapIni, GameMode gameMode)
-    {
-        if (!AffectsMapCode || SelectedIndex < 0 || SelectedIndex >= Items.Count) return;
-
-        string customIniPath;
-        customIniPath = Items[SelectedIndex].Tag.ToString();
-
-        MapCodeHelper.ApplyMapCode(mapIni, customIniPath, gameMode);
-    }
+    public void ApplyMapCode(IniFile mapIni, GameMode gameMode) => Option.ApplyMapCode(mapIni, gameMode);
 
     public override void OnLeftClick(InputEventArgs inputEventArgs)
     {
         // FIXME there's a discrepancy with how base XNAUI handles this
         // it doesn't set handled if changing the setting is not allowed
         inputEventArgs.Handled = true;
-            
+
         if (!AllowDropDown)
             return;
 

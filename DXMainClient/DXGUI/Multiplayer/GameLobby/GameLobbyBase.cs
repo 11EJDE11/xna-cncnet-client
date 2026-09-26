@@ -1,6 +1,7 @@
 using ClientCore;
 using ClientCore.Statistics;
 using ClientLogic.Launch;
+using ClientLogic.Options;
 using ClientLogic.Protocol;
 using ClientGUI;
 using DTAClient.Domain;
@@ -92,6 +93,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public List<GameLobbyCheckBox> CheckBoxes { get; } = new();
         public List<GameLobbyDropDown> DropDowns { get; } = new();
 
+        /// <summary>The lobby's game options in INI order; <see cref="CheckBoxes"/> and <see cref="DropDowns"/> show them.</summary>
+        public GameOptionSet GameOptions { get; } = new();
+
         public List<IGameSessionSetting> GetBroadcastableSettings()
         {
             var result = new List<IGameSessionSetting>();
@@ -104,8 +108,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected string GetPackedGameOptionValuesString() =>
             BroadcastedGameOptionValues.Encode(
-                CheckBoxes.Where(cb => cb.BroadcastToLobby).Select(cb => cb.Checked).ToList(),
-                DropDowns.Where(dd => dd.BroadcastToLobby).Select(dd => dd.SelectedIndex).ToList());
+                GameOptions.CheckBoxes.Where(o => o.BroadcastToLobby).Select(o => o.IsChecked).ToList(),
+                GameOptions.DropDowns.Where(o => o.BroadcastToLobby).Select(o => o.Value).ToList());
 
         protected DiscordHandler discordHandler;
 
@@ -362,6 +366,37 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             DropDowns.ForEach(dd => dd.SelectedIndexChanged += Dropdown_SelectedIndexChanged);
 
             InitializeGameOptionPresetUI();
+
+            if (Environment.GetEnvironmentVariable("CNCNET_CHECK_OPTION_CATALOG") == "1")
+                CheckGameOptionCatalog();
+        }
+
+        /// <summary>
+        /// Debugging aid: logs whether <see cref="GameOptionCatalog"/> reads the same game options from the layout
+        /// INI as the option controls registered.
+        /// </summary>
+        private void CheckGameOptionCatalog()
+        {
+            List<string> fromControls = GameOptions.All.Select(o => o.Definition.Describe()).ToList();
+            List<string> fromCatalog = GameOptionCatalog.Load(ConfigIni, Name).Select(d => d.Describe()).ToList();
+
+            if (fromControls.SequenceEqual(fromCatalog))
+            {
+                Logger.Log($"Game option catalog check for {Name}: OK, {fromControls.Count} options.");
+                return;
+            }
+
+            Logger.Log($"Game option catalog check for {Name}: DIFFERENT ({fromControls.Count} from controls, {fromCatalog.Count} from the catalog).");
+            for (int i = 0; i < Math.Max(fromControls.Count, fromCatalog.Count); i++)
+            {
+                string control = i < fromControls.Count ? fromControls[i] : "<none>";
+                string catalog = i < fromCatalog.Count ? fromCatalog[i] : "<none>";
+                if (control != catalog)
+                {
+                    Logger.Log($"  #{i} controls: {control}");
+                    Logger.Log($"  #{i} catalog:  {catalog}");
+                }
+            }
         }
 
         /// <summary>
@@ -1501,14 +1536,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         /// <returns>A list of disallowed side indexes.</returns>
         protected bool[] GetDisallowedSidesForGroup(bool forHumanPlayers) =>
-            GameLaunchBuilder.GetDisallowedSidesForGroup(SideCount, GameModeMap, CheckBoxes, forHumanPlayers);
+            GameLaunchBuilder.GetDisallowedSidesForGroup(SideCount, GameModeMap, GameOptions.CheckBoxes, forHumanPlayers);
 
         /// <summary>
         /// Gets a list of side indexes that are disallowed.
         /// </summary>
         /// <returns>A list of disallowed side indexes.</returns>
         protected bool[] GetDisallowedSides() =>
-            GameLaunchBuilder.GetDisallowedSides(SideCount, GameModeMap, CheckBoxes);
+            GameLaunchBuilder.GetDisallowedSides(SideCount, GameModeMap, GameOptions.CheckBoxes);
 
         /// <summary>
         /// Returns the number of teams with human players in them.
@@ -1677,8 +1712,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 RandomSeed = RandomSeed,
                 GameModeMap = GameModeMap,
                 IsMultiplayer = isMultiplayer,
-                CheckBoxes = CheckBoxes,
-                DropDowns = DropDowns,
+                CheckBoxes = GameOptions.CheckBoxes,
+                DropDowns = GameOptions.DropDowns,
                 MPColors = MPColors,
                 SideCount = SideCount,
                 RandomSelectors = RandomSelectors,
