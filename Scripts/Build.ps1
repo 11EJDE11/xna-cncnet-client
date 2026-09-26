@@ -22,6 +22,8 @@
   Do not clean Compiled folder.
 .PARAMETER NoMove
   Do not make folder structure.
+.PARAMETER Avalonia
+  Also publish the Avalonia front end preview (AvClientView) to Resources/BinariesAvalonia.
 .EXAMPLE
   Build.ps1
   Build.
@@ -41,7 +43,10 @@ param(
   $NoClean,
   [Parameter()]
   [switch]
-  $NoMove
+  $NoMove,
+  [Parameter()]
+  [switch]
+  $Avalonia
 )
 
 $Script:ConfigurationSuffix = 'Release'
@@ -132,3 +137,12 @@ function Script:Invoke-BuildProject {
 }
 
 Script:Invoke-BuildProject
+
+if ($Avalonia) {
+  $Private:AvaloniaProject = Join-Path $RepoRoot 'AvClientView' 'AvClientView.csproj'
+  $Private:AvaloniaOutput = Join-Path $CompiledRoot 'Resources' 'BinariesAvalonia'
+  & 'dotnet' publish $Private:AvaloniaProject "--configuration:WindowsDX$Script:ConfigurationSuffix" "--output:$Private:AvaloniaOutput" '-property:SatelliteResourceLanguages=en'
+  if ($LASTEXITCODE) {
+    throw "Build failed for AvClientView (exit code $LASTEXITCODE)"
+  }
+}
