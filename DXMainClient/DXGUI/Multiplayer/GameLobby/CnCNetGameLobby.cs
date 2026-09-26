@@ -72,7 +72,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 new IntCommandHandler("OR", (sender, options) => HandleOptionsRequest(sender, new PlayerOptionsRequestMessage(PackedPlayerOptions.Unpack(options)).Encode())),
                 new IntCommandHandler("R", (sender, readyState) => HandleReadyRequest(sender, new ReadyRequestMessage(readyState).Encode())),
                 new StringCommandHandler("PO", ApplyPlayerOptions),
-                new StringCommandHandler(PlayerExtraOptions.CNCNET_MESSAGE_KEY, ApplyPlayerExtraOptions),
+                new StringCommandHandler(PlayerExtraOptions.CNCNET_MESSAGE_KEY, HandlePlayerExtraOptions),
                 new StringCommandHandler("GO", ApplyGameOptions),
                 new StringCommandHandler("STARTV2", NonHostLaunchGameV2),
                 new StringCommandHandler("STARTV3", NonHostLaunchGameV3),
@@ -741,6 +741,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private void ApplyGameLobbySettings(string sender, string message)
         {
             if (IsHost)
+                return;
+
+            if (sender != hostName)
                 return;
 
             if (!GameRoomSettingsMessage.TryDecode(message, out GameRoomSettingsMessage settings))
@@ -1446,6 +1449,17 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             base.PlayerExtraOptions_OptionsChanged(sender, e);
             BroadcastPlayerExtraOptions();
+        }
+
+        /// <summary>
+        /// Handles player extra options received from the game host.
+        /// </summary>
+        private void HandlePlayerExtraOptions(string sender, string message)
+        {
+            if (sender != hostName)
+                return;
+
+            ApplyPlayerExtraOptions(sender, message);
         }
 
         protected override void BroadcastPlayerExtraOptions()
