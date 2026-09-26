@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using ClientCore;
+using ClientLogic.GameList;
 using ClientCore.Enums;
 using ClientCore.Extensions;
 
@@ -51,9 +52,16 @@ namespace DTAClient.DXGUI.Multiplayer
         /// </summary>
         private int baseLineHeight;
 
-        public List<GenericHostedGame> HostedGames = new();
+        /// <summary>The listed games; the list box shows them sorted and filtered.</summary>
+        public GameListState State { get; } = new();
 
-        public double GameLifetime { get; set; } = 35.0;
+        public List<GenericHostedGame> HostedGames => State.Games;
+
+        public double GameLifetime
+        {
+            get => State.GameLifetime;
+            set => State.GameLifetime = value;
+        }
 
         /// <summary>
         /// A predicate for setting a filter expression for displayed games.
@@ -151,27 +159,8 @@ namespace DTAClient.DXGUI.Multiplayer
             return GameMatchesFilter == null ? sortedGames : sortedGames.Where(hg => GameMatchesFilter(hg));
         }
 
-        private IEnumerable<GenericHostedGame> GetSortedGames()
-        {
-            var sortedGames =
-                HostedGames
-                    .OrderBy(hg => hg.Locked)
-                    .ThenBy(hg => string.Equals(hg.Game.InternalName, localGameIdentifier, StringComparison.InvariantCultureIgnoreCase))
-                    .ThenBy(hg => hg.GameVersion != ProgramConstants.GAME_VERSION)
-                    .ThenBy(hg => hg.Passworded);
-
-            switch ((SortDirection)UserINISettings.Instance.SortState.Value)
-            {
-                case SortDirection.Asc:
-                    sortedGames = sortedGames.ThenBy(hg => hg.RoomName);
-                    break;
-                case SortDirection.Desc:
-                    sortedGames = sortedGames.ThenByDescending(hg => hg.RoomName);
-                    break;
-            }
-
-            return sortedGames;
-        }
+        private IEnumerable<GenericHostedGame> GetSortedGames() => GameListState.Sort(HostedGames, localGameIdentifier,
+            ProgramConstants.GAME_VERSION, (SortDirection)UserINISettings.Instance.SortState.Value);
 
         /// <summary>
         /// Sorts and refreshes the game information in the game list box.
@@ -409,14 +398,7 @@ namespace DTAClient.DXGUI.Multiplayer
 
             if (timeSinceGameRefresh.TotalSeconds > GAME_REFRESH_RATE)
             {
-                for (int i = 0; i < HostedGames.Count; i++)
-                {
-                    if (DateTime.Now - HostedGames[i].LastRefreshTime > TimeSpan.FromSeconds(GameLifetime))
-                    {
-                        HostedGames.RemoveAt(i);
-                        i--;
-                    }
-                }
+                State.RemoveExpired(DateTime.Now);
 
                 Refresh();
 

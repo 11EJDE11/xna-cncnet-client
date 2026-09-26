@@ -1,6 +1,7 @@
 ﻿using ClientCore;
 using ClientLogic.Protocol;
 using ClientGUI;
+using ClientLogic.GameList;
 using DTAClient.Domain.Multiplayer;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using DTAClient.DXGUI.Generic;
@@ -435,73 +436,23 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         /// <returns>True if the game matches the filter criteria, false otherwise.</returns>
         private bool HostedGameMatches(GenericHostedGame hg)
         {
-            // friends list takes priority over other filters below
-            if (UserINISettings.Instance.ShowFriendGamesOnly)
-                return hg.Players.Any(cncnetUserData.IsFriend);
+            var settings = new GameListFilterSettings(
+                ShowFriendGamesOnly: UserINISettings.Instance.ShowFriendGamesOnly,
+                HideLockedGames: UserINISettings.Instance.HideLockedGames.Value,
+                HideIncompatibleGames: UserINISettings.Instance.HideIncompatibleGames.Value,
+                HidePasswordedGames: UserINISettings.Instance.HidePasswordedGames.Value,
+                MaxPlayerCount: UserINISettings.Instance.MaxPlayerCount.Value,
+                SearchText: tbGameSearch == null || tbGameSearch.Text == tbGameSearch.Suggestion ? null : tbGameSearch.Text,
+                OptionFilters: gameLobby.GetBroadcastableSettings()
+                    .Select(setting => UserINISettings.Instance.GetGameOptionFilterValue(setting.Name)).ToList());
 
-            if (UserINISettings.Instance.HideLockedGames.Value && hg.Locked)
-                return false;
-
-            if (UserINISettings.Instance.HideIncompatibleGames.Value && hg.Incompatible)
-                return false;
-
-            if (UserINISettings.Instance.HidePasswordedGames.Value && hg.Passworded)
-                return false;
-
-            if (hg.MaxPlayers > UserINISettings.Instance.MaxPlayerCount.Value)
-                return false;
-
-            if (hg is HostedCnCNetGame cncnetGame && !GameOptionsMatch(cncnetGame))
-                return false;
-
-            string textUpper = tbGameSearch?.Text?.ToUpperInvariant();
-
-            string translatedGameMode = string.IsNullOrEmpty(hg.GameMode)
-                ? "Unknown".L10N("Client:Main:Unknown")
-                : hg.GameMode.L10N($"INI:GameModes:{hg.GameMode}:UIName", TranslationNotificationLevel.Verbose);
-
-            string translatedMapName = string.IsNullOrEmpty(hg.Map)
-                ? "Unknown".L10N("Client:Main:Unknown") : mapLoader.TranslatedMapNames.ContainsKey(hg.Map)
-                ? mapLoader.TranslatedMapNames[hg.Map] : null;
-
-            return
-                string.IsNullOrWhiteSpace(tbGameSearch?.Text) ||
-                tbGameSearch.Text == tbGameSearch.Suggestion ||
-                hg.RoomName.ToUpperInvariant().Contains(textUpper) ||
-                hg.GameMode.ToUpperInvariant().Equals(textUpper, StringComparison.Ordinal) ||
-                translatedGameMode.ToUpperInvariant().Equals(textUpper, StringComparison.Ordinal) ||
-                hg.Map.ToUpperInvariant().Contains(textUpper) ||
-                (translatedMapName is not null && translatedMapName.ToUpperInvariant().Contains(textUpper)) ||
-                hg.Players.Any(pl => pl.ToUpperInvariant().Equals(textUpper, StringComparison.Ordinal));
-        }
-
-        /// <summary>
-        /// Checks if a game's broadcast options match the current filter criteria.
-        /// </summary>
-        /// <param name="game">The hosted game to check.</param>
-        /// <returns>True if the game matches the filter criteria, false otherwise.</returns>
-        private bool GameOptionsMatch(HostedCnCNetGame game)
-        {
-            if (game.BroadcastedGameOptionValues == null)
-                return true;
-
-            var broadcastableSettings = gameLobby.GetBroadcastableSettings();
-
-            for (int i = 0; i < broadcastableSettings.Count; i++)
-            {
-                if (i >= game.BroadcastedGameOptionValues.Length)
-                    break;
-
-                int? filterValue = UserINISettings.Instance.GetGameOptionFilterValue(broadcastableSettings[i].Name);
-
-                if (filterValue == null)
-                    continue;
-
-                if (game.BroadcastedGameOptionValues[i] != filterValue.Value)
-                    return false;
-            }
-
-            return true;
+            return GameListFilter.Matches(hg, settings, cncnetUserData.IsFriend,
+                gameMode => string.IsNullOrEmpty(gameMode)
+                    ? "Unknown".L10N("Client:Main:Unknown")
+                    : gameMode.L10N($"INI:GameModes:{gameMode}:UIName", TranslationNotificationLevel.Verbose),
+                map => string.IsNullOrEmpty(map)
+                    ? "Unknown".L10N("Client:Main:Unknown") : mapLoader.TranslatedMapNames.ContainsKey(map)
+                    ? mapLoader.TranslatedMapNames[map] : null);
         }
 
         private void OnCnCNetGameCountUpdated(object sender, PlayerCountEventArgs e) => UpdateOnlineCount(e.PlayerCount);
@@ -1711,11 +1662,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
                 if (isClosed)
                 {
-                    int index = lbGameList.HostedGames.FindIndex(hg => hg.HostName == e.UserName);
-
-                    if (index > -1)
+                    if (lbGameList.State.RemoveByHost(e.UserName))
                     {
-                        lbGameList.RemoveGame(index);
+                        lbGameList.Refresh();
 
                         // dismiss any outstanding invitations that are no longer valid
                         DismissInvalidInvitations();
