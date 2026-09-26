@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\ClientCore\ClientCore.csproj" />
+    <ProjectReference Include="..\ClientLogic\ClientLogic.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Rampastring.XNAUI\Rampastring.XNAUI.csproj" />

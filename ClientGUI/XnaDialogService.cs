@@ -1,12 +1,10 @@
 using System;
 
-using ClientGUI;
-
 using ClientLogic.UI;
 
 using Rampastring.XNAUI;
 
-namespace DTAClient.DXGUI
+namespace ClientGUI
 {
     /// <summary>
     /// Shows message boxes with <see cref="XNAMessageBox"/>.
