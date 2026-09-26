@@ -5,6 +5,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Keeps this assembly's polyfills hidden from the client assemblies, which see its internals. -->
     <PolyUseEmbeddedAttribute>true</PolyUseEmbeddedAttribute>
+    <!-- The client assemblies see this assembly's internals, so a second GitVersionInformation would clash with theirs. -->
+    <GenerateGitVersionInformation>false</GenerateGitVersionInformation>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="lzo.net" />
