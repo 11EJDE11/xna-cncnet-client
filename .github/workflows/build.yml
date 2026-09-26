@@ -24,6 +24,10 @@ jobs:
       run: ./Scripts/Build.ps1
       shell: pwsh
 
+    - name: Test
+      run: dotnet test ClientLogic.Tests/ClientLogic.Tests.csproj -c WindowsDXRelease
+      shell: pwsh
+
     - uses: actions/upload-artifact@v4
       name: Upload Artifacts
       with:
