@@ -475,7 +475,7 @@ namespace DTAClient.DXGUI.Multiplayer
                     continue;
                 }
 
-                playerLabel.RemapColor = sgPlayer.ColorIndex > -1 ? MPColors[sgPlayer.ColorIndex].XnaColor
+                playerLabel.RemapColor = sgPlayer.ColorIndex > -1 ? MPColors[sgPlayer.ColorIndex].ToXnaColor()
                     : Color.White;
                 playerLabel.Text = pInfo.Ready ? sgPlayer.Name : sgPlayer.Name + " " + "(Not Ready)".L10N("Client:Main:NotReadySuffix");
             }

@@ -11,24 +11,21 @@ using System.Text.Json.Serialization;
 using ClientCore;
 using ClientCore.Extensions;
 
-using DTAClient.DXGUI.Multiplayer.GameLobby;
-
 using Rampastring.Tools;
 
 using SixLabors.ImageSharp;
 
-using Point = Microsoft.Xna.Framework.Point;
 
 namespace DTAClient.Domain.Multiplayer
 {
     public struct ExtraMapPreviewTexture
     {
         public string TextureName;
-        public Point Point;
+        public MapPoint Point;
         public int Level;
         public bool Toggleable;
 
-        public ExtraMapPreviewTexture(string textureName, Point point, int level, bool toggleable)
+        public ExtraMapPreviewTexture(string textureName, MapPoint point, int level, bool toggleable)
         {
             TextureName = textureName;
             Point = point;
@@ -187,7 +184,7 @@ namespace DTAClient.Domain.Multiplayer
         /// The pixel coordinates of the map's player starting locations.
         /// </summary>
         [JsonInclude]
-        public List<Point> startingLocations;
+        public List<MapPoint> startingLocations;
 
         [JsonInclude]
         public List<TeamStartMappingPreset> TeamStartMappingPresets = new List<TeamStartMappingPreset>();
@@ -303,7 +300,7 @@ namespace DTAClient.Domain.Multiplayer
                     if (parts.Length > 4)
                         toggleable = Conversions.BooleanFromString(parts[4], false);
 
-                    extraTextures.Add(new ExtraMapPreviewTexture(parts[0], new Point(x, y), level, toggleable));
+                    extraTextures.Add(new ExtraMapPreviewTexture(parts[0], new MapPoint(x, y), level, toggleable));
 
                     i++;
                 }
@@ -395,11 +392,11 @@ namespace DTAClient.Domain.Multiplayer
             }
         }
 
-        public List<Point> GetStartingLocationPreviewCoords(Point previewSize)
+        public List<MapPoint> GetStartingLocationPreviewCoords(MapPoint previewSize)
         {
             if (startingLocations == null)
             {
-                startingLocations = new List<Point>();
+                startingLocations = new List<MapPoint>();
 
                 foreach (string waypoint in waypoints)
                 {
@@ -413,7 +410,7 @@ namespace DTAClient.Domain.Multiplayer
             return startingLocations;
         }
 
-        public Point MapPointToMapPreviewPoint(Point mapPoint, Point previewSize, int level)
+        public MapPoint MapPointToMapPreviewPoint(MapPoint mapPoint, MapPoint previewSize, int level)
         {
             if (MainClientConstants.USE_ISOMETRIC_CELLS)
                 return GetIsoTilePixelCoord(mapPoint.X, mapPoint.Y, actualSize, localSize, previewSize, level);
@@ -756,12 +753,12 @@ namespace DTAClient.Domain.Multiplayer
             }
         }
 
-        private static Point GetTDRAWaypointCoords(string waypoint, int x, int y, int width, int height, Point previewSizePoint)
+        private static MapPoint GetTDRAWaypointCoords(string waypoint, int x, int y, int width, int height, MapPoint previewSizePoint)
         {
             int waypointCoordsInt = Conversions.IntFromString(waypoint, -1);
 
             if (waypointCoordsInt < 0)
-                return new Point(0, 0);
+                return new MapPoint(0, 0);
 
             // https://modenc.renegadeprojects.com/Waypoints
             int waypointX = waypointCoordsInt % MainClientConstants.TDRA_WAYPOINT_COEFFICIENT;
@@ -770,7 +767,7 @@ namespace DTAClient.Domain.Multiplayer
             return GetTDRACellPixelCoord(waypointX, waypointY, x, y, width, height, previewSizePoint);
         }
 
-        private static Point GetTDRACellPixelCoord(int cellX, int cellY, int x, int y, int width, int height, Point previewSizePoint)
+        private static MapPoint GetTDRACellPixelCoord(int cellX, int cellY, int x, int y, int width, int height, MapPoint previewSizePoint)
         {
             int rx = cellX - x;
             int ry = cellY - y;
@@ -781,15 +778,15 @@ namespace DTAClient.Domain.Multiplayer
             int pixelX = (int)(ratioX * previewSizePoint.X);
             int pixelY = (int)(ratioY * previewSizePoint.Y);
 
-            return new Point(pixelX, pixelY);
+            return new MapPoint(pixelX, pixelY);
         }
 
         /// <summary>
         /// Converts a waypoint's coordinate string into pixel coordinates on the preview image.
         /// </summary>
         /// <returns>The waypoint's location on the map preview as a point.</returns>
-        private static Point GetIsometricWaypointCoords(string waypoint, string[] actualSizeValues, string[] localSizeValues,
-            Point previewSizePoint)
+        private static MapPoint GetIsometricWaypointCoords(string waypoint, string[] actualSizeValues, string[] localSizeValues,
+            MapPoint previewSizePoint)
         {
             string[] parts = waypoint.Split(',');
 
@@ -806,7 +803,7 @@ namespace DTAClient.Domain.Multiplayer
             return GetIsoTilePixelCoord(isoTileX, isoTileY, actualSizeValues, localSizeValues, previewSizePoint, level);
         }
 
-        private static Point GetIsoTilePixelCoord(int isoTileX, int isoTileY, string[] actualSizeValues, string[] localSizeValues, Point previewSizePoint, int level)
+        private static MapPoint GetIsoTilePixelCoord(int isoTileX, int isoTileY, string[] actualSizeValues, string[] localSizeValues, MapPoint previewSizePoint, int level)
         {
             int rx = isoTileX - isoTileY + Convert.ToInt32(actualSizeValues[2], CultureInfo.InvariantCulture) - 1;
             int ry = isoTileX + isoTileY - Convert.ToInt32(actualSizeValues[2], CultureInfo.InvariantCulture) - 1;
@@ -827,7 +824,7 @@ namespace DTAClient.Domain.Multiplayer
             int pixelX = Convert.ToInt32(ratioX * previewSizePoint.X);
             int pixelY = Convert.ToInt32(ratioY * previewSizePoint.Y);
 
-            return new Point(pixelX, pixelY);
+            return new MapPoint(pixelX, pixelY);
         }
 
         /// <summary>

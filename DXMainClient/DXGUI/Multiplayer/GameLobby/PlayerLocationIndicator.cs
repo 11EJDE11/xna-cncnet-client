@@ -184,7 +184,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             {
                 Color textColor = Color.White;
                 if (pInfo.ColorId > 0)
-                    textColor = mpColors[pInfo.ColorId - 1].XnaColor;
+                    textColor = mpColors[pInfo.ColorId - 1].ToXnaColor();
 
                 if (backgroundAlpha > 0.0)
                 {
@@ -229,7 +229,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             Color hoverRemapColor = HoverRemapColor;
             if (Players.Count == 1 && Players[0].ColorId > 0)
             {
-                remapColor = mpColors[Players[0].ColorId - 1].XnaColor;
+                remapColor = mpColors[Players[0].ColorId - 1].ToXnaColor();
                 hoverRemapColor = remapColor;
             }
 

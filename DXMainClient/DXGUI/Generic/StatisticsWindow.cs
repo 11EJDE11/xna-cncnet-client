@@ -2,6 +2,7 @@
 using ClientCore.Statistics;
 using ClientGUI;
 using DTAClient.Domain.Multiplayer;
+using DTAClient.DXGUI.Multiplayer;
 using ClientCore.Extensions;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -504,7 +505,7 @@ namespace DTAClient.DXGUI.Generic
                 List<XNAListBoxItem> items = new List<XNAListBoxItem>();
 
                 if (ps.Color > -1 && ps.Color < mpColors.Count)
-                    textColor = mpColors[ps.Color].XnaColor;
+                    textColor = mpColors[ps.Color].ToXnaColor();
 
                 if (ps.IsAI)
                 {

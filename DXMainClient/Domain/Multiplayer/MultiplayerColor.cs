@@ -1,6 +1,5 @@
 ﻿using ClientCore;
 using ClientCore.Extensions;
-using Microsoft.Xna.Framework;
 using Rampastring.Tools;
 using System;
 using System.Collections.Generic;
@@ -14,7 +13,21 @@ namespace DTAClient.Domain.Multiplayer
     {
         public int GameColorIndex { get; private set; }
         public string Name { get; private set; }
-        public Color XnaColor { get; private set; }
+
+        /// <summary>
+        /// The red component of the color, 0-255. Values above 255 in the INI are clamped.
+        /// </summary>
+        public int R { get; private set; }
+
+        /// <summary>
+        /// The green component of the color, 0-255. Values above 255 in the INI are clamped.
+        /// </summary>
+        public int G { get; private set; }
+
+        /// <summary>
+        /// The blue component of the color, 0-255. Values above 255 in the INI are clamped.
+        /// </summary>
+        public int B { get; private set; }
 
         private static List<MultiplayerColor> colorList;
 
@@ -29,9 +42,9 @@ namespace DTAClient.Domain.Multiplayer
             return new MultiplayerColor()
             {
                 Name = name,
-                XnaColor = new Color(Math.Min(255, Int32.Parse(data[0])),
-                Math.Min(255, Int32.Parse(data[1])),
-                Math.Min(255, Int32.Parse(data[2])), 255),
+                R = Math.Min(255, Int32.Parse(data[0])),
+                G = Math.Min(255, Int32.Parse(data[1])),
+                B = Math.Min(255, Int32.Parse(data[2])),
                 GameColorIndex = Int32.Parse(data[3])
             };
         }

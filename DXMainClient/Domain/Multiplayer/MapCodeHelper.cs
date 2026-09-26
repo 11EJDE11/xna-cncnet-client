@@ -7,11 +7,9 @@ using ClientCore;
 using ClientCore.I18N;
 using ClientCore.Extensions;
 
-using DTAClient.Domain.Multiplayer;
-
 using Rampastring.Tools;
 
-namespace DTAClient.DXGUI.Multiplayer.GameLobby
+namespace DTAClient.Domain.Multiplayer
 {
     public static class MapCodeHelper
     {

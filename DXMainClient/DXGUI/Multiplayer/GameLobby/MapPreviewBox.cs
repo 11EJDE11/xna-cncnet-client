@@ -484,7 +484,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             textureRectangle = new Rectangle(texturePositionX, texturePositionY,
                 textureWidth, textureHeight);
 
-            List<Point> startingLocations = GameModeMap.Map.GetStartingLocationPreviewCoords(new Point(mapPreviewTexture.Width, mapPreviewTexture.Height));
+            List<MapPoint> startingLocations = GameModeMap.Map.GetStartingLocationPreviewCoords(new MapPoint(mapPreviewTexture.Width, mapPreviewTexture.Height));
 
             // Disable all indicators to be able updated after changing
             // locations when 2 or more of them have same location (RA1 specifics)
@@ -519,11 +519,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 // LoadTexture makes use of a texture cache 
                 // so we don't need to cache the textures manually
                 Texture2D extraTexture = AssetLoader.LoadTexture(mapExtraTexture.TextureName);
-                Point location = PreviewTexturePointToControlAreaPoint(
-                    GameModeMap.Map.MapPointToMapPreviewPoint(mapExtraTexture.Point,
-                    new Point(mapPreviewTexture.Width - (extraTexture.Width / 2),
-                              mapPreviewTexture.Height - (extraTexture.Height / 2)), mapExtraTexture.Level),
-                              ratio);
+                MapPoint previewPoint = GameModeMap.Map.MapPointToMapPreviewPoint(mapExtraTexture.Point,
+                    new MapPoint(mapPreviewTexture.Width - (extraTexture.Width / 2),
+                                 mapPreviewTexture.Height - (extraTexture.Height / 2)), mapExtraTexture.Level);
+                Point location = PreviewTexturePointToControlAreaPoint(new Point(previewPoint.X, previewPoint.Y), ratio);
 
                 extraTextures.Add(new MapPreviewBoxExtraMapPreviewTexture(extraTexture, location, mapExtraTexture.Toggleable));
             }
@@ -613,7 +612,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 XNAContextMenuItem item = new XNAContextMenuItem()
                 {
                     Text = id + ". " + text,
-                    TextColor = pInfo.ColorId > 0 ? mpColors[pInfo.ColorId - 1].XnaColor : Color.White,
+                    TextColor = pInfo.ColorId > 0 ? mpColors[pInfo.ColorId - 1].ToXnaColor() : Color.White,
                     SelectAction = () => ContextMenu_OptionSelected(index),
                 };
                 contextMenu.AddItem(item);

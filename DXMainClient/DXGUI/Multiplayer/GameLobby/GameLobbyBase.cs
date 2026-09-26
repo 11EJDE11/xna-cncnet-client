@@ -1140,7 +1140,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     ddPlayerName.Y, colorWidth, DROP_DOWN_HEIGHT);
                 ddPlayerColor.AddItem("Random".L10N("Client:Main:RandomColor"), AssetLoader.GetColorFromString(randomColor));
                 foreach (MultiplayerColor mpColor in MPColors)
-                    ddPlayerColor.AddItem(mpColor.Name, mpColor.XnaColor);
+                    ddPlayerColor.AddItem(mpColor.Name, mpColor.ToXnaColor());
                 ddPlayerColor.AllowDropDown = false;
                 ddPlayerColor.SelectedIndexChanged += CopyPlayerDataFromUI;
                 ddPlayerColor.Tag = false;
