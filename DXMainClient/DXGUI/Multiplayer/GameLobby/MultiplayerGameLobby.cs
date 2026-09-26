@@ -34,6 +34,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             : base(windowManager, iniName, mapLoader, true, discordHandler, random)
         {
             TopBar = topBar;
+            IsHost = false;
             this.random = random;
 
             chatBoxCommands = new List<ChatBoxCommand>
@@ -66,19 +67,26 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private Random random;
 
-        protected bool IsHost = false;
+        protected bool IsHost
+        {
+            get => LobbyState.IsHost;
+            set => LobbyState.IsHost = value;
+        }
 
         /// <summary>Sends this lobby's messages over its network.</summary>
-        protected ILobbySession Session { get; set; }
+        protected ILobbySession Session
+        {
+            get => LobbyState.Session;
+            set => LobbyState.Session = value;
+        }
 
-        private bool locked = false;
         protected bool Locked
         {
-            get => locked;
+            get => LobbyState.Locked;
             set
             {
-                bool oldLocked = locked;
-                locked = value;
+                bool oldLocked = LobbyState.Locked;
+                LobbyState.Locked = value;
                 if (oldLocked != value)
                 {
                     RefreshPlayerSlots();
@@ -643,13 +651,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// <param name="dieType">The parameters given for the command by the user.</param>
         private void RollDiceCommand(string dieType)
         {
-            if (!DiceRoll.TryParse(dieType, out int dieCount, out int dieSides, out string error))
+            int[] results = LobbyState.RollDice(dieType, random, out int dieSides, out string error);
+            if (results == null)
             {
                 AddNotice(error);
                 return;
             }
 
-            BroadcastDiceRoll(dieSides, DiceRoll.Roll(dieCount, dieSides, random));
+            OnLocalDiceRoll(dieSides, results);
         }
 
         /// <summary>
@@ -671,11 +680,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         /// <summary>
-        /// Override in derived classes to broadcast the results of rolling dice to other players.
+        /// Called after the local player rolled dice and the result was sent to the other players.
         /// </summary>
         /// <param name="dieSides">The number of sides in the dice.</param>
         /// <param name="results">The results of the dice roll.</param>
-        protected abstract void BroadcastDiceRoll(int dieSides, int[] results);
+        protected virtual void OnLocalDiceRoll(int dieSides, int[] results)
+        {
+        }
 
         /// <summary>
         /// Parses and lists the results of rolling dice.
@@ -866,9 +877,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            IReadOnlyList<LaunchBlocker> blockers = LaunchValidation.Validate(new LaunchCheck(
-                Locked, GetTeamMappingsError(), Players, AIPlayers, ProgramConstants.PLAYERNAME, SlotIndices.SpectatorSide,
-                GameModeMap.EnforceMinPlayers, GameModeMap.MinPlayers, GameModeMap.EnforceMaxPlayers, GameModeMap.MaxPlayers));
+            IReadOnlyList<LaunchBlocker> blockers = LobbyState.CheckLaunch(ProgramConstants.PLAYERNAME, SlotIndices.SpectatorSide);
 
             if (blockers.Count > 0)
             {

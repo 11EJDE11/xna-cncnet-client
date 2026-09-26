@@ -124,18 +124,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected GameModeMapFilter gameModeMapFilter;
 
-        private GameModeMap _gameModeMap;
-
         /// <summary>
         /// The currently selected game mode.
         /// </summary>
         protected GameModeMap GameModeMap
         {
-            get => _gameModeMap;
+            get => LobbyState.GameModeMap;
             set
             {
-                var oldGameModeMap = _gameModeMap;
-                _gameModeMap = value;
+                var oldGameModeMap = LobbyState.GameModeMap;
+                LobbyState.GameModeMap = value;
                 if (value != null && oldGameModeMap != value)
                     UpdateDiscordPresence();
             }
@@ -189,6 +187,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private PlayerSlotsState slots;
         private IDialogService dialogs;
+        private GameLobbyState lobbyState;
+
+        /// <summary>The lobby's state and rules; the lobby shows it and forwards input to it.</summary>
+        protected GameLobbyState LobbyState => lobbyState ??= new GameLobbyState(GameOptions, Slots, ExtraOptions);
 
         /// <summary>Message boxes.</summary>
         protected IDialogService Dialogs => dialogs ??= new XnaDialogService(WindowManager);
@@ -847,20 +849,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             mapContextMenu.Open(GetCursorPoint());
         }
 
-        private bool CanDeleteMap()
-        {
-            return Map != null && !Map.Official && !isMultiplayer;
-        }
+        private bool CanDeleteMap() => LobbyState.CanDeleteMap(isMultiplayer);
 
-        private void DeleteMapConfirmation()
-        {
-            if (Map == null)
-                return;
-
-            Dialogs.Confirm("Delete Confirmation".L10N("Client:Main:DeleteMapConfirmTitle"),
-                string.Format("Are you sure you wish to delete the custom map {0}?".L10N("Client:Main:DeleteMapConfirmText"), Map.Name),
-                DeleteSelectedMap);
-        }
+        private void DeleteMapConfirmation() => LobbyState.DeleteMap(Dialogs, DeleteSelectedMap);
 
         private void ShowInFolder() => Map?.OpenContainingFolder();
 
@@ -1771,14 +1762,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// Sets the ready status of all non-host human players to false.
         /// </summary>
         /// <param name="resetAutoReady">If set, players with autoready enabled are reset as well.</param>
-        protected void ClearReadyStatuses(bool resetAutoReady = false)
-        {
-            for (int i = 1; i < Players.Count; i++)
-            {
-                if (resetAutoReady || !Players[i].AutoReady || Players[i].IsInGame)
-                    Players[i].Ready = false;
-            }
-        }
+        protected void ClearReadyStatuses(bool resetAutoReady = false) => LobbyState.ClearReadyStatuses(resetAutoReady);
 
         private bool CanRightClickMultiplayer(XNADropDownItem selectedPlayer)
         {

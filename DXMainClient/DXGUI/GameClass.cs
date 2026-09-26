@@ -27,6 +27,7 @@ using Rampastring.XNAUI.XNAControls;
 using MainMenu = DTAClient.DXGUI.Generic.MainMenu;
 using System.Threading.Tasks;
 using ClientCore.Display;
+using ClientLogic;
 using ClientLogic.UI;
 
 
@@ -287,9 +288,9 @@ namespace DTAClient.DXGUI
                             })
                             .AddSingleton<DiscordHandler>()
                             .AddSingleton<PrivateMessageHandler>()
-                            .AddSingleton<MapLoader>()
                             .AddSingleton<Random>(GetRandom())
-                            .AddSingleton<DirectDrawWrapperManager>();
+                            .AddSingleton<DirectDrawWrapperManager>()
+                            .AddClientLogic();
 
                         // singleton xna controls - same instance on each request
                         services

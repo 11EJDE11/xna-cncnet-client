@@ -11,6 +11,7 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="lzo.net" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="OpenMcdf" />
     <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="System.Text.Json" />

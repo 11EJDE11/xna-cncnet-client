@@ -1082,11 +1082,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             SendMessageToHost(PING);
         }
 
-        protected override void BroadcastDiceRoll(int dieSides, int[] results)
-        {
-            Session.SendDiceRoll(dieSides, results);
-        }
-
         private void Host_HandleDiceRoll(string sender, string result)
         {
             BroadcastMessage($"{DICE_ROLL_COMMAND} {sender}{ProgramConstants.LAN_DATA_SEPARATOR}{result}");

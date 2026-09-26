@@ -64,6 +64,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             this.random = random;
             this.uiDispatcher = uiDispatcher;
             Session = new CnCNetLobbySession(() => channel, () => chatColor);
+            LobbyState.RoomSettings = roomSettings;
             _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler, uiDispatcher);
             tunnelSession = new TunnelSession(tunnelHandler, _negotiator, this, this, this);
             tunnelSession.Start((TunnelMode)UserINISettings.Instance.TunnelMode.Value);
@@ -1945,9 +1946,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             AddNotice(string.Format("Player {0} has different files compared to the game host. Either {0} or the game host could be cheating.".L10N("Client:Main:DifferentFileCheating"), cheaterName), Color.Red);
         }
 
-        protected override void BroadcastDiceRoll(int dieSides, int[] results)
+        protected override void OnLocalDiceRoll(int dieSides, int[] results)
         {
-            Session.SendDiceRoll(dieSides, results);
+            // Other players' clients print CTCP rolls; the channel doesn't echo them back to the sender
             PrintDiceRollResult(ProgramConstants.PLAYERNAME, dieSides, results);
         }
 
@@ -1955,7 +1956,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void HandleLockGameButtonClick()
         {
-            switch (RoomLock.OnLockButton(Locked, Players.Count, roomSettings.PlayerLimit))
+            switch (LobbyState.LockButtonAction(roomSettings.PlayerLimit))
             {
                 case LockButtonAction.Lock:
                     AddNotice("You've locked the game room.".L10N("Client:Main:RoomLockedByYou"));
