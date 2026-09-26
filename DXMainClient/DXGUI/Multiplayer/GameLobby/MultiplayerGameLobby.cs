@@ -29,9 +29,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
     /// </summary>
     public abstract class MultiplayerGameLobby : GameLobbyBase, ISwitchable, IMapSharingLobby, INoticeSink
     {
-        private const int MAX_DICE = 10;
-        private const int MAX_DIE_SIDES = 100;
-
         public MultiplayerGameLobby(WindowManager windowManager, string iniName,
             TopBar topBar, MapLoader mapLoader, DiscordHandler discordHandler, PrivateMessagingWindow pmWindow, Random random)
             : base(windowManager, iniName, mapLoader, true, discordHandler, random)
@@ -389,47 +386,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (tbChatInput.Text.StartsWith("/"))
             {
                 string text = tbChatInput.Text;
-                string command;
-                string parameters;
-
-                int spaceIndex = text.IndexOf(' ');
-
-                if (spaceIndex == -1)
-                {
-                    command = text.Substring(1).ToUpper();
-                    parameters = string.Empty;
-                }
-                else
-                {
-                    command = text.Substring(1, spaceIndex - 1);
-                    parameters = text.Substring(spaceIndex + 1);
-                }
-
                 tbChatInput.Text = string.Empty;
 
-                foreach (var chatBoxCommand in chatBoxCommands)
-                {
-                    if (command.ToUpper() == chatBoxCommand.Command)
-                    {
-                        if (!IsHost && chatBoxCommand.HostOnly)
-                        {
-                            AddNotice(string.Format("/{0} is for game hosts only.".L10N("Client:Main:ChatboxCommandHostOnly"), chatBoxCommand.Command));
-                            return;
-                        }
+                ChatCommandResult result = ChatBoxCommands.Execute(text, chatBoxCommands, IsHost);
+                if (result.Outcome == ChatCommandOutcome.HostOnly)
+                    AddNotice(result.Notice);
+                else if (result.Outcome == ChatCommandOutcome.Unknown)
+                    XNAMessageBox.Show(WindowManager, ChatBoxCommands.HelpTitle, ChatBoxCommands.HelpText(chatBoxCommands));
 
-                        chatBoxCommand.Action(parameters);
-                        return;
-                    }
-                }
-
-                StringBuilder sb = new StringBuilder("To use a command, start your message with /<command>. Possible chat box commands:".L10N("Client:Main:ChatboxCommandTipText") + " ");
-                foreach (var chatBoxCommand in chatBoxCommands)
-                {
-                    sb.Append(Environment.NewLine);
-                    sb.Append(Environment.NewLine);
-                    sb.Append($"{chatBoxCommand.Command}: {chatBoxCommand.Description}");
-                }
-                XNAMessageBox.Show(WindowManager, "Chat Box Command Help".L10N("Client:Main:ChatboxCommandTipTitle"), sb.ToString());
                 return;
             }
 
@@ -676,41 +640,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// <param name="dieType">The parameters given for the command by the user.</param>
         private void RollDiceCommand(string dieType)
         {
-            int dieSides = 6;
-            int dieCount = 1;
-
-            if (!string.IsNullOrEmpty(dieType))
+            if (!DiceRoll.TryParse(dieType, out int dieCount, out int dieSides, out string error))
             {
-                string[] parts = dieType.Split('d');
-                if (parts.Length == 2)
-                {
-                    if (!int.TryParse(parts[0], out dieCount) || !int.TryParse(parts[1], out dieSides))
-                    {
-                        AddNotice("Invalid dice specified. Expected format: /roll <die count>d<die sides>".L10N("Client:Main:ChatboxCommandRollInvalidAndSyntax"));
-                        return;
-                    }
-                }
-            }
-
-            if (dieCount > MAX_DICE || dieCount < 1)
-            {
-                AddNotice("You can only have between 1 to 10 dice at once.".L10N("Client:Main:ChatboxCommandRollInvalid2"));
+                AddNotice(error);
                 return;
             }
 
-            if (dieSides > MAX_DIE_SIDES || dieSides < 2)
-            {
-                AddNotice("You can only have between 2 and 100 sides in a die.".L10N("Client:Main:ChatboxCommandRollInvalid3"));
-                return;
-            }
-
-            int[] results = new int[dieCount];
-            for (int i = 0; i < dieCount; i++)
-            {
-                results[i] = random.Next(1, dieSides + 1);
-            }
-
-            BroadcastDiceRoll(dieSides, results);
+            BroadcastDiceRoll(dieSides, DiceRoll.Roll(dieCount, dieSides, random));
         }
 
         /// <summary>
@@ -750,27 +686,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </example>
         protected void HandleDiceRollResult(string senderName, string result)
         {
-            if (string.IsNullOrEmpty(result))
-                return;
-
-            string[] parts = result.Split(',');
-            if (parts.Length < 2 || parts.Length > MAX_DICE + 1)
-                return;
-
-            int[] intArray = Array.ConvertAll(parts, (s) => { return Conversions.IntFromString(s, -1); });
-            int dieSides = intArray[0];
-            if (dieSides < 1 || dieSides > MAX_DIE_SIDES)
-                return;
-            int[] results = new int[intArray.Length - 1];
-            Array.ConstrainedCopy(intArray, 1, results, 0, results.Length);
-
-            for (int i = 1; i < intArray.Length; i++)
-            {
-                if (intArray[i] < 1 || intArray[i] > dieSides)
-                    return;
-            }
-
-            PrintDiceRollResult(senderName, dieSides, results);
+            if (DiceRoll.TryParseResult(result, out int dieSides, out int[] results))
+                PrintDiceRollResult(senderName, dieSides, results);
         }
 
         /// <summary>
@@ -781,9 +698,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// <param name="results">The results of the roll.</param>
         protected void PrintDiceRollResult(string senderName, int dieSides, int[] results)
         {
-            AddNotice(String.Format("{0} rolled {1}d{2} and got {3}".L10N("Client:Main:PrintDiceRollResult"),
-                senderName, results.Length, dieSides, string.Join(", ", results)
-            ));
+            AddNotice(DiceRoll.FormatResult(senderName, dieSides, results));
         }
 
         protected abstract void SendChatMessage(string message);
@@ -948,138 +863,54 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            if (!Locked)
+            IReadOnlyList<LaunchBlocker> blockers = LaunchValidation.Validate(new LaunchCheck(
+                Locked, GetTeamMappingsError(), Players, AIPlayers, ProgramConstants.PLAYERNAME, SlotIndices.SpectatorSide,
+                GameModeMap.EnforceMinPlayers, GameModeMap.MinPlayers, GameModeMap.EnforceMaxPlayers, GameModeMap.MaxPlayers));
+
+            if (blockers.Count > 0)
             {
-                LockGameNotification();
+                ShowLaunchBlocker(blockers[0]);
                 return;
-            }
-
-            var teamMappingsError = GetTeamMappingsError();
-            if (!string.IsNullOrEmpty(teamMappingsError))
-            {
-                AddNotice(teamMappingsError);
-                return;
-            }
-
-            List<int> occupiedColorIds = new List<int>();
-            foreach (PlayerInfo player in Players)
-            {
-                if (occupiedColorIds.Contains(player.ColorId) && player.ColorId > 0)
-                {
-                    SharedColorsNotification();
-                    return;
-                }
-
-                occupiedColorIds.Add(player.ColorId);
-            }
-
-            if (AIPlayers.Count(pInfo => pInfo.SideId == SlotIndices.SpectatorSide) > 0)
-            {
-                AISpectatorsNotification();
-                return;
-            }
-
-            if (GameModeMap.EnforceMaxPlayers)
-            {
-                foreach (PlayerInfo pInfo in Players)
-                {
-                    if (pInfo.StartingLocation == 0)
-                        continue;
-
-                    if (Players.Concat(AIPlayers).ToList().Find(
-                        p => p.StartingLocation == pInfo.StartingLocation &&
-                        p.Name != pInfo.Name) != null)
-                    {
-                        SharedStartingLocationNotification();
-                        return;
-                    }
-                }
-
-                for (int aiId = 0; aiId < AIPlayers.Count; aiId++)
-                {
-                    int startingLocation = AIPlayers[aiId].StartingLocation;
-
-                    if (startingLocation == 0)
-                        continue;
-
-                    int index = AIPlayers.FindIndex(aip => aip.StartingLocation == startingLocation);
-
-                    if (index > -1 && index != aiId)
-                    {
-                        SharedStartingLocationNotification();
-                        return;
-                    }
-                }
-            }
-
-            int totalPlayerCount = Players.Count(p => p.SideId < SlotIndices.SpectatorSide)
-                + AIPlayers.Count;
-
-            if (GameModeMap.EnforceMinPlayers)
-            {
-                int minPlayers = GameModeMap.MinPlayers;
-                if (totalPlayerCount < minPlayers)
-                {
-                    InsufficientPlayersNotification();
-                    return;
-                }
-            }
-
-            if (GameModeMap.EnforceMaxPlayers && totalPlayerCount > GameModeMap.MaxPlayers)
-            {
-                TooManyPlayersNotification();
-                return;
-            }
-
-            int iId = 0;
-            foreach (PlayerInfo player in Players)
-            {
-                iId++;
-
-                if (player.Name == ProgramConstants.PLAYERNAME)
-                    continue;
-
-                if (!player.HashReceived)
-                {
-                    NotVerifiedNotification(iId - 1);
-                    return;
-                }
-
-
-                if (player.IsInGame)
-                {
-                    StillInGameNotification(iId - 1);
-                    return;
-                }
-                /*
-                if (DisableSpectatorReadyChecking)
-                {
-                    // Only account ready status if player is not a spectator
-                    if (!player.Ready && !IsPlayerSpectator(player))
-                    {
-                        GetReadyNotification();
-                        return;
-                    }
-                }
-                else
-                {
-                    if (!player.Ready)
-                    {
-                        GetReadyNotification();
-                        return;
-                    }
-                }
-                */
-
-                if (!player.Ready)
-                {
-                    GetReadyNotification();
-                    return;
-                }
-
             }
 
             HostLaunchGame();
+        }
+
+        private void ShowLaunchBlocker(LaunchBlocker blocker)
+        {
+            switch (blocker.Kind)
+            {
+                case LaunchBlockerKind.RoomNotLocked:
+                    LockGameNotification();
+                    break;
+                case LaunchBlockerKind.TeamMappings:
+                    AddNotice(blocker.Message);
+                    break;
+                case LaunchBlockerKind.SharedColors:
+                    SharedColorsNotification();
+                    break;
+                case LaunchBlockerKind.AiSpectators:
+                    AISpectatorsNotification();
+                    break;
+                case LaunchBlockerKind.SharedStartingLocation:
+                    SharedStartingLocationNotification();
+                    break;
+                case LaunchBlockerKind.InsufficientPlayers:
+                    InsufficientPlayersNotification();
+                    break;
+                case LaunchBlockerKind.TooManyPlayers:
+                    TooManyPlayersNotification();
+                    break;
+                case LaunchBlockerKind.NotVerified:
+                    NotVerifiedNotification(blocker.PlayerIndex);
+                    break;
+                case LaunchBlockerKind.StillInGame:
+                    StillInGameNotification(blocker.PlayerIndex);
+                    break;
+                case LaunchBlockerKind.NotReady:
+                    GetReadyNotification();
+                    break;
+            }
         }
 
         protected virtual void LockGameNotification() =>

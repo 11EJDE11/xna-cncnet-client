@@ -922,7 +922,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     RefreshPlayerSlots();
                 }
 
-                if (Players.Count >= roomSettings.PlayerLimit)
+                if (RoomLock.IsFull(Players.Count, roomSettings.PlayerLimit))
                 {
                     AddNotice("Player limit reached. The game room has been locked.".L10N("Client:Main:GameRoomNumberLimitReached"));
                     LockGame();
@@ -966,7 +966,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             if (e.ModeString == "+i")
             {
-                if (Players.Count >= roomSettings.PlayerLimit)
+                if (RoomLock.IsFull(Players.Count, roomSettings.PlayerLimit))
                     AddNotice("Player limit reached. The game room has been locked.".L10N("Client:Main:GameRoomNumberLimitReached"));
                 else
                     AddNotice("The game host has locked the game room.".L10N("Client:Main:RoomLockedByHost"));
@@ -1594,7 +1594,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 BroadcastPlayerExtraOptions();
                 StartInactiveCheck();
 
-                if (Players.Count < roomSettings.PlayerLimit)
+                if (!RoomLock.IsFull(Players.Count, roomSettings.PlayerLimit))
                     UnlockGame(true);
             }
         }
@@ -1958,21 +1958,20 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void HandleLockGameButtonClick()
         {
-            if (!Locked)
+            switch (RoomLock.OnLockButton(Locked, Players.Count, roomSettings.PlayerLimit))
             {
-                AddNotice("You've locked the game room.".L10N("Client:Main:RoomLockedByYou"));
-                LockGame();
-            }
-            else
-            {
-                if (Players.Count < roomSettings.PlayerLimit)
-                {
+                case LockButtonAction.Lock:
+                    AddNotice("You've locked the game room.".L10N("Client:Main:RoomLockedByYou"));
+                    LockGame();
+                    break;
+                case LockButtonAction.Unlock:
                     AddNotice("You've unlocked the game room.".L10N("Client:Main:RoomUnlockedByYou"));
                     UnlockGame(false);
-                }
-                else
+                    break;
+                case LockButtonAction.RefuseUnlock:
                     AddNotice(string.Format(
                         "Cannot unlock game; the player limit ({0}) has been reached.".L10N("Client:Main:RoomCantUnlockAsLimit"), roomSettings.PlayerLimit));
+                    break;
             }
         }
 
