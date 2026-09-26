@@ -16,6 +16,10 @@
     <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="System.Text.Json" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Keeps the resource names the client has always used -->
+    <EmbeddedResource Include="Icons\*.png" LogicalName="DTAClient.Icons.%(Filename)%(Extension)" />
+  </ItemGroup>
   <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
     <Reference Include="System.Net.Http" />
   </ItemGroup>
