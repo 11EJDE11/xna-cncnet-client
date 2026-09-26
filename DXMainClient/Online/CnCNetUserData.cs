@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using ClientCore;
 
 using Rampastring.Tools;
-using Rampastring.XNAUI;
 
 namespace DTAClient.Online
 {
@@ -49,7 +48,10 @@ namespace DTAClient.Online
         public event EventHandler<UserNameEventArgs> UserFriendToggled;
         public event EventHandler<IdentEventArgs> UserIgnoreToggled;
 
-        public CnCNetUserData(WindowManager windowManager)
+        /// <summary>
+        /// Loads the lists in the background. The front end calls <see cref="Save"/> when the client closes.
+        /// </summary>
+        public CnCNetUserData()
         {
             lazyFriendList = new Lazy<List<string>>(LoadFriendList, LazyThreadSafetyMode.ExecutionAndPublication);
             lazyIgnoreList = new Lazy<List<string>>(LoadIgnoreList, LazyThreadSafetyMode.ExecutionAndPublication);
@@ -59,8 +61,6 @@ namespace DTAClient.Online
             Task.Run(() => _ = FriendList);
             Task.Run(() => _ = IgnoreList);
             Task.Run(() => _ = RecentList);
-
-            windowManager.GameClosing += WindowManager_GameClosing;
         }
 
         private static List<string> LoadTextList(string path)
@@ -152,15 +152,14 @@ namespace DTAClient.Online
 
         private List<RecentPlayer> LoadRecentPlayerList() => LoadJsonList<RecentPlayer>(RECENT_LIST_PATH);
 
-        private void WindowManager_GameClosing(object sender, EventArgs e) => Save();
-
         private void SaveFriends() => SaveTextList(FRIEND_LIST_PATH, FriendList);
 
         private void SaveIgnoreList() => SaveTextList(IGNORE_LIST_PATH, IgnoreList);
 
         private void SaveRecentList() => SaveJsonList(RECENT_LIST_PATH, RecentList);
 
-        private void Save()
+        /// <summary>Saves the friend, ignore and recent player lists.</summary>
+        public void Save()
         {
             SaveFriends();
             SaveIgnoreList();

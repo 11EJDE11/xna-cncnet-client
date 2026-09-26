@@ -273,7 +273,12 @@ namespace DTAClient.DXGUI
                             .AddSingleton(windowManager)
                             .AddSingleton(GraphicsDevice)
                             .AddSingleton<GameCollection>()
-                            .AddSingleton<CnCNetUserData>()
+                            .AddSingleton(_ =>
+                            {
+                                var cncnetUserData = new CnCNetUserData();
+                                windowManager.GameClosing += (_, _) => cncnetUserData.Save();
+                                return cncnetUserData;
+                            })
                             .AddSingleton<CnCNetManager>()
                             .AddSingleton<IUiDispatcher>(new XnaUiDispatcher(windowManager))
                             .AddSingleton<IDialogService>(new XnaDialogService(windowManager))
