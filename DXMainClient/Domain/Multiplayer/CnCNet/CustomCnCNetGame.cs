@@ -2,16 +2,12 @@
 using System;
 using System.Reflection;
 
-using Microsoft.Xna.Framework.Graphics;
-
-using Rampastring.XNAUI;
-
 using SixLabors.ImageSharp;
 
 namespace DTAClient.Domain.Multiplayer.CnCNet
 {
     /// <summary>
-    /// A <see cref="CnCNetGame"/> that loads its texture from a custom icon file, or falls back
+    /// A <see cref="CnCNetGame"/> that uses a custom icon file from the theme, or falls back
     /// to the unknown game icon embedded in the assembly.
     /// </summary>
     internal sealed class CustomCnCNetGame : CnCNetGame
@@ -31,12 +27,6 @@ namespace DTAClient.Domain.Multiplayer.CnCNet
 
         protected override Image? LoadImage() => FallbackImage;
 
-        protected override Texture2D? LoadTexture()
-        {
-            if (AssetLoader.AssetExists(iconFilename))
-                return AssetLoader.LoadTexture(iconFilename);
-
-            return base.LoadTexture();
-        }
+        public override string? IconFilename => iconFilename;
     }
 }

@@ -345,8 +345,8 @@ namespace DTAClient.DXGUI.Multiplayer
             {
                 bool showGameIcon = ClientConfiguration.Instance.ShowGameIconInGameList
                     || game.Game.InternalName != localGameIdentifier.ToLower();
-                if (showGameIcon && game.Game.Texture != null)
-                    maxHeight = Math.Max(maxHeight, game.Game.Texture.Height);
+                if (showGameIcon && game.Game.GetTexture() != null)
+                    maxHeight = Math.Max(maxHeight, game.Game.GetTexture().Height);
 
                 var (leftIcons, rightIcons) = GetGameOptionIcons(game);
                 foreach (var icon in leftIcons)
@@ -370,7 +370,7 @@ namespace DTAClient.DXGUI.Multiplayer
 
             bool showGameIcon = ClientConfiguration.Instance.ShowGameIconInGameList
                 || hg.Game.InternalName != localGameIdentifier.ToLower();
-            int gameTextureWidth = showGameIcon ? hg.Game.Texture.Width : 0;
+            int gameTextureWidth = showGameIcon ? hg.Game.GetTexture().Width : 0;
 
             int skillLevelIndex = hg.SkillLevel;
             int skillLevelIconWidth = 0;
@@ -474,11 +474,11 @@ namespace DTAClient.DXGUI.Multiplayer
 
                 if (showGameIcon)
                 {
-                    DrawTexture(hostedGame.Game.Texture,
-                        new Rectangle(x, height + (LineHeight - hostedGame.Game.Texture.Height) / 2,
-                        hostedGame.Game.Texture.Width, hostedGame.Game.Texture.Height), Color.White);
+                    DrawTexture(hostedGame.Game.GetTexture(),
+                        new Rectangle(x, height + (LineHeight - hostedGame.Game.GetTexture().Height) / 2,
+                        hostedGame.Game.GetTexture().Width, hostedGame.Game.GetTexture().Height), Color.White);
 
-                    x += hostedGame.Game.Texture.Width + ICON_MARGIN;
+                    x += hostedGame.Game.GetTexture().Width + ICON_MARGIN;
                 }
 
                 if (hostedGame.Locked)

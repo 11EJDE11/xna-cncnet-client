@@ -446,7 +446,7 @@ namespace DTAClient.DXGUI.Multiplayer
                         Texture2D gameTexture = unknownGameIcon;
 
                         if (gameIndex > -1 && gameIndex < gameCollection.GameList.Count)
-                            gameTexture = gameCollection.GameList[gameIndex].Texture;
+                            gameTexture = gameCollection.GameList[gameIndex].GetTexture();
 
                         user = playerManager.GetOrCreatePlayer(endPoint, name, gameTexture);
                     }

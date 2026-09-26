@@ -165,7 +165,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 if (user.IRCUser.GameID < 0 || user.IRCUser.GameID >= gameCollection.GameList.Count)
                     item.Texture = unknownGameIcon;
                 else
-                    item.Texture = gameCollection.GameList[user.IRCUser.GameID].Texture;
+                    item.Texture = gameCollection.GameList[user.IRCUser.GameID].GetTexture();
             }
         }
     }

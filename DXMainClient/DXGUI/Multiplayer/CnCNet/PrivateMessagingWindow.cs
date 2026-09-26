@@ -728,7 +728,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (user.GameID < 0 || user.GameID >= gameCollection.GameList.Count)
                 return unknownGameIcon;
             else
-                return gameCollection.GameList[user.GameID].Texture;
+                return gameCollection.GameList[user.GameID].GetTexture();
         }
 
         /// <summary>

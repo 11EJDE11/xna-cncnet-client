@@ -521,7 +521,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
                 var item = new XNADropDownItem();
                 item.Text = game.UIName;
-                item.Texture = game.Texture;
+                item.Texture = game.GetTexture();
 
                 ddCurrentChannel.AddItem(item);
 
@@ -1497,7 +1497,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (ircUser.GameID < 0 || ircUser.GameID >= gameCollection.GameList.Count)
                 item.Texture = unknownGameIcon;
             else
-                item.Texture = gameCollection.GameList[ircUser.GameID].Texture;
+                item.Texture = gameCollection.GameList[ircUser.GameID].GetTexture();
         }
 
         private void OnChatMessagesCleared()
@@ -1806,7 +1806,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             if (iu != null && iu.GameID >= 0 && iu.GameID < gameCollection.GameList.Count)
             {
-                senderGameIcon = gameCollection.GameList[iu.GameID].Texture;
+                senderGameIcon = gameCollection.GameList[iu.GameID].GetTexture();
             }
 
             return senderGameIcon;

@@ -1,6 +1,7 @@
 ﻿using ClientCore.Extensions;
 using ClientCore;
 using DTAClient.Domain.Multiplayer.CnCNet;
+using DTAClient.DXGUI.Multiplayer;
 using DTAClient.DXGUI.Multiplayer.CnCNet;
 using ClientGUI;
 using Microsoft.Xna.Framework;
@@ -326,7 +327,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
                     gameIconPanel.Name = "gameIcon" + game.InternalName.ToUpperInvariant();
                     gameIconPanel.ClientRectangle = new Rectangle(0, 0, gameIconWidth, gameIconWidth);
                     gameIconPanel.DrawBorders = false;
-                    gameIconPanel.BackgroundTexture = game.Texture;
+                    gameIconPanel.BackgroundTexture = game.GetTexture();
 
                     var gameChkBox = new XNAClientCheckBox(WindowManager);
                     gameChkBox.Name = game.InternalName.ToUpperInvariant();
