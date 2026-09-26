@@ -53,6 +53,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             this.optionsWindow = optionsWindow;
             this.mapLoader = mapLoader;
             this.random = random;
+            lobbyState = new CnCNetLobbyState(connectionManager, gameCollection, ClientConfiguration.Instance.LocalGame);
 
             ctcpCommandHandlers = new CommandHandlerBase[]
             {
@@ -123,7 +124,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private PasswordRequestWindow passwordRequestWindow;
 
-        private bool isInGameRoom = false;
+        private readonly CnCNetLobbyState lobbyState;
         private bool updateDenied = false;
 
         private string localGameID;
@@ -131,14 +132,11 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private List<string> followedGames = new List<string>();
 
-        private bool isJoiningGame = false;
-        private HostedCnCNetGame gameOfLastJoinAttempt;
 
         private CancellationTokenSource gameCheckCancellation;
 
         private CommandHandlerBase[] ctcpCommandHandlers;
 
-        private GameInvitations<ChoiceNotificationBox> invitations;
 
         private GameFiltersPanel panelGameFilters;
 
@@ -155,13 +153,11 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void LogoutEvent(object sender, EventArgs e)
         {
-            isJoiningGame = false;
+            lobbyState.IsJoiningGame = false;
         }
 
         public override void Initialize()
         {
-            invitations = new GameInvitations<ChoiceNotificationBox>();
-
             ClientRectangle = new Rectangle(0, 0, WindowManager.RenderResolutionX - 64,
                 WindowManager.RenderResolutionY - 64);
 
@@ -202,7 +198,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             panelGameFilters.ClientRectangle = gameListRectangle;
             panelGameFilters.Disable();
 
-            lbGameList = new GameListBox(WindowManager, mapLoader, localGameID, gameLobby, HostedGameMatches);
+            lbGameList = new GameListBox(WindowManager, mapLoader, localGameID, gameLobby, HostedGameMatches, lobbyState.GameList);
             lbGameList.Name = nameof(lbGameList);
             lbGameList.ClientRectangle = gameListRectangle;
             lbGameList.PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.STRETCHED;
@@ -623,10 +619,10 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(), string.Format(
                 "Cannot join game {0}, you've been banned by the game host!".L10N("Client:Main:PlayerBannedByHost"), game.RoomName)));
 
-            isJoiningGame = false;
-            if (gameOfLastJoinAttempt != null)
+            lobbyState.IsJoiningGame = false;
+            if (lobbyState.GameOfLastJoinAttempt != null)
             {
-                if (gameOfLastJoinAttempt.IsLoadedGame)
+                if (lobbyState.GameOfLastJoinAttempt.IsLoadedGame)
                     gameLoadingLobby.Clear();
                 else
                     gameLobby.Clear();
@@ -739,9 +735,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void GameLoadingLobby_GameLeft(object sender, EventArgs e)
         {
-            isJoiningGame = false;
+            lobbyState.IsJoiningGame = false;
             topBar.SwitchToSecondary();
-            isInGameRoom = false;
+            lobbyState.IsInGameRoom = false;
             SetLogOutButtonText();
 
             // keep the friends window up to date so it can disable the Invite option
@@ -750,9 +746,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void GameLobby_GameLeft(object sender, EventArgs e)
         {
-            isJoiningGame = false;
+            lobbyState.IsJoiningGame = false;
             topBar.SwitchToSecondary();
-            isInGameRoom = false;
+            lobbyState.IsInGameRoom = false;
             SetLogOutButtonText();
 
             // keep the friends window up to date so it can disable the Invite option
@@ -761,7 +757,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void SetLogOutButtonText()
         {
-            if (isInGameRoom)
+            if (lobbyState.IsInGameRoom)
             {
                 btnLogout.Text = "Game Lobby".L10N("Client:Main:GameLobby");
                 return;
@@ -793,28 +789,19 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void PasswordRequestWindow_PasswordEntered(object sender, PasswordEventArgs e) => _JoinGame(e.HostedGame, e.Password);
 
-        private string GetJoinGameErrorBase() => JoinGameRules.BaseError(isJoiningGame, ProgramConstants.IsInGame);
-
         /// <summary>
         /// Checks if the user can join a game.
         /// Returns null if the user can, otherwise returns an error message
         /// that tells the reason why the user cannot join the game.
         /// </summary>
         /// <param name="gameIndex">The index of the game in the game list box.</param>
-        private string GetJoinGameErrorByIndex(int gameIndex)
-        {
-            if (gameIndex < 0 || gameIndex >= lbGameList.HostedGames.Count)
-                return "Invalid game index".L10N("Client:Main:InvalidGameIndex");
-
-            return GetJoinGameErrorBase();
-        }
+        private string GetJoinGameErrorByIndex(int gameIndex) => lobbyState.JoinErrorByIndex(gameIndex);
 
         /// <summary>
         /// Returns an error message if game is not join-able, otherwise null.
         /// </summary>
-        private string GetJoinGameError(HostedCnCNetGame hg) => JoinGameRules.Error(hg, new JoinContext(
-            localGameID, ProgramConstants.PLAYERNAME, ClientConfiguration.Instance.DisallowJoiningIncompatibleGames,
-            isJoiningGame, ProgramConstants.IsInGame, gameCollection.GetGameNameFromInternalName));
+        private string GetJoinGameError(HostedCnCNetGame hg) =>
+            lobbyState.JoinError(hg, ClientConfiguration.Instance.DisallowJoiningIncompatibleGames);
 
         private void JoinSelectedGame()
         {
@@ -853,7 +840,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 return false;
             }
 
-            if (isInGameRoom)
+            if (lobbyState.IsInGameRoom)
             {
                 topBar.SwitchToPrimary();
                 return false;
@@ -883,8 +870,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         {
             connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(),
                 string.Format("Attempting to join game {0} ...".L10N("Client:Main:AttemptJoin"), hg.RoomName)));
-            isJoiningGame = true;
-            gameOfLastJoinAttempt = hg;
+            lobbyState.BeginJoin(hg);
 
             Channel gameChannel = connectionManager.CreateChannel(hg.RoomName, hg.ChannelName, false, true, password);
             connectionManager.AddChannel(gameChannel);
@@ -895,7 +881,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 gameChannel.UserAdded += GameLoadingChannel_UserAdded;
                 //gameChannel.MessageAdded += GameLoadingChannel_MessageAdded;
                 gameChannel.InvalidPasswordEntered += GameChannel_InvalidPasswordEntered_LoadedGame;
-                isJoiningGame = false;
+                lobbyState.IsJoiningGame = false;
             }
             else
             {
@@ -907,8 +893,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 gameChannel.TargetChangeTooFast += GameChannel_TargetChangeTooFast;
             }
 
-            connectionManager.SendCustomMessage(new QueuedMessage("JOIN " + hg.ChannelName + " " + password,
-                QueuedMessageType.INSTANT_MESSAGE, 0));
+            lobbyState.SendJoin(hg, password);
         }
 
         private void GameChannel_TargetChangeTooFast(object sender, MessageEventArgs e)
@@ -963,7 +948,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             {
                 ClearGameChannelEvents(gameChannel);
                 gameLobby.OnJoined();
-                isInGameRoom = true;
+                lobbyState.IsInGameRoom = true;
                 SetLogOutButtonText();
             }
         }
@@ -981,12 +966,12 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             channel.InviteOnlyErrorOnJoin -= GameChannel_InviteOnlyErrorOnJoin;
             channel.ChannelFull -= GameChannel_ChannelFull;
             channel.TargetChangeTooFast -= GameChannel_TargetChangeTooFast;
-            isJoiningGame = false;
+            lobbyState.IsJoiningGame = false;
         }
 
         private void BtnNewGame_LeftClick(object sender, EventArgs e)
         {
-            if (isInGameRoom)
+            if (lobbyState.IsInGameRoom)
             {
                 topBar.SwitchToPrimary();
                 return;
@@ -1057,7 +1042,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             channel.UserAdded -= GameLoadingChannel_UserAdded;
             channel.InvalidPasswordEntered -= GameChannel_InvalidPasswordEntered_LoadedGame;
             gameLoadingLobby.Clear();
-            isJoiningGame = false;
+            lobbyState.IsJoiningGame = false;
         }
 
         private void GameLoadingChannel_UserAdded(object sender, ChannelUserEventArgs e)
@@ -1070,8 +1055,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 gameLoadingChannel.InvalidPasswordEntered -= GameChannel_InvalidPasswordEntered_LoadedGame;
 
                 gameLoadingLobby.OnJoined();
-                isInGameRoom = true;
-                isJoiningGame = false;
+                lobbyState.IsInGameRoom = true;
+                lobbyState.IsJoiningGame = false;
             }
         }
 
@@ -1110,6 +1095,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private void SetChatColor()
         {
             IRCColor selectedColor = (IRCColor)ddColor.SelectedItem.Tag;
+            lobbyState.ChatColor = selectedColor;
             tbChatInput.TextColor = selectedColor.Color.ToXnaColor();
             gameLobby.ChangeChatColor(selectedColor);
             gameLoadingLobby.ChangeChatColor(selectedColor);
@@ -1219,7 +1205,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             IRCUser inviter = connectionManager.UserList.Find(u => u.Name == sender);
             var gameIndex = lbGameList.HostedGames.FindIndex(hg => ((HostedCnCNetGame)hg).ChannelName == channelName);
 
-            InvitationResponse response = invitations.Decide(invitation,
+            InvitationResponse response = lobbyState.Invitations.Decide(invitation,
                 senderIsKnown: inviter != null,
                 senderIsIgnored: inviter != null && cncnetUserData.IsIgnored(inviter.Ident),
                 joinError: GetJoinGameErrorByIndex(gameIndex),
@@ -1255,12 +1241,12 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             // add the invitation to the index so we can remove it if the target game is closed
             // also lets us silently ignore new invitations from the same person while this one is still outstanding
-            invitations.Add(invitation, gameInviteChoiceBox);
+            lobbyState.Invitations.Add(invitation, gameInviteChoiceBox);
 
             gameInviteChoiceBox.AffirmativeClickedAction = delegate (ChoiceNotificationBox choiceBox)
             {
                 // if we're currently in a game lobby, first leave that channel
-                if (isInGameRoom)
+                if (lobbyState.IsInGameRoom)
                 {
                     gameLobby.LeaveGameLobby();
                     gameLoadingLobby.Clear();
@@ -1275,13 +1261,13 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 }
 
                 // clean up the index as this invitation no longer exists
-                invitations.Remove(sender, channelName);
+                lobbyState.Invitations.Remove(sender, channelName);
             };
 
             gameInviteChoiceBox.NegativeClickedAction = delegate (ChoiceNotificationBox choiceBox)
             {
                 // clean up the index as this invitation no longer exists
-                invitations.Remove(sender, channelName);
+                lobbyState.Invitations.Remove(sender, channelName);
             };
 
             sndGameInviteReceived.Play();
@@ -1292,7 +1278,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (!CanReceiveInvitationMessagesFrom(sender))
                 return;
 
-            if (isInGameRoom && !ProgramConstants.IsInGame)
+            if (lobbyState.IsInGameRoom && !ProgramConstants.IsInGame)
             {
                 gameLobby.AddWarning(
                     string.Format(("{0} could not receive your invitation. They might be in game " +
@@ -1457,7 +1443,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 channel.ChannelName == localGame.GameBroadcastChannel &&
                 !updateDenied &&
                 channelUser.IsAdmin &&
-                !isInGameRoom &&
+                !lobbyState.IsInGameRoom &&
                 e.Message.StartsWith("UPDATE ") &&
                 e.Message.Length > 7)
             {
@@ -1659,7 +1645,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void BtnLogout_LeftClick(object sender, EventArgs e)
         {
-            if (isInGameRoom)
+            if (lobbyState.IsInGameRoom)
             {
                 topBar.SwitchToPrimary();
                 return;
@@ -1726,9 +1712,9 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void DismissInvalidInvitations()
         {
-            foreach ((string sender, string channel) in invitations.FindInvalid(lbGameList.HostedGames.Cast<HostedCnCNetGame>()))
+            foreach ((string sender, string channel) in lobbyState.Invitations.FindInvalid(lbGameList.HostedGames.Cast<HostedCnCNetGame>()))
             {
-                ChoiceNotificationBox invitationNotification = invitations.Remove(sender, channel);
+                var invitationNotification = lobbyState.Invitations.Remove(sender, channel) as ChoiceNotificationBox;
 
                 if (invitationNotification != null)
                     WindowManager.RemoveControl(invitationNotification);

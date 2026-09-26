@@ -31,9 +31,10 @@ namespace DTAClient.DXGUI.Multiplayer
 
         public GameListBox(WindowManager windowManager, MapLoader mapLoader,
             string localGameIdentifier, GameLobbyBase gameLobby = null,
-            Predicate<GenericHostedGame> gameMatchesFilter = null)
+            Predicate<GenericHostedGame> gameMatchesFilter = null, GameListState state = null)
             : base(windowManager)
         {
+            State = state ?? new GameListState();
             this.mapLoader = mapLoader;
             this.localGameIdentifier = localGameIdentifier;
             this.gameLobby = gameLobby;
@@ -53,7 +54,7 @@ namespace DTAClient.DXGUI.Multiplayer
         private int baseLineHeight;
 
         /// <summary>The listed games; the list box shows them sorted and filtered.</summary>
-        public GameListState State { get; } = new();
+        public GameListState State { get; }
 
         public List<GenericHostedGame> HostedGames => State.Games;
 
