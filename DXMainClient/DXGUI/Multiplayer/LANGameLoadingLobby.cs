@@ -569,7 +569,7 @@ namespace DTAClient.DXGUI.Multiplayer
                 return;
 
             lbChatMessages.AddMessage(new ChatMessage(playerName,
-                chatColors[colorIndex].XNAColor, DateTime.Now, parts[2]));
+                chatColors[colorIndex].XNAColor.ToChatColor(), DateTime.Now, parts[2]));
 
             Sounds.Play(LobbySound.Message);
         }

@@ -266,7 +266,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
                 XNADropDownItem ddItem = new XNADropDownItem();
                 ddItem.Text = color.Name;
-                ddItem.TextColor = color.XnaColor;
+                ddItem.TextColor = color.Color.ToXnaColor();
                 ddItem.Tag = color;
 
                 ddColor.AddItem(ddItem);
@@ -607,7 +607,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             clientVersion = $"{GitVersionInformation.CommitDate} {GitVersionInformation.BranchName}@{GitVersionInformation.ShortSha}";
 #endif
 
-            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White, Renderer.GetSafeString(
+            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(), Renderer.GetSafeString(
                     string.Format("*** CnCNet Client version {0} ***".L10N("Client:Main:CnCNetClientVersionMessageV2"), clientVersion),
                     lbChatMessages.FontIndex)));
 
@@ -617,7 +617,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 #if DEVELOPMENT_BUILD
                 if (ClientConfiguration.Instance.ShowDevelopmentBuildWarnings)
                 {
-                    connectionManager.MainChannel.AddMessage(new ChatMessage(Color.Red, Renderer.GetSafeString(
+                    connectionManager.MainChannel.AddMessage(new ChatMessage(Color.Red.ToChatColor(), Renderer.GetSafeString(
                             developBuildWarningMessage, lbChatMessages.FontIndex)));
                 }
 #endif
@@ -665,12 +665,12 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (game == null)
             {
                 var chatChannel = connectionManager.FindChannel(e.ChannelName);
-                chatChannel?.AddMessage(new ChatMessage(Color.White, string.Format(
+                chatChannel?.AddMessage(new ChatMessage(Color.White.ToChatColor(), string.Format(
                     "Cannot join chat channel {0}, you're banned!".L10N("Client:Main:PlayerBannedByChannel"), chatChannel.UIName)));
                 return;
             }
 
-            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White, string.Format(
+            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(), string.Format(
                 "Cannot join game {0}, you've been banned by the game host!".L10N("Client:Main:PlayerBannedByHost"), game.RoomName)));
 
             isJoiningGame = false;
@@ -903,7 +903,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             string error = GetJoinGameErrorByIndex(gameIndex);
             if (!string.IsNullOrEmpty(error))
             {
-                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White, error));
+                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(), error));
                 return false;
             }
 
@@ -922,7 +922,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             string error = GetJoinGameError(hg);
             if (!string.IsNullOrEmpty(error))
             {
-                messageView.AddMessage(new ChatMessage(Color.White, error));
+                messageView.AddMessage(new ChatMessage(Color.White.ToChatColor(), error));
                 return false;
             }
 
@@ -933,7 +933,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             }
 
             if (hg.GameVersion != ProgramConstants.GAME_VERSION)
-                messageView.AddMessage(new ChatMessage(Color.Yellow, "The game host is on a different game version than you. Version incompatibilities may cause issues.".L10N("Client:Main:JoinGameVersionMismatch")));
+                messageView.AddMessage(new ChatMessage(Color.Yellow.ToChatColor(), "The game host is on a different game version than you. Version incompatibilities may cause issues.".L10N("Client:Main:JoinGameVersionMismatch")));
 
             if (hg.Passworded)
             {
@@ -967,7 +967,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void _JoinGame(HostedCnCNetGame hg, string password)
         {
-            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White,
+            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(),
                 string.Format("Attempting to join game {0} ...".L10N("Client:Main:AttemptJoin"), hg.RoomName)));
             isJoiningGame = true;
             gameOfLastJoinAttempt = hg;
@@ -999,7 +999,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void GameChannel_TargetChangeTooFast(object sender, MessageEventArgs e)
         {
-            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White, e.Message));
+            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(), e.Message));
             ClearGameJoinAttempt((Channel)sender);
         }
 
@@ -1014,13 +1014,13 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             var game = FindGameByChannelName(channel.ChannelName);
             if (game != null)
             {
-                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White, string.Format("The game {0} is locked!".L10N("Client:Main:GameLockedWithName"), game.RoomName)));
+                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(), string.Format("The game {0} is locked!".L10N("Client:Main:GameLockedWithName"), game.RoomName)));
                 game.Locked = true;
                 SortAndRefreshHostedGames();
             }
             else
             {
-                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White, "The selected game is locked!".L10N("Client:Main:GameLocked")));
+                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(), "The selected game is locked!".L10N("Client:Main:GameLocked")));
             }
 
             ClearGameJoinAttempt((Channel)sender);
@@ -1037,7 +1037,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
         private void GameChannel_InvalidPasswordEntered_NewGame(object sender, EventArgs e)
         {
-            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White, "Incorrect password!".L10N("Client:Main:PasswordWrong")));
+            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(), "Incorrect password!".L10N("Client:Main:PasswordWrong")));
             ClearGameJoinAttempt((Channel)sender);
         }
 
@@ -1106,7 +1106,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             //gameChannel.MessageAdded += GameChannel_MessageAdded;
             connectionManager.SendCustomMessage(new QueuedMessage("JOIN " + channelName + " " + password,
                 QueuedMessageType.INSTANT_MESSAGE, 0));
-            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White,
+            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(),
                string.Format("Creating a game named {0} ...".L10N("Client:Main:CreateGameNamed"), e.GameRoomName)));
 
             gameCreationPanel.Hide();
@@ -1128,7 +1128,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             gameLoadingChannel.UserAdded += GameLoadingChannel_UserAdded;
             connectionManager.SendCustomMessage(new QueuedMessage("JOIN " + channelName + " " + e.Password,
                 QueuedMessageType.INSTANT_MESSAGE, 0));
-            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White,
+            connectionManager.MainChannel.AddMessage(new ChatMessage(Color.White.ToChatColor(),
                string.Format("Creating a game named {0} ...".L10N("Client:Main:CreateGameNamed"), e.GameRoomName)));
 
             gameCreationPanel.Hide();
@@ -1196,7 +1196,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         private void SetChatColor()
         {
             IRCColor selectedColor = (IRCColor)ddColor.SelectedItem.Tag;
-            tbChatInput.TextColor = selectedColor.XnaColor;
+            tbChatInput.TextColor = selectedColor.Color.ToXnaColor();
             gameLobby.ChangeChatColor(selectedColor);
             gameLoadingLobby.ChangeChatColor(selectedColor);
             UserINISettings.Instance.ChatColor.Value = ddColor.SelectedIndex;
@@ -1273,7 +1273,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             if (UserINISettings.Instance.EnableP2P)
             {
-                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.Orange, Renderer.GetSafeString(
+                connectionManager.MainChannel.AddMessage(new ChatMessage(Color.Orange.ToChatColor(), Renderer.GetSafeString(
                     ("Direct P2P connections are enabled. Your IP address may be shared with other " +
                      "players when a P2P connection is used in a match. You can change this in Options.")
                         .L10N("Client:Main:P2PEnabledOnlineNotice"),
@@ -1513,7 +1513,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 cncnetUserData.IsIgnored(message.SenderIdent) &&
                 !message.SenderIsAdmin)
             {
-                lbChatMessages.AddMessage(new ChatMessage(Color.Silver, string.Format("Message blocked from - {0}".L10N("Client:Main:PMBlockedFrom"), message.SenderName)));
+                lbChatMessages.AddMessage(new ChatMessage(Color.Silver.ToChatColor(), string.Format("Message blocked from - {0}".L10N("Client:Main:PMBlockedFrom"), message.SenderName)));
             }
             else
             {
@@ -1587,7 +1587,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                         "You can ignore this prompt if there are games listed later. " +
                         "Otherwise, this usually means that your client is outdated, or, in a rare case, newer than others. Please check for updates.").L10N("Client:Main:InvalidGameMessage");
 
-                    lbChatMessages.AddMessage(new ChatMessage(Color.Gray, message));
+                    lbChatMessages.AddMessage(new ChatMessage(Color.Gray.ToChatColor(), message));
                 }
 
                 return;
@@ -1626,7 +1626,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                             string message = ("There are no games listed. The client did receive a valid game message but can't add it to the list because there are no available tunnels. " +
                                 "You can ignore this prompt if there are games listed later. Otherwise, it might indicate a network problem to CnCNet HTTP service.").L10N("Client:Main:NoTunnels");
 
-                            lbChatMessages.AddMessage(new ChatMessage(Color.Gray, message));
+                            lbChatMessages.AddMessage(new ChatMessage(Color.Gray.ToChatColor(), message));
                         }
 
                         return;
@@ -1649,7 +1649,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                             string message = string.Format(("There are no games listed. The client did receive a valid game message but can't add it to the list because the specified tunnel is not available. " +
                                 "You can ignore this prompt if there are games listed later. Otherwise, please contact support at {0}.").L10N("Client:Main:NoTunnelForGames"), ClientConfiguration.Instance.LongSupportURL);
 
-                            lbChatMessages.AddMessage(new ChatMessage(Color.Gray, message));
+                            lbChatMessages.AddMessage(new ChatMessage(Color.Gray.ToChatColor(), message));
                         }
 
                         return;
@@ -1871,13 +1871,13 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (user == null)
             {
                 // can happen if a user is selected while offline
-                messageView.AddMessage(new ChatMessage(Color.White, "User is not currently available!".L10N("Client:Main:UserNotAvailable")));
+                messageView.AddMessage(new ChatMessage(Color.White.ToChatColor(), "User is not currently available!".L10N("Client:Main:UserNotAvailable")));
                 return;
             }
             var game = GetHostedGameForUser(user);
             if (game == null)
             {
-                messageView.AddMessage(new ChatMessage(Color.White, string.Format("{0} is not in a game!".L10N("Client:Main:UserNotInGame"), user.Name)));
+                messageView.AddMessage(new ChatMessage(Color.White.ToChatColor(), string.Format("{0} is not in a game!".L10N("Client:Main:UserNotInGame"), user.Name)));
                 return;
             }
 

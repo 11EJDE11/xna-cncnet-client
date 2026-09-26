@@ -49,14 +49,14 @@ namespace DTAClient.DXGUI.Multiplayer
 
         public void AddMessage(string sender, string message, Color color)
         {
-            AddMessage(new ChatMessage(sender, color, DateTime.Now, message));
+            AddMessage(new ChatMessage(sender, color.ToChatColor(), DateTime.Now, message));
         }
 
         public void AddMessage(ChatMessage message)
         {
             var listBoxItem = new XNAListBoxItem
             {
-                TextColor = message.Color,
+                TextColor = message.Color.ToXnaColor(),
                 Selectable = true,
                 Tag = message
             };

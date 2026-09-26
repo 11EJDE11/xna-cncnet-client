@@ -342,7 +342,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             if (!IsHost && playerName == hostName && !ProgramConstants.IsInGame)
             {
                 connectionManager.MainChannel.AddMessage(new ChatMessage(
-                    Color.Yellow, "The game host left the game!".L10N("Client:Main:HostLeft")));
+                    Color.Yellow.ToChatColor(), "The game host left the game!".L10N("Client:Main:HostLeft")));
 
                 Clear();
             }
@@ -354,7 +354,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 cncnetUserData.IsIgnored(e.Message.SenderIdent) &&
                 !e.Message.SenderIsAdmin)
             {
-                lbChatMessages.AddMessage(new ChatMessage(Color.Silver, string.Format("Message blocked from - {0}".L10N("Client:Main:PMBlockedFrom"), e.Message.SenderName)));
+                lbChatMessages.AddMessage(new ChatMessage(Color.Silver.ToChatColor(), string.Format("Message blocked from - {0}".L10N("Client:Main:PMBlockedFrom"), e.Message.SenderName)));
             }
             else
             {
@@ -363,7 +363,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             }
         }
 
-        protected override void AddNotice(string message, Color color) => channel.AddMessage(new ChatMessage(color, message));
+        protected override void AddNotice(string message, Color color) => channel.AddMessage(new ChatMessage(color.ToChatColor(), message));
 
         protected override void BroadcastOptions()
         {
@@ -830,7 +830,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         public void ChangeChatColor(IRCColor chatColor)
         {
             this.chatColor = chatColor;
-            tbChatInput.TextColor = chatColor.XnaColor;
+            tbChatInput.TextColor = chatColor.Color.ToXnaColor();
         }
 
         private void BroadcastGame()

@@ -1,5 +1,6 @@
-﻿using Microsoft.Xna.Framework;
-using System;
+﻿using System;
+
+using ClientLogic.UI;
 
 namespace DTAClient.Online
 {
@@ -12,7 +13,7 @@ namespace DTAClient.Online
         /// <param name="color">The color of the message.</param>
         /// <param name="dateTime">The date and time of the message.</param>
         /// <param name="message">The message.</param>
-        public ChatMessage(string senderName, Color color, DateTime dateTime, string message)
+        public ChatMessage(string senderName, ChatColor color, DateTime dateTime, string message)
         {
             SenderName = senderName;
             Color = color;
@@ -26,7 +27,7 @@ namespace DTAClient.Online
         /// <param name="senderName">The sender of the message. Use null for none (system messages).</param>
         /// <param name="color">The color of the message.</param>
         /// <param name="message">The message.</param>
-        public ChatMessage(string senderName, Color color, string message) : this(senderName, color, DateTime.Now, message) { }
+        public ChatMessage(string senderName, ChatColor color, string message) : this(senderName, color, DateTime.Now, message) { }
 
         /// <summary>
         /// Creates a new ChatMessage instance.
@@ -37,7 +38,7 @@ namespace DTAClient.Online
         /// <param name="color">The color of the message.</param>
         /// <param name="dateTime">The date and time of the message.</param>
         /// <param name="message">The message.</param>
-        public ChatMessage(string senderName, string ident, bool senderIsAdmin, Color color, DateTime dateTime, string message) : this(senderName, color, dateTime, message)
+        public ChatMessage(string senderName, string ident, bool senderIsAdmin, ChatColor color, DateTime dateTime, string message) : this(senderName, color, dateTime, message)
         {
             SenderIdent = ident;
             SenderIsAdmin = senderIsAdmin;
@@ -49,18 +50,18 @@ namespace DTAClient.Online
         /// </summary>
         /// <param name="color">The color of the message.</param>
         /// <param name="message">The message.</param>
-        public ChatMessage(Color color, string message) : this(null, color, DateTime.Now, message) { }
+        public ChatMessage(ChatColor color, string message) : this(null, color, DateTime.Now, message) { }
 
         /// <summary>
         /// Creates a chat message that has no sender and has the date and time set to the
         /// current system date and time.
         /// </summary>
         /// <param name="message">The message.</param>
-        public ChatMessage(string message) : this(Color.White, message) { }
+        public ChatMessage(string message) : this(ChatColor.White, message) { }
 
         public string SenderName { get; private set; }
         public string SenderIdent { get; private set; }
-        public Color Color { get; private set; }
+        public ChatColor Color { get; private set; }
         public DateTime DateTime { get; private set; }
         public string Message { get; private set; }
         public bool SenderIsAdmin { get; private set; }

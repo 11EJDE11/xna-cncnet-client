@@ -2,9 +2,8 @@
 using DTAClient.Domain.Multiplayer.CnCNet;
 using DTAClient.Online.EventArguments;
 using ClientCore.Extensions;
-using Microsoft.Xna.Framework;
+using ClientLogic.UI;
 using Rampastring.Tools;
-using Rampastring.XNAUI;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -23,7 +22,7 @@ namespace DTAClient.Online
         // to thread-safety.
         // The functions in IConnectionManager are usually called from the networking
         // thread, so if they affect anything in the UI or affect data that the 
-        // UI thread might be reading, use WindowManager.AddCallback to execute a function
+        // UI thread might be reading, use IUiDispatcher.Post to execute a function
         // on the UI thread instead of modifying the data or raising events directly.
 
         public delegate void UserListDelegate(string channelName, string[] userNames);
@@ -47,34 +46,34 @@ namespace DTAClient.Online
         public event EventHandler<UserNameIndexEventArgs> UserRemoved;
         public event EventHandler MultipleUsersAdded;
 
-        public CnCNetManager(WindowManager wm, GameCollection gc, CnCNetUserData cncNetUserData, Random random)
+        public CnCNetManager(IUiDispatcher uiDispatcher, GameCollection gc, CnCNetUserData cncNetUserData, Random random)
         {
             gameCollection = gc;
             this.cncNetUserData = cncNetUserData;
             connection = new Connection(this, random);
 
-            this.wm = wm;
+            this.uiDispatcher = uiDispatcher;
 
-            cDefaultChatColor = AssetLoader.GetColorFromString(ClientConfiguration.Instance.DefaultChatColor);
+            cDefaultChatColor = ChatColor.Parse(ClientConfiguration.Instance.DefaultChatColor);
 
             ircChatColors = new IRCColor[]
             {
                 new IRCColor("Default color".L10N("Client:Main:ColorDefault"), false, cDefaultChatColor, 0),
                 new IRCColor("Default color #2".L10N("Client:Main:ColorDefault2"), false, cDefaultChatColor, 1),
-                new IRCColor("Light Blue".L10N("Client:Main:ColorLightBlue"), true, Color.LightBlue, 2),
-                new IRCColor("Green".L10N("Client:Main:ColorGreen"), true, Color.ForestGreen, 3),
-                new IRCColor("Dark Red".L10N("Client:Main:ColorDarkRed"), true, new Color(180, 0, 0, 255), 4),
-                new IRCColor("Red".L10N("Client:Main:ColorRed"), true, Color.Red, 5),
-                new IRCColor("Purple".L10N("Client:Main:ColorPurple"), true, Color.MediumPurple, 6),
-                new IRCColor("Orange".L10N("Client:Main:ColorOrange"), true, Color.Orange, 7),
-                new IRCColor("Yellow".L10N("Client:Main:ColorYellow"), true, Color.Yellow, 8),
-                new IRCColor("Lime Green".L10N("Client:Main:ColorLimeGreen"), true, Color.LimeGreen, 9),
-                new IRCColor("Turquoise".L10N("Client:Main:ColorTurquoise"), true, Color.Turquoise, 10),
-                new IRCColor("Sky Blue".L10N("Client:Main:ColorSkyBlue"), true, Color.LightSkyBlue, 11),
-                new IRCColor("Blue".L10N("Client:Main:ColorBlue"), true, Color.RoyalBlue, 12),
-                new IRCColor("Pink".L10N("Client:Main:ColorPink"), true, Color.DeepPink, 13),
-                new IRCColor("Metallic".L10N("Client:Main:ColorLightGrayMetallic"), true, Color.LightGray, 14),
-                new IRCColor("Gray".L10N("Client:Main:ColorGray"), false, Color.Gray, 15)
+                new IRCColor("Light Blue".L10N("Client:Main:ColorLightBlue"), true, new ChatColor(173, 216, 230), 2),
+                new IRCColor("Green".L10N("Client:Main:ColorGreen"), true, new ChatColor(34, 139, 34), 3),
+                new IRCColor("Dark Red".L10N("Client:Main:ColorDarkRed"), true, new ChatColor(180, 0, 0, 255), 4),
+                new IRCColor("Red".L10N("Client:Main:ColorRed"), true, new ChatColor(255, 0, 0), 5),
+                new IRCColor("Purple".L10N("Client:Main:ColorPurple"), true, new ChatColor(147, 112, 219), 6),
+                new IRCColor("Orange".L10N("Client:Main:ColorOrange"), true, new ChatColor(255, 165, 0), 7),
+                new IRCColor("Yellow".L10N("Client:Main:ColorYellow"), true, new ChatColor(255, 255, 0), 8),
+                new IRCColor("Lime Green".L10N("Client:Main:ColorLimeGreen"), true, new ChatColor(50, 205, 50), 9),
+                new IRCColor("Turquoise".L10N("Client:Main:ColorTurquoise"), true, new ChatColor(64, 224, 208), 10),
+                new IRCColor("Sky Blue".L10N("Client:Main:ColorSkyBlue"), true, new ChatColor(135, 206, 250), 11),
+                new IRCColor("Blue".L10N("Client:Main:ColorBlue"), true, new ChatColor(65, 105, 225), 12),
+                new IRCColor("Pink".L10N("Client:Main:ColorPink"), true, new ChatColor(255, 20, 147), 13),
+                new IRCColor("Metallic".L10N("Client:Main:ColorLightGrayMetallic"), true, new ChatColor(211, 211, 211), 14),
+                new IRCColor("Gray".L10N("Client:Main:ColorGray"), false, new ChatColor(128, 128, 128), 15)
             };
         }
 
@@ -108,10 +107,10 @@ namespace DTAClient.Online
         private GameCollection gameCollection;
         private readonly CnCNetUserData cncNetUserData;
 
-        private Color cDefaultChatColor;
+        private ChatColor cDefaultChatColor;
         private IRCColor[] ircChatColors;
 
-        private WindowManager wm;
+        private readonly IUiDispatcher uiDispatcher;
 
         private bool disconnect = false;
 
@@ -181,10 +180,10 @@ namespace DTAClient.Online
 
         public void OnAttemptedServerChanged(string serverName)
         {
-            // AddCallback is necessary for thread-safety; OnAttemptedServerChanged
-            // is called by the networking thread, and AddCallback schedules DoAttemptedServerChanged
+            // Post is necessary for thread-safety; OnAttemptedServerChanged
+            // is called by the networking thread, and Post schedules DoAttemptedServerChanged
             // to be executed on the main (UI) thread.
-            wm.AddCallback(new Action<string>(DoAttemptedServerChanged), serverName);
+            uiDispatcher.Post(() => DoAttemptedServerChanged(serverName));
         }
 
         private void DoAttemptedServerChanged(string serverName)
@@ -196,7 +195,7 @@ namespace DTAClient.Online
 
         public void OnAwayMessageReceived(string userName, string reason)
         {
-            wm.AddCallback(new Action<string, string>(DoAwayMessageReceived), userName, reason);
+            uiDispatcher.Post(() => DoAwayMessageReceived(userName, reason));
         }
 
         private void DoAwayMessageReceived(string userName, string reason)
@@ -206,7 +205,7 @@ namespace DTAClient.Online
 
         public void OnChannelFull(string channelName)
         {
-            wm.AddCallback(new Action<string>(DoChannelFull), channelName);
+            uiDispatcher.Post(() => DoChannelFull(channelName));
         }
 
         private void DoChannelFull(string channelName)
@@ -219,7 +218,7 @@ namespace DTAClient.Online
 
         public void OnTargetChangeTooFast(string channelName, string message)
         {
-            wm.AddCallback(new Action<string, string>(DoTargetChangeTooFast), channelName, message);
+            uiDispatcher.Post(() => DoTargetChangeTooFast(channelName, message));
         }
 
         private void DoTargetChangeTooFast(string channelName, string message)
@@ -232,7 +231,7 @@ namespace DTAClient.Online
 
         public void OnChannelInviteOnly(string channelName)
         {
-            wm.AddCallback(new Action<string>(DoChannelInviteOnly), channelName);
+            uiDispatcher.Post(() => DoChannelInviteOnly(channelName));
         }
 
         private void DoChannelInviteOnly(string channelName)
@@ -245,8 +244,7 @@ namespace DTAClient.Online
 
         public void OnChannelModesChanged(string userName, string channelName, string modeString, List<string> modeParameters)
         {
-            wm.AddCallback(new Action<string, string, string, List<string>>(DoChannelModesChanged),
-                userName, channelName, modeString, modeParameters);
+            uiDispatcher.Post(() => DoChannelModesChanged(userName, channelName, modeString, modeParameters));
         }
 
         private void DoChannelModesChanged(string userName, string channelName, string modeString, List<string> modeParameters)
@@ -303,7 +301,7 @@ namespace DTAClient.Online
 
         public void OnChannelTopicReceived(string channelName, string topic)
         {
-            wm.AddCallback(new Action<string, string>(DoChannelTopicReceived), channelName, topic);
+            uiDispatcher.Post(() => DoChannelTopicReceived(channelName, topic));
         }
 
         private void DoChannelTopicReceived(string channelName, string topic)
@@ -318,13 +316,12 @@ namespace DTAClient.Online
 
         public void OnChannelTopicChanged(string userName, string channelName, string topic)
         {
-            wm.AddCallback(new Action<string, string>(DoChannelTopicReceived), channelName, topic);
+            uiDispatcher.Post(() => DoChannelTopicReceived(channelName, topic));
         }
 
         public void OnChatMessageReceived(string receiver, string senderName, string ident, string message)
         {
-            wm.AddCallback(new Action<string, string, string, string>(DoChatMessageReceived),
-                receiver, senderName, ident, message);
+            uiDispatcher.Post(() => DoChatMessageReceived(receiver, senderName, ident, message));
         }
 
         private void DoChatMessageReceived(string receiver, string senderName, string ident, string message)
@@ -339,7 +336,7 @@ namespace DTAClient.Online
 
             try
             {
-                Color foreColor;
+                ChatColor foreColor;
 
                 // Previously there was an "ACTION" handling, to be compatible with Funky's client, but we don't officially support Funky's client anymore.
 
@@ -357,7 +354,7 @@ namespace DTAClient.Online
                         int colorIndex = Conversions.IntFromString(colorString, -1);
                         // Try to parse message color info; if fails, use default color
                         if (colorIndex < ircChatColors.Length && colorIndex > -1)
-                            foreColor = ircChatColors[colorIndex].XnaColor;
+                            foreColor = ircChatColors[colorIndex].Color;
                         else
                             foreColor = cDefaultChatColor;
                     }
@@ -385,8 +382,7 @@ namespace DTAClient.Online
 
         public void OnCTCPParsed(string channelName, string userName, string message)
         {
-            wm.AddCallback(new Action<string, string, string>(DoCTCPParsed),
-                channelName, userName, message);
+            uiDispatcher.Post(() => DoCTCPParsed(channelName, userName, message));
         }
 
         private void DoCTCPParsed(string channelName, string userName, string message)
@@ -412,19 +408,19 @@ namespace DTAClient.Online
 
         public void OnConnectAttemptFailed()
         {
-            wm.AddCallback(new Action(DoConnectAttemptFailed), null);
+            uiDispatcher.Post(DoConnectAttemptFailed);
         }
 
         private void DoConnectAttemptFailed()
         {
             ConnectAttemptFailed?.Invoke(this, EventArgs.Empty);
 
-            MainChannel.AddMessage(new ChatMessage(Color.Red, "Connecting to CnCNet failed!".L10N("Client:Main:ConnectToCncNetFailed")));
+            MainChannel.AddMessage(new ChatMessage(ChatColor.Red, "Connecting to CnCNet failed!".L10N("Client:Main:ConnectToCncNetFailed")));
         }
 
         public void OnConnected()
         {
-            wm.AddCallback(new Action(DoConnected), null);
+            uiDispatcher.Post(DoConnected);
         }
 
         private void DoConnected()
@@ -440,7 +436,7 @@ namespace DTAClient.Online
         /// <param name="reason"></param>
         public void OnConnectionLost(string reason)
         {
-            wm.AddCallback(new Action<string>(DoConnectionLost), reason);
+            uiDispatcher.Post(() => DoConnectionLost(reason));
         }
 
         private void DoConnectionLost(string reason)
@@ -462,7 +458,7 @@ namespace DTAClient.Online
 
             UserList.Clear();
 
-            MainChannel.AddMessage(new ChatMessage(Color.Red, "Connection to CnCNet has been lost.".L10N("Client:Main:ConnectToCncNetHasLost")));
+            MainChannel.AddMessage(new ChatMessage(ChatColor.Red, "Connection to CnCNet has been lost.".L10N("Client:Main:ConnectToCncNetHasLost")));
             connected = false;
         }
 
@@ -490,7 +486,7 @@ namespace DTAClient.Online
         /// </summary>
         public void OnDisconnected()
         {
-            wm.AddCallback(new Action(DoDisconnected), null);
+            uiDispatcher.Post(DoDisconnected);
         }
 
         private void DoDisconnected()
@@ -518,12 +514,12 @@ namespace DTAClient.Online
 
         public void OnErrorReceived(string errorMessage)
         {
-            MainChannel.AddMessage(new ChatMessage(Color.Red, errorMessage));
+            MainChannel.AddMessage(new ChatMessage(ChatColor.Red, errorMessage));
         }
 
         public void OnGenericServerMessageReceived(string message)
         {
-            wm.AddCallback(new Action<string>(DoGenericServerMessageReceived), message);
+            uiDispatcher.Post(() => DoGenericServerMessageReceived(message));
         }
 
         private void DoGenericServerMessageReceived(string message)
@@ -533,7 +529,7 @@ namespace DTAClient.Online
 
         public void OnIncorrectChannelPassword(string channelName)
         {
-            wm.AddCallback(new Action<string>(DoIncorrectChannelPassword), channelName);
+            uiDispatcher.Post(() => DoIncorrectChannelPassword(channelName));
         }
 
         private void DoIncorrectChannelPassword(string channelName)
@@ -550,8 +546,7 @@ namespace DTAClient.Online
 
         public void OnPrivateMessageReceived(string sender, string message)
         {
-            wm.AddCallback(new Action<string, string>(DoPrivateMessageReceived),
-                sender, message);
+            uiDispatcher.Post(() => DoPrivateMessageReceived(sender, message));
         }
 
         private void DoPrivateMessageReceived(string sender, string message)
@@ -563,7 +558,7 @@ namespace DTAClient.Online
 
         public void OnReconnectAttempt()
         {
-            wm.AddCallback(new Action(DoReconnectAttempt), null);
+            uiDispatcher.Post(DoReconnectAttempt);
         }
 
         private void DoReconnectAttempt()
@@ -577,8 +572,7 @@ namespace DTAClient.Online
 
         public void OnUserJoinedChannel(string channelName, string host, string userName, string ident)
         {
-            wm.AddCallback(new Action<string, string, string, string>(DoUserJoinedChannel),
-                channelName, host, userName, ident);
+            uiDispatcher.Post(() => DoUserJoinedChannel(channelName, host, userName, ident));
         }
 
         private void DoUserJoinedChannel(string channelName, string host, string userName, string userAddress)
@@ -644,8 +638,7 @@ namespace DTAClient.Online
 
         public void OnUserKicked(string channelName, string userName)
         {
-            wm.AddCallback(new Action<string, string>(DoUserKicked),
-                channelName, userName);
+            uiDispatcher.Post(() => DoUserKicked(channelName, userName));
         }
 
         private void DoUserKicked(string channelName, string userName)
@@ -676,8 +669,7 @@ namespace DTAClient.Online
 
         public void OnUserLeftChannel(string channelName, string userName)
         {
-            wm.AddCallback(new Action<string, string>(DoUserLeftChannel),
-                channelName, userName);
+            uiDispatcher.Post(() => DoUserLeftChannel(channelName, userName));
         }
 
         private void DoUserLeftChannel(string channelName, string userName)
@@ -732,8 +724,7 @@ namespace DTAClient.Online
 
         public void OnUserListReceived(string channelName, string[] userList)
         {
-            wm.AddCallback(new UserListDelegate(DoUserListReceived),
-                channelName, userList);
+            uiDispatcher.Post(() => DoUserListReceived(channelName, userList));
         }
 
         private void DoUserListReceived(string channelName, string[] userList)
@@ -789,7 +780,7 @@ namespace DTAClient.Online
 
         public void OnUserQuitIRC(string userName)
         {
-            wm.AddCallback(new Action<string>(DoUserQuitIRC), userName);
+            uiDispatcher.Post(() => DoUserQuitIRC(userName));
         }
 
         private void DoUserQuitIRC(string userName)
@@ -807,7 +798,7 @@ namespace DTAClient.Online
 
         public void OnWelcomeMessageReceived(string message)
         {
-            wm.AddCallback(new Action<string>(DoWelcomeMessageReceived), message);
+            uiDispatcher.Post(() => DoWelcomeMessageReceived(message));
         }
 
 
@@ -838,8 +829,7 @@ namespace DTAClient.Online
 
         public void OnWhoReplyReceived(string ident, string hostName, string userName, string extraInfo)
         {
-            wm.AddCallback(new Action<string, string, string, string>(DoWhoReplyReceived),
-                ident, hostName, userName, extraInfo);
+            uiDispatcher.Post(() => DoWhoReplyReceived(ident, hostName, userName, extraInfo));
         }
 
         private void DoWhoReplyReceived(string ident, string hostName, string userName, string extraInfo)
@@ -881,7 +871,7 @@ namespace DTAClient.Online
 
         public void OnNameAlreadyInUse()
         {
-            wm.AddCallback(new Action(DoNameAlreadyInUse), null);
+            uiDispatcher.Post(DoNameAlreadyInUse);
         }
 
         /// <summary>
@@ -902,7 +892,7 @@ namespace DTAClient.Online
 
                 if (lastNonUnderscoreIndex == -1)
                 {
-                    MainChannel.AddMessage(new ChatMessage(Color.White,
+                    MainChannel.AddMessage(new ChatMessage(ChatColor.White,
                         "Your nickname is invalid or already in use. Please change your nickname in the login screen.".L10N("Client:Main:PickAnotherNickName")));
                     UserINISettings.Instance.SkipConnectDialog.Value = false;
                     Disconnect();
@@ -916,7 +906,7 @@ namespace DTAClient.Online
             foreach (char c in charList)
                 sb.Append(c);
 
-            MainChannel.AddMessage(new ChatMessage(Color.White,
+            MainChannel.AddMessage(new ChatMessage(ChatColor.White,
                 string.Format("Your name is already in use. Retrying with {0}...".L10N("Client:Main:NameInUseRetry"), sb.ToString())));
 
             ProgramConstants.PLAYERNAME = sb.ToString();
@@ -925,7 +915,7 @@ namespace DTAClient.Online
 
         public void OnBannedFromChannel(string channelName)
         {
-            wm.AddCallback(new Action<string>(DoBannedFromChannel), channelName);
+            uiDispatcher.Post(() => DoBannedFromChannel(channelName));
         }
 
         private void DoBannedFromChannel(string channelName)
@@ -934,7 +924,7 @@ namespace DTAClient.Online
         }
 
         public void OnUserNicknameChange(string oldNickname, string newNickname)
-            => wm.AddCallback(new Action<string, string>(DoUserNicknameChange), oldNickname, newNickname);
+            => uiDispatcher.Post(() => DoUserNicknameChange(oldNickname, newNickname));
 
         private void DoUserNicknameChange(string oldNickname, string newNickname)
         {
@@ -952,7 +942,7 @@ namespace DTAClient.Online
 
         public void OnServerLatencyTested(int candidateCount, int closerCount)
         {
-            wm.AddCallback(new Action<int, int>(DoServerLatencyTested), candidateCount, closerCount);
+            uiDispatcher.Post(() => DoServerLatencyTested(candidateCount, closerCount));
         }
 
         private void DoServerLatencyTested(int candidateCount, int closerCount)

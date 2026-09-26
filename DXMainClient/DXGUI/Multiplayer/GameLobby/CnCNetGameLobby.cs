@@ -706,7 +706,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         public void ChangeChatColor(IRCColor chatColor)
         {
             this.chatColor = chatColor;
-            tbChatInput.TextColor = chatColor.XnaColor;
+            tbChatInput.TextColor = chatColor.Color.ToXnaColor();
         }
 
         public override void Clear()
@@ -829,7 +829,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (e.UserName == hostName)
             {
                 connectionManager.MainChannel.AddMessage(new ChatMessage(
-                    ERROR_MESSAGE_COLOR, "The game host abandoned the game.".L10N("Client:Main:HostAbandoned")));
+                    ERROR_MESSAGE_COLOR.ToChatColor(), "The game host abandoned the game.".L10N("Client:Main:HostAbandoned")));
                 BtnLeaveGame_LeftClick(this, EventArgs.Empty);
             }
             else
@@ -843,7 +843,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (e.UserName == hostName)
             {
                 connectionManager.MainChannel.AddMessage(new ChatMessage(
-                    ERROR_MESSAGE_COLOR, "The game host abandoned the game.".L10N("Client:Main:HostAbandoned")));
+                    ERROR_MESSAGE_COLOR.ToChatColor(), "The game host abandoned the game.".L10N("Client:Main:HostAbandoned")));
                 BtnLeaveGame_LeftClick(this, EventArgs.Empty);
             }
             else
@@ -855,7 +855,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (e.UserName == ProgramConstants.PLAYERNAME)
             {
                 connectionManager.MainChannel.AddMessage(new ChatMessage(
-                    ERROR_MESSAGE_COLOR, "You were kicked from the game!".L10N("Client:Main:YouWereKicked")));
+                    ERROR_MESSAGE_COLOR.ToChatColor(), "You were kicked from the game!".L10N("Client:Main:YouWereKicked")));
                 Clear();
                 this.Visible = false;
                 this.Enabled = false;
@@ -881,7 +881,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 if (channel.Users.Find(hostName) == null)
                 {
                     connectionManager.MainChannel.AddMessage(new ChatMessage(
-                        ERROR_MESSAGE_COLOR, "The game host has abandoned the game.".L10N("Client:Main:HostHasAbandoned")));
+                        ERROR_MESSAGE_COLOR.ToChatColor(), "The game host has abandoned the game.".L10N("Client:Main:HostHasAbandoned")));
                     BtnLeaveGame_LeftClick(this, EventArgs.Empty);
                 }
             }
@@ -1001,7 +1001,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             if (cncnetUserData.IsIgnored(e.Message.SenderIdent))
             {
-                lbChatMessages.AddMessage(new ChatMessage(Color.Silver,
+                lbChatMessages.AddMessage(new ChatMessage(Color.Silver.ToChatColor(),
                     string.Format("Message blocked from {0}".L10N("Client:Main:MessageBlockedFromPlayer"), e.Message.SenderName)));
             }
             else
@@ -1274,7 +1274,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             Session.RequestReady(readyState);
         }
 
-        protected override void AddNotice(string message, Color color) => channel.AddMessage(new ChatMessage(color, message));
+        protected override void AddNotice(string message, Color color) => channel.AddMessage(new ChatMessage(color.ToChatColor(), message));
 
         /// <summary>
         /// Handles player option requests received from non-host players.

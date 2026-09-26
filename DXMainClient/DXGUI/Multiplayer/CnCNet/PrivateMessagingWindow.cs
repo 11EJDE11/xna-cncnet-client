@@ -264,7 +264,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
 
             if (pmUser != null)
             {
-                leaveMessage = new ChatMessage(Color.White,
+                leaveMessage = new ChatMessage(Color.White.ToChatColor(),
                     string.Format("{0} is now offline.".L10N("Client:Main:PlayerOffline"), e.UserName));
                 pmUser.Messages.Add(leaveMessage);
             }
@@ -464,7 +464,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 connectionManager.MainChannel.Users.Find(e.Sender) == null)
                 return;
 
-            ChatMessage message = new ChatMessage(e.Sender, otherUserMessageColor, DateTime.Now, e.Message);
+            ChatMessage message = new ChatMessage(e.Sender, otherUserMessageColor.ToChatColor(), DateTime.Now, e.Message);
 
             pmUser.Messages.Add(message);
 
@@ -551,7 +551,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             }
 
             ChatMessage sentMessage = new ChatMessage(ProgramConstants.PLAYERNAME,
-                personalMessageColor, DateTime.Now, tbMessageInput.Text);
+                personalMessageColor.ToChatColor(), DateTime.Now, tbMessageInput.Text);
 
             pmUser.Messages.Add(sentMessage);
 

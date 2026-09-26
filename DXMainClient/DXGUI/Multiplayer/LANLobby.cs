@@ -317,7 +317,7 @@ namespace DTAClient.DXGUI.Multiplayer
         private void LanGameLobby_GameLeft(object sender, GameLeftEventArgs e)
         {
             if (!string.IsNullOrWhiteSpace(e.Message))
-                AddChatMessage(new ChatMessage(Color.Red, e.Message));
+                AddChatMessage(new ChatMessage(Color.Red.ToChatColor(), e.Message));
 
             Enable();
         }
@@ -383,7 +383,7 @@ namespace DTAClient.DXGUI.Multiplayer
             }
             catch (Exception ex)
             {
-                AddChatMessage(new ChatMessage(Color.Red,
+                AddChatMessage(new ChatMessage(Color.Red.ToChatColor(),
                     "Creating LAN socket failed! Message:".L10N("Client:Main:SocketFailure1") + " " + ex.Message + "\n" +
                     "Please check your firewall settings.".L10N("Client:Main:SocketFailure2") + " " +
                     "Also make sure that no other application is listening to traffic on UDP ports 1232 - 1234.".L10N("Client:Main:SocketFailure3")));
@@ -404,7 +404,7 @@ namespace DTAClient.DXGUI.Multiplayer
             if (!sendSucceeded)
             {
                 // Socket is not initialized or sending failed; report this so failures are not silent.
-                AddChatMessage(new ChatMessage(Color.Red,
+                AddChatMessage(new ChatMessage(Color.Red.ToChatColor(),
                         "Failed to send LAN broadcast message. The network socket may not be initialized."));
             }
         }
@@ -468,7 +468,7 @@ namespace DTAClient.DXGUI.Multiplayer
                         return;
 
                     AddChatMessage(new ChatMessage(user.Name,
-                        chatColors[colorIndex].XNAColor, DateTime.Now, parameters[1]));
+                        chatColors[colorIndex].XNAColor.ToChatColor(), DateTime.Now, parameters[1]));
 
                     break;
 
@@ -581,7 +581,7 @@ namespace DTAClient.DXGUI.Multiplayer
 
             if (hg.GameVersion != ProgramConstants.GAME_VERSION)
             {
-                AddChatMessage(new ChatMessage(Color.Yellow, "The game host is on a different game version than you. Version incompatibilities may cause issues.".L10N("Client:Main:JoinGameVersionMismatch")));
+                AddChatMessage(new ChatMessage(Color.Yellow.ToChatColor(), "The game host is on a different game version than you. Version incompatibilities may cause issues.".L10N("Client:Main:JoinGameVersionMismatch")));
             }
 
             AddChatMessage(string.Format("Attempting to join game {0} ...".L10N("Client:Main:AttemptJoin"), hg.RoomName));

@@ -261,7 +261,7 @@ namespace DTAClient.Online
 
         public void SendChatMessage(string message, IRCColor color)
         {
-            AddMessage(new ChatMessage(ProgramConstants.PLAYERNAME, color.XnaColor, DateTime.Now, message));
+            AddMessage(new ChatMessage(ProgramConstants.PLAYERNAME, color.Color, DateTime.Now, message));
 
             string colorString = ((char)03).ToString() + color.IrcColorId.ToString("D2");
 
