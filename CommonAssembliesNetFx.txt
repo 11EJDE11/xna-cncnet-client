@@ -1,6 +1,7 @@
 ClientUpdater.dll
 ClientUpdater.pdb
 arm64\libHarfBuzzSharp.dll
+CommunityToolkit.Mvvm.dll
 Cyotek.Drawing.BitmapFont.dll
 DiscordRPC.dll
 Facepunch.Steamworks.Win64.dll
@@ -50,6 +51,7 @@ StbImageSharp.dll
 StbTrueTypeSharp.dll
 System.Buffers.dll
 System.CodeDom.dll
+System.ComponentModel.Annotations.dll
 System.Diagnostics.DiagnosticSource.dll
 System.IO.FileSystem.AccessControl.dll
 System.Memory.dll

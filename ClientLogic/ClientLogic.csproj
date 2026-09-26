@@ -9,6 +9,7 @@
     <GenerateGitVersionInformation>false</GenerateGitVersionInformation>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="lzo.net" />
     <PackageReference Include="OpenMcdf" />
     <PackageReference Include="SixLabors.ImageSharp" />

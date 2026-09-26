@@ -1,5 +1,6 @@
 ClientUpdater.dll
 ClientUpdater.pdb
+CommunityToolkit.Mvvm.dll
 Cyotek.Drawing.BitmapFont.dll
 DiscordRPC.dll
 Facepunch.Steamworks.Win64.dll
