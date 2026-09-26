@@ -1300,37 +1300,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             int start = request.Options.Start;
             int team = request.Options.Team;
 
-            if (side < 0 || side > SideCount + RandomSelectorCount)
-                return;
-
-            if (color < 0 || color > MPColors.Count)
-                return;
-
-            // Disallowed sides from client, maps, or game modes do not take random selectors into account
-            // So, we need to insert "false" for each random at the beginning of this list AFTER getting them
-            // from client, maps, or game modes.
-            var randomDisallowedSides = new List<bool>(RandomSelectorCount);
-            for (int i = 0; i < RandomSelectorCount; i++)
-                randomDisallowedSides.Add(false);
-
-            var disallowedSides = randomDisallowedSides.Concat(GetDisallowedSides()).ToArray();
-
-            if (0 < side && side < SideCount && disallowedSides[side])
-                return;
-
-            if (GameModeMap?.CoopInfo != null)
-            {
-                if (GameModeMap.CoopInfo.DisallowedPlayerSides.Contains(side - 1) || side == SideCount + RandomSelectorCount)
-                    return;
-
-                if (GameModeMap.CoopInfo.DisallowedPlayerColors.Contains(color - 1))
-                    return;
-            }
-
-            if (!(start == 0 || (GameModeMap?.AllowedStartingLocations?.Contains(start) ?? true)))
-                return;
-
-            if (team < 0 || team > 4)
+            if (!IsPlayerOptionsRequestAllowed(side, color, start, team))
                 return;
 
             if (side != pInfo.SideId

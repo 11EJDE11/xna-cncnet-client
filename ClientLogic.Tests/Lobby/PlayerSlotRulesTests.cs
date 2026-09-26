@@ -210,4 +210,32 @@ public class PlayerSlotRulesTests
         SlotControls noMap = PlayerSlotRules.ComputeControls(false, true, true, none, false, false, false);
         Assert.False(noMap.TeamAndStartKnown);
     }
+
+    [Fact]
+    public void OptionRequestsFollowTheDropDownRules()
+    {
+        // Human players may not use real side 3 (side id 6), e.g. DisallowedHumanPlayerSides; co-op map
+        SideAvailability humanSides = PlayerSlotRules.ComputeSideAvailability(
+            [false, false, false, true], Selectors, Map, hasCoopInfo: true);
+        bool[] colors = PlayerSlotRules.ComputeColorSelectable(9, coopDisallowedColors: [1], mpColorCount: 8);
+        bool AnyStart(int start) => start <= 4;
+
+        bool Allowed(int side, int color = 0, int start = 0, int team = 0) =>
+            PlayerSlotRules.IsOptionsRequestAllowed(side, color, start, team, humanSides, Map, colors, AnyStart);
+
+        Assert.True(Allowed(3, color: 1, start: 4, team: 4));
+        Assert.False(Allowed(6));   // the last real side: the old CnCNet check skipped it
+        Assert.False(Allowed(7));   // Spectator on a co-op map
+        Assert.False(Allowed(8));
+        Assert.False(Allowed(-1));
+        Assert.False(Allowed(3, color: 2));   // co-op disallowed colour
+        Assert.False(Allowed(3, color: 9));
+        Assert.False(Allowed(3, start: 5));
+        Assert.False(Allowed(3, team: 5));
+
+        // Random choices are accepted even when not selectable; the side check moves them afterwards
+        Assert.False(humanSides.Selectable[2]);
+        Assert.True(Allowed(2));
+        Assert.True(Allowed(0));
+    }
 }

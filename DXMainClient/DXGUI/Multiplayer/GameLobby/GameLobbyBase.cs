@@ -1384,6 +1384,22 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         }
 
         /// <summary>
+        /// Whether the game host accepts a player's request to change their side, colour, start and team: the same
+        /// rules as the player's own drop-downs.
+        /// </summary>
+        protected bool IsPlayerOptionsRequestAllowed(int side, int color, int start, int team)
+        {
+            SideAvailability humanSides = PlayerSlotRules.ComputeSideAvailability(
+                GetDisallowedSidesForGroup(forHumanPlayers: true), RandomSelectors, SlotIndices,
+                hasCoopInfo: GameModeMap?.CoopInfo != null);
+            bool[] colors = PlayerSlotRules.ComputeColorSelectable(MPColors.Count + 1,
+                GameModeMap?.CoopInfo?.DisallowedPlayerColors, MPColors.Count);
+
+            return PlayerSlotRules.IsOptionsRequestAllowed(side, color, start, team, humanSides, SlotIndices, colors,
+                s => GameModeMap?.AllowedStartingLocations?.Contains(s) ?? true);
+        }
+
+        /// <summary>
         /// Applies disallowed side indexes to the side option drop-downs
         /// and player options.
         /// </summary>

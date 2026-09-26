@@ -110,13 +110,18 @@ public static class PlayerSlotRules
     }
 
     /// <summary>Whether each colour item (0 = Random) can be picked.</summary>
-    public static bool[] ComputeColorSelectable(int colorItemCount, MapSlotRules map, int mpColorCount)
+    public static bool[] ComputeColorSelectable(int colorItemCount, MapSlotRules map, int mpColorCount) =>
+        ComputeColorSelectable(colorItemCount, map.CoopDisallowedColors, mpColorCount);
+
+    /// <summary>Whether each colour item (0 = Random) can be picked.</summary>
+    /// <param name="coopDisallowedColors">The co-op map's disallowed colours, or null.</param>
+    public static bool[] ComputeColorSelectable(int colorItemCount, IReadOnlyList<int> coopDisallowedColors, int mpColorCount)
     {
         var selectable = Enumerable.Repeat(true, colorItemCount).ToArray();
 
-        if (map.HasCoopInfo)
+        if (coopDisallowedColors != null)
         {
-            foreach (int disallowedColorIndex in map.CoopDisallowedColors)
+            foreach (int disallowedColorIndex in coopDisallowedColors)
             {
                 if (disallowedColorIndex < mpColorCount)
                     selectable[SlotIndexMapper.ColorId(disallowedColorIndex)] = false;
@@ -124,6 +129,36 @@ public static class PlayerSlotRules
         }
 
         return selectable;
+    }
+
+    /// <summary>The highest team index (teams are 1-4, 0 = none).</summary>
+    public const int MaxTeam = 4;
+
+    /// <summary>
+    /// Whether the game host accepts a player's request to change their own side, colour, start and team.
+    /// Real sides, Spectator and colours must be selectable as in the player's own drop-downs. Random and the
+    /// random selectors are accepted even when not selectable: the host's side check moves them to the default
+    /// side, as it does for everyone.
+    /// </summary>
+    /// <param name="humanSides">The side availability for human players.</param>
+    /// <param name="colorSelectable">From <see cref="ComputeColorSelectable(int, IReadOnlyList{int}, int)"/>.</param>
+    /// <param name="isStartAllowed">Whether a start location other than random is allowed.</param>
+    public static bool IsOptionsRequestAllowed(int side, int color, int start, int team, SideAvailability humanSides,
+        SlotIndexMapper map, bool[] colorSelectable, System.Func<int, bool> isStartAllowed)
+    {
+        if (side < 0 || side >= humanSides.Selectable.Count)
+            return false;
+
+        if (side >= map.RandomSelectorCount && !humanSides.Selectable[side])
+            return false;
+
+        if (color < 0 || color >= colorSelectable.Length || !colorSelectable[color])
+            return false;
+
+        if (start != SlotIndexMapper.RandomStart && !isStartAllowed(start))
+            return false;
+
+        return team >= 0 && team <= MaxTeam;
     }
 
     /// <summary>
