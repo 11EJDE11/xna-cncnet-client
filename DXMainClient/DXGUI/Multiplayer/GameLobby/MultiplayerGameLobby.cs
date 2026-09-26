@@ -1193,6 +1193,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             iniFile.SetIntValue("Settings", "Protocol", ProtocolVersion);
         }
 
+        protected override void AddLaunchCaptureInputs(IDictionary<string, object> inputs)
+        {
+            base.AddLaunchCaptureInputs(inputs);
+            inputs["IsHost"] = IsHost;
+            inputs["FrameSendRate"] = FrameSendRate;
+            inputs["MaxAhead"] = MaxAhead;
+            inputs["ProtocolVersion"] = ProtocolVersion;
+        }
+
         protected override int GetDefaultMapRankIndex(GameModeMap gameModeMap)
         {
             if (gameModeMap.MaxPlayers > 3)

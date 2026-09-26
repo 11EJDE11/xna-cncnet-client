@@ -2174,16 +2174,65 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         protected virtual void StartGame()
         {
+            LaunchCapture launchCapture = LaunchCapture.Begin(GetLaunchCaptureInputs);
+
             Random pseudoRandom = new Random(RandomSeed);
 
             PlayerHouseInfo[] houseInfos = WriteSpawnIni(pseudoRandom);
             InitializeMatchStatistics(houseInfos);
             WriteMap(houseInfos, pseudoRandom);
 
+            launchCapture?.Complete(ProgramConstants.PLAYERNAME);
+
             GameProcessLogic.GameProcessExited += GameProcessExited_Callback;
 
             GameProcessLogic.StartGameProcess(WindowManager);
             UpdateDiscordPresence(true);
+        }
+
+        private IDictionary<string, object> GetLaunchCaptureInputs()
+        {
+            var inputs = new Dictionary<string, object>();
+            AddLaunchCaptureInputs(inputs);
+            return inputs;
+        }
+
+        /// <summary>
+        /// Adds the lobby state that the game launch depends on to a launch capture.
+        /// See <see cref="LaunchCapture"/>.
+        /// </summary>
+        protected virtual void AddLaunchCaptureInputs(IDictionary<string, object> inputs)
+        {
+            PlayerExtraOptions extraOptions = GetPlayerExtraOptions();
+
+            inputs["LobbyType"] = GetType().Name;
+            inputs["LocalPlayerName"] = ProgramConstants.PLAYERNAME;
+            inputs["Seed"] = RandomSeed;
+            inputs["GameMode"] = GameMode.Name;
+            inputs["GameModeUIName"] = GameMode.UntranslatedUIName;
+            inputs["MapName"] = Map.UntranslatedName;
+            inputs["MapSHA1"] = Map.SHA1;
+            inputs["MapPath"] = Map.CompleteFilePath;
+            inputs["MapOfficial"] = Map.Official;
+            inputs["IsCoop"] = GameModeMap.IsCoop;
+            inputs["SideCount"] = SideCount;
+            inputs["RandomSelectorCount"] = RandomSelectorCount;
+            inputs["RemoveStartingLocations"] = RemoveStartingLocations;
+            inputs["Players"] = Players.Select(LaunchCapture.DescribePlayer).ToList();
+            inputs["AIPlayers"] = AIPlayers.Select(LaunchCapture.DescribePlayer).ToList();
+            inputs["CheckBoxes"] = CheckBoxes.Select(chk => new { chk.Name, chk.Checked }).ToList();
+            inputs["DropDowns"] = DropDowns.Select(dd => new { dd.Name, dd.SelectedIndex, SelectedItem = dd.SelectedItem?.Text }).ToList();
+            inputs["PlayerExtraOptions"] = new
+            {
+                extraOptions.IsForceRandomSides,
+                extraOptions.IsForceRandomColors,
+                extraOptions.IsForceNoTeams,
+                extraOptions.IsForceRandomStarts,
+                extraOptions.IsUseTeamStartMappings,
+            };
+            inputs["TeamStartMappings"] = PlayerExtraOptionsPanel == null
+                ? new List<object>()
+                : PlayerExtraOptionsPanel.GetTeamStartMappings().Select(m => (object)new { m.Team, m.Start }).ToList();
         }
 
         private void GameProcessExited_Callback() => AddCallback(new Action(GameProcessExited), null);

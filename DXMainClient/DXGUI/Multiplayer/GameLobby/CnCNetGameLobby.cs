@@ -2394,6 +2394,17 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             iniFile.SetBooleanValue("Settings", "Host", IsHost);
             iniFile.SetIntValue("Settings", "Port", localPlayer.Port);
         }
+
+        protected override void AddLaunchCaptureInputs(IDictionary<string, object> inputs)
+        {
+            base.AddLaunchCaptureInputs(inputs);
+            inputs["UniqueGameID"] = UniqueGameID;
+            inputs["TunnelMode"] = _tunnelMode.ToString();
+            inputs["TunnelAddress"] = tunnelHandler.CurrentTunnel?.Address;
+            inputs["TunnelPort"] = tunnelHandler.CurrentTunnel?.Port;
+            inputs["ReservedGamePort"] = tunnelHandler.ReservedGamePort;
+        }
+
         protected override void SendChatMessage(string message) => channel.SendChatMessage(message, chatColor);
 
         #region Notifications

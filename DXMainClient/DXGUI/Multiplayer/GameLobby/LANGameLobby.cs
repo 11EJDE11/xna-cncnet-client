@@ -1212,6 +1212,13 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         #endregion
 
+        protected override void AddLaunchCaptureInputs(IDictionary<string, object> inputs)
+        {
+            base.AddLaunchCaptureInputs(inputs);
+            inputs["UniqueGameID"] = UniqueGameID;
+            inputs["Port"] = ProgramConstants.LAN_INGAME_PORT;
+        }
+
         protected override void WriteSpawnIniAdditions(IniFile iniFile)
         {
             base.WriteSpawnIniAdditions(iniFile);
