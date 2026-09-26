@@ -19,17 +19,6 @@ public class GameLobbyCheckBox : GameSessionCheckBox
     public GameLobbyCheckBox(WindowManager windowManager) : base(windowManager) { }
 
     /// <summary>
-    /// The last host-defined value for this check box (<see cref="GameOption.HostValue"/>).
-    /// Defaults to the default value of Checked after the check-box
-    /// has been initialized, but its value is only changed by user interaction.
-    /// </summary>
-    public bool HostChecked
-    {
-        get => Option.HostValue != 0;
-        set => Option.HostValue = value ? 1 : 0;
-    }
-
-    /// <summary>
     /// The last value that the local player gave for this check box (<see cref="GameOption.UserValue"/>).
     /// Defaults to the default value of Checked after the check-box
     /// has been initialized, but its value is only changed by user interaction.

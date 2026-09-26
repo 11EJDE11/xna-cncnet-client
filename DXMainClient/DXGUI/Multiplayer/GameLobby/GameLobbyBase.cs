@@ -208,8 +208,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private MatchStatistics matchStatistics;
 
-        private bool disableGameOptionUpdateBroadcast = false;
-
         protected EventHandler<MultiplayerNameRightClickedEventArgs> MultiplayerNameRightClicked;
 
         /// <summary>
@@ -362,8 +360,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             btnPickRandomMap = FindChild<XNAClientButton>(nameof(btnPickRandomMap));
             btnPickRandomMap.LeftClick += BtnPickRandomMap_LeftClick;
 
-            CheckBoxes.ForEach(chk => chk.CheckedChanged += ChkBox_CheckedChanged);
-            DropDowns.ForEach(dd => dd.SelectedIndexChanged += Dropdown_SelectedIndexChanged);
+            GameOptions.OptionChanged += GameOptions_OptionChanged;
 
             InitializeGameOptionPresetUI();
 
@@ -631,25 +628,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             ListMaps();
         }
 
-        private void Dropdown_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (disableGameOptionUpdateBroadcast)
-                return;
-
-            var dd = (GameLobbyDropDown)sender;
-            dd.HostSelectedIndex = dd.SelectedIndex;
-            OnGameOptionChanged();
-        }
-
-        private void ChkBox_CheckedChanged(object sender, EventArgs e)
-        {
-            if (disableGameOptionUpdateBroadcast)
-                return;
-
-            var checkBox = (GameLobbyCheckBox)sender;
-            checkBox.HostChecked = checkBox.Checked;
-            OnGameOptionChanged();
-        }
+        private void GameOptions_OptionChanged(object sender, GameOption option) => OnGameOptionChanged();
 
         protected virtual void OnGameOptionChanged()
         {
@@ -2119,39 +2098,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 return;
             }
 
-            disableGameOptionUpdateBroadcast = true;
+            GameOptions.BeginUpdate();
 
-            // Clear forced options
-            foreach (var ddGameOption in DropDowns)
-                ddGameOption.AllowDropDown = true;
-
-            foreach (var checkBox in CheckBoxes)
-                checkBox.AllowChecking = true;
-
-            // We could either pass the CheckBoxes and DropDowns of this class
-            // to the Map and GameMode instances and let them apply their forced
-            // options, or we could do it in this class with helper functions.
-            // The second approach is probably clearer.
-
-            // We use these temp lists to determine which options WERE NOT forced
-            // by the map. We then return these to user-defined settings.
-            // This prevents forced options from one map getting carried
-            // to other maps.
-
-            var checkBoxListClone = new List<GameLobbyCheckBox>(CheckBoxes);
-            var dropDownListClone = new List<GameLobbyDropDown>(DropDowns);
-
-            ApplyForcedCheckBoxOptions(checkBoxListClone, GameMode.ForcedCheckBoxValues);
-            ApplyForcedCheckBoxOptions(checkBoxListClone, Map.ForcedCheckBoxValues);
-
-            ApplyForcedDropDownOptions(dropDownListClone, GameMode.ForcedDropDownValues);
-            ApplyForcedDropDownOptions(dropDownListClone, Map.ForcedDropDownValues);
-
-            foreach (var chkBox in checkBoxListClone)
-                chkBox.Checked = chkBox.HostChecked;
-
-            foreach (var dd in dropDownListClone)
-                dd.SelectedIndex = dd.HostSelectedIndex;
+            // Forced options of the previous map don't carry over: the others return to the host's choice
+            GameOptions.ApplyGameModeMap(GameMode, Map);
 
             // Enable all sides by default
             foreach (var ddSide in ddPlayerSides)
@@ -2260,39 +2210,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             MapPreviewBox.GameModeMap = GameModeMap;
             CopyPlayerDataToUI();
 
-            disableGameOptionUpdateBroadcast = false;
+            GameOptions.EndUpdate();
 
             PlayerExtraOptionsPanel?.UpdateForGameModeMap(GameModeMap);
-        }
-
-        private void ApplyForcedCheckBoxOptions(List<GameLobbyCheckBox> optionList,
-            List<KeyValuePair<string, bool>> forcedOptions)
-        {
-            foreach (KeyValuePair<string, bool> option in forcedOptions)
-            {
-                GameLobbyCheckBox checkBox = CheckBoxes.Find(chk => chk.Name == option.Key);
-                if (checkBox != null)
-                {
-                    checkBox.Checked = option.Value;
-                    checkBox.AllowChecking = false;
-                    optionList.Remove(checkBox);
-                }
-            }
-        }
-
-        private void ApplyForcedDropDownOptions(List<GameLobbyDropDown> optionList,
-            List<KeyValuePair<string, int>> forcedOptions)
-        {
-            foreach (KeyValuePair<string, int> option in forcedOptions)
-            {
-                GameLobbyDropDown dropDown = DropDowns.Find(dd => dd.Name == option.Key);
-                if (dropDown != null)
-                {
-                    dropDown.SelectedIndex = option.Value;
-                    dropDown.AllowDropDown = false;
-                    optionList.Remove(dropDown);
-                }
-            }
         }
 
         protected string AILevelToName(int aiLevel)
@@ -2476,18 +2396,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (!string.IsNullOrEmpty(error))
                 return error;
 
-            GameOptionPreset preset = new GameOptionPreset(name);
-            foreach (GameLobbyCheckBox checkBox in CheckBoxes)
-            {
-                preset.AddCheckBoxValue(checkBox.Name, checkBox.Checked);
-            }
-
-            foreach (GameLobbyDropDown dropDown in DropDowns)
-            {
-                preset.AddDropDownValue(dropDown.Name, dropDown.SelectedIndex);
-            }
-
-            GameOptionPresets.Instance.AddPreset(preset);
+            GameOptionPresets.Instance.AddPreset(GameOptions.CreatePreset(name));
             return null;
         }
 
@@ -2497,31 +2406,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (preset == null)
                 return false;
 
-            disableGameOptionUpdateBroadcast = true;
-
-            var checkBoxValues = preset.GetCheckBoxValues();
-            foreach (var kvp in checkBoxValues)
-            {
-                GameLobbyCheckBox checkBox = CheckBoxes.Find(c => c.Name == kvp.Key);
-                if (checkBox != null && checkBox.AllowChanges && checkBox.AllowChecking)
-                {
-                    checkBox.Checked = kvp.Value;
-                    checkBox.HostChecked = kvp.Value;
-                }
-            }
-
-            var dropDownValues = preset.GetDropDownValues();
-            foreach (var kvp in dropDownValues)
-            {
-                GameLobbyDropDown dropDown = DropDowns.Find(d => d.Name == kvp.Key);
-                if (dropDown != null && dropDown.AllowDropDown)
-                {
-                    dropDown.SelectedIndex = kvp.Value;
-                    dropDown.HostSelectedIndex = kvp.Value;
-                }
-            }
-
-            disableGameOptionUpdateBroadcast = false;
+            // Only check boxes are also locked for players who aren't the host
+            GameOptions.ApplyPreset(preset, option => CheckBoxes.Find(c => c.Option == option).AllowChanges);
             OnGameOptionChanged();
             return true;
         }

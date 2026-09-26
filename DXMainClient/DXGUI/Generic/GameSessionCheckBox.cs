@@ -118,6 +118,8 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
         {
             if (e.PropertyName == nameof(GameOption.Value) && Checked != created.IsChecked)
                 Checked = created.IsChecked;
+            else if (e.PropertyName == nameof(GameOption.ForcedLocked))
+                AllowChecking = !created.ForcedLocked;
         };
 
         return created;

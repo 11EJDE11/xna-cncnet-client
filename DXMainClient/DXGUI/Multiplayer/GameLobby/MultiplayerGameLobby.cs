@@ -816,16 +816,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 chkAutoReady.Disable();
 
                 foreach (GameLobbyDropDown dd in DropDowns)
-                {
                     dd.InputEnabled = true;
-                    dd.SelectedIndex = dd.UserSelectedIndex;
-                }
 
                 foreach (GameLobbyCheckBox checkBox in CheckBoxes)
-                {
                     checkBox.AllowChanges = true;
-                    checkBox.Checked = checkBox.UserChecked;
-                }
+
+                // Restore the local player's own choices, and send them once
+                if (GameOptions.RestoreUserValues())
+                    OnGameOptionChanged();
 
                 GenerateGameID();
             }

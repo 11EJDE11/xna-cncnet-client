@@ -44,6 +44,10 @@ public sealed partial class GameOption : ObservableObject, IGameSessionSetting
     [ObservableProperty]
     private int userValue;
 
+    /// <summary>Whether the current game mode or map forces the value, so that nobody can change it.</summary>
+    [ObservableProperty]
+    private bool forcedLocked;
+
     public string Name => Definition.Name;
 
     public bool IsCheckBox => Definition.Kind == GameOptionKind.CheckBox;
@@ -137,26 +141,4 @@ public sealed partial class GameOption : ObservableObject, IGameSessionSetting
 
         MapCodeHelper.ApplyMapCode(mapIni, Definition.Items[Value].Value, gameMode);
     }
-}
-
-/// <summary>The game options of a lobby, in INI order (which is also the order they are sent in).</summary>
-public sealed class GameOptionSet
-{
-    private readonly List<GameOption> all = [];
-    private readonly List<GameOption> checkBoxes = [];
-    private readonly List<GameOption> dropDowns = [];
-
-    public IReadOnlyList<GameOption> All => all;
-
-    public IReadOnlyList<GameOption> CheckBoxes => checkBoxes;
-
-    public IReadOnlyList<GameOption> DropDowns => dropDowns;
-
-    public void Add(GameOption option)
-    {
-        all.Add(option);
-        (option.IsCheckBox ? checkBoxes : dropDowns).Add(option);
-    }
-
-    public GameOption Find(string name) => all.FirstOrDefault(o => o.Name == name);
 }

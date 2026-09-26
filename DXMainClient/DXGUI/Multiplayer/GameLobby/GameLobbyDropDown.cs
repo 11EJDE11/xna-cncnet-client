@@ -12,13 +12,6 @@ public class GameLobbyDropDown : GameSessionDropDown
 {
     public GameLobbyDropDown(WindowManager windowManager) : base(windowManager) { }
 
-    /// <summary>The last host-defined selection (<see cref="GameOption.HostValue"/>).</summary>
-    public int HostSelectedIndex
-    {
-        get => Option.HostValue;
-        set => Option.HostValue = value;
-    }
-
     /// <summary>The last selection the local player made (<see cref="GameOption.UserValue"/>).</summary>
     public int UserSelectedIndex
     {

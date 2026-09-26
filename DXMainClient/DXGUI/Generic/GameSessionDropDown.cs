@@ -123,6 +123,8 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
         {
             if (e.PropertyName == nameof(GameOption.Value) && SelectedIndex != created.Value)
                 SelectedIndex = created.Value;
+            else if (e.PropertyName == nameof(GameOption.ForcedLocked))
+                AllowDropDown = !created.ForcedLocked;
         };
 
         return created;
