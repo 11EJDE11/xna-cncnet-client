@@ -29,6 +29,7 @@
     <Platform Solution="WindowsXNADebug|*" Project="x86" />
     <Platform Solution="WindowsXNARelease|*" Project="x86" />
   </Project>
+  <Project Path="AvClientView/AvClientView.csproj" />
   <Project Path="ClientUpdater/ClientUpdater.csproj" />
   <Project Path="DXMainClient/DXMainClient.csproj">
     <Platform Solution="WindowsXNADebug|*" Project="x86" />

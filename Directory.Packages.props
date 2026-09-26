@@ -7,6 +7,9 @@
     <GlobalPackageReference Include="GitVersion.MsBuild" Version="5.12.0" />
   </ItemGroup>
   <ItemGroup>
+    <PackageVersion Include="Avalonia" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.3" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageVersion Include="DiscordRichPresence" Version="1.2.1.24" />
     <PackageVersion Include="Facepunch.Steamworks" Version="2.4.1" />
@@ -16,6 +19,7 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.3" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.4.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(DotnetLibrariesVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DotnetLibrariesVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(DotnetLibrariesVersion)" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

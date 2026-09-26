@@ -1,0 +1,86 @@
+using System;
+using System.Globalization;
+using System.IO;
+using System.Text;
+
+using Avalonia;
+
+using ClientCore;
+using ClientCore.I18N;
+
+using Rampastring.Tools;
+
+namespace AvClientView;
+
+/// <summary>
+/// The Avalonia front end (preview). Install it in the game's Resources folder (e.g. Resources/BinariesAvalonia);
+/// it finds the game folder the same way the XNA client does.
+/// </summary>
+internal static class Program
+{
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        InitializeClient();
+
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
+
+    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>()
+        .UsePlatformDetect()
+        .LogToTrace();
+
+    /// <summary>
+    /// The start-up steps the front end needs from the XNA client's PreStartup: working folder, log file, settings
+    /// and translation.
+    /// </summary>
+    private static void InitializeClient()
+    {
+        Translation.InitialUICulture = CultureInfo.CurrentUICulture;
+        CultureInfo.CurrentUICulture = new CultureInfo(ProgramConstants.HARDCODED_LOCALE_CODE);
+        IniFile.DisallowDesktopIni = true;
+
+        DirectoryInfo gameDirectory = SafePath.GetDirectory(ProgramConstants.GamePath);
+        Environment.CurrentDirectory = gameDirectory.FullName;
+
+        DirectoryInfo clientUserFilesDirectory = SafePath.GetDirectory(ProgramConstants.ClientUserFilesPath);
+        if (!clientUserFilesDirectory.Exists)
+            clientUserFilesDirectory.Create();
+
+        FileInfo logFile = SafePath.GetFile(clientUserFilesDirectory.FullName, "avclient.log");
+        ProgramConstants.LogFileName = logFile.FullName;
+        if (logFile.Exists)
+            logFile.Delete();
+
+        Logger.Initialize(clientUserFilesDirectory.FullName, logFile.Name);
+        Logger.WriteLogFile = true;
+        Logger.Log("***Logfile for the Avalonia client (preview)***");
+
+        UserINISettings.Initialize(ClientConfiguration.Instance.SettingsIniName);
+
+        try
+        {
+            FileInfo translationThemeFile = SafePath.GetFile(UserINISettings.Instance.TranslationThemeFolderPath, ClientConfiguration.Instance.TranslationIniName);
+            FileInfo translationFile = SafePath.GetFile(UserINISettings.Instance.TranslationFolderPath, ClientConfiguration.Instance.TranslationIniName);
+
+            if (translationFile.Exists)
+            {
+                var translation = new Translation(translationFile.FullName, UserINISettings.Instance.Translation);
+                if (translationThemeFile.Exists)
+                    translation.AppendValuesFromIniFile(translationThemeFile.FullName);
+
+                Translation.Instance = translation;
+            }
+
+            Logger.Log("Loaded translation: " + Translation.Instance.Name);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Failed to load the translation file. " + ex);
+            Translation.Instance = new Translation(UserINISettings.Instance.Translation);
+        }
+
+        CultureInfo.CurrentUICulture = Translation.Instance.Culture;
+    }
+}
