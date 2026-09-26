@@ -922,7 +922,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             int mTopIndex = Players.FindIndex(p => p.Name == ProgramConstants.PLAYERNAME);
 
-            if (mTopIndex == -1 || Players[mTopIndex].SideId == ddPlayerSides[0].Items.Count - 1)
+            if (mTopIndex == -1 || Players[mTopIndex].SideId == SlotIndices.SpectatorSide)
                 return;
 
             ddPlayerStarts[mTopIndex].SelectedIndex = e.StartingLocationIndex;
@@ -974,7 +974,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 occupiedColorIds.Add(player.ColorId);
             }
 
-            if (AIPlayers.Count(pInfo => pInfo.SideId == ddPlayerSides[0].Items.Count - 1) > 0)
+            if (AIPlayers.Count(pInfo => pInfo.SideId == SlotIndices.SpectatorSide) > 0)
             {
                 AISpectatorsNotification();
                 return;
@@ -1013,7 +1013,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
-            int totalPlayerCount = Players.Count(p => p.SideId < ddPlayerSides[0].Items.Count - 1)
+            int totalPlayerCount = Players.Count(p => p.SideId < SlotIndices.SpectatorSide)
                 + AIPlayers.Count;
 
             if (GameModeMap.EnforceMinPlayers)

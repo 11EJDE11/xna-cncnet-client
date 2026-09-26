@@ -113,7 +113,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private string CheckGameValidity()
         {
-            int totalPlayerCount = Players.Count(p => p.SideId < ddPlayerSides[0].Items.Count - 1)
+            int totalPlayerCount = Players.Count(p => p.SideId < SlotIndices.SpectatorSide)
                 + AIPlayers.Count;
 
             if (GameModeMap.MultiplayerOnly)
@@ -150,7 +150,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 }
             }
 
-            if (GameModeMap.IsCoop && Players[0].SideId == ddPlayerSides[0].Items.Count - 1)
+            if (GameModeMap.IsCoop && Players[0].SideId == SlotIndices.SpectatorSide)
             {
                 return "Co-op missions cannot be spectated. You'll have to show a bit more effort to cheat here.".L10N("Client:Main:CoOpMissionSpectatorPrompt");
             }
