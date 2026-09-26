@@ -2174,6 +2174,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         protected virtual void StartGame()
         {
+            if (!isMultiplayer && LaunchCapture.ForcedSkirmishSeed is int forcedSeed)
+            {
+                Logger.Log($"Using the random seed {forcedSeed} from {LaunchCapture.SEED_ENVIRONMENT_VARIABLE}.");
+                RandomSeed = forcedSeed;
+            }
+
             LaunchCapture launchCapture = LaunchCapture.Begin(GetLaunchCaptureInputs);
 
             Random pseudoRandom = new Random(RandomSeed);

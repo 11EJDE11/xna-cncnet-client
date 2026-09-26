@@ -13,6 +13,7 @@ namespace DTAClient.Domain.Multiplayer
     /// every game launched from a game lobby leaves a copy of its spawn files and the lobby inputs
     /// that produced them in a new sub-directory of it. Used to compare launches between client
     /// versions and between the players of the same game.
+    /// To compare skirmish launches, set CNCNET_LAUNCH_SEED to use a fixed random seed.
     /// </summary>
     public sealed class LaunchCapture
     {
@@ -21,6 +22,15 @@ namespace DTAClient.Domain.Multiplayer
         private static readonly string captureRoot = Environment.GetEnvironmentVariable(ENVIRONMENT_VARIABLE);
 
         public static bool IsEnabled => !string.IsNullOrWhiteSpace(captureRoot);
+
+        public const string SEED_ENVIRONMENT_VARIABLE = "CNCNET_LAUNCH_SEED";
+
+        /// <summary>
+        /// The random seed to use for skirmish games, set by CNCNET_LAUNCH_SEED; null if not set.
+        /// Multiplayer games always use the host's seed.
+        /// </summary>
+        public static int? ForcedSkirmishSeed { get; } =
+            int.TryParse(Environment.GetEnvironmentVariable(SEED_ENVIRONMENT_VARIABLE), out int seed) ? seed : null;
 
         private readonly string inputsJson;
 
