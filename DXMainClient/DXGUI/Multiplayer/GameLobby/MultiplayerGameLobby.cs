@@ -68,6 +68,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected bool IsHost = false;
 
+        /// <summary>Sends this lobby's messages over its network.</summary>
+        protected ILobbySession Session { get; set; }
+
         private bool locked = false;
         protected bool Locked
         {

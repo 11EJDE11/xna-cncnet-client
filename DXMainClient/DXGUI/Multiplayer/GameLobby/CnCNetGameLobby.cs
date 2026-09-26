@@ -39,7 +39,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private static readonly Color ERROR_MESSAGE_COLOR = Color.Yellow;
 
         private const string CHEAT_DETECTED_MESSAGE = "CD";
-        private const string DICE_ROLL_MESSAGE = "DR";
+        private const string DICE_ROLL_MESSAGE = CnCNetLobbySession.DICE_ROLL_MESSAGE;
 
         public CnCNetGameLobby(
             WindowManager windowManager,
@@ -63,6 +63,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             this.pmWindow = pmWindow;
             this.random = random;
             this.uiDispatcher = uiDispatcher;
+            Session = new CnCNetLobbySession(() => channel, () => chatColor);
             _negotiator = new V3TunnelNegotiationManager(this, tunnelHandler, uiDispatcher);
             tunnelSession = new TunnelSession(tunnelHandler, _negotiator, this, this, this);
             tunnelSession.Start((TunnelMode)UserINISettings.Instance.TunnelMode.Value);
@@ -1242,9 +1243,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void RequestPlayerOptions(int side, int color, int start, int team)
         {
-            var message = new PlayerOptionsRequestMessage(new PackedPlayerOptions(side, color, start, team));
-
-            channel.SendCTCPMessage("OR " + message.Encode(), QueuedMessageType.GAME_SETTINGS_MESSAGE, 6);
+            Session.RequestPlayerOptions(new PackedPlayerOptions(side, color, start, team));
         }
 
         protected override void RequestReadyStatus()
@@ -1255,7 +1254,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                     "you will be unable to participate in the match.").L10N("Client:Main:HostMustReplaceMap"));
 
                 if (chkAutoReady.Checked)
-                    channel.SendCTCPMessage("R " + new ReadyRequestMessage(0).Encode(), QueuedMessageType.GAME_PLAYERS_READY_STATUS_MESSAGE, 5);
+                    Session.RequestReady(0);
 
                 return;
             }
@@ -1271,7 +1270,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             else if (!pInfo.Ready)
                 readyState = 1;
 
-            channel.SendCTCPMessage("R " + new ReadyRequestMessage(readyState).Encode(), QueuedMessageType.GAME_PLAYERS_READY_STATUS_MESSAGE, 5);
+            Session.RequestReady(readyState);
         }
 
         protected override void AddNotice(string message, Color color) => channel.AddMessage(new ChatMessage(color, message));
@@ -1347,8 +1346,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 pInfo.IsAI ? 1 : pInfo.AutoReady && !pInfo.IsInGame && !LastMapChangeWasInvalid ? 2 : Convert.ToInt32(pInfo.Ready),
                 string.Empty)).ToList();
 
-            var message = new PlayerOptionsMessage(entries);
-            channel.SendCTCPMessage("PO " + message.Encode(), QueuedMessageType.GAME_PLAYERS_MESSAGE, 11);
+            Session.SendPlayerOptions(new PlayerOptionsMessage(entries));
         }
 
         protected override void PlayerExtraOptions_OptionsChanged(object sender, EventArgs e)
@@ -1375,7 +1373,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             var playerExtraOptions = GetPlayerExtraOptions();
 
-            channel.SendCTCPMessage(playerExtraOptions.ToCncnetMessage(), QueuedMessageType.GAME_PLAYERS_EXTRA_MESSAGE, 11, true);
+            Session.SendPlayerExtraOptions(playerExtraOptions);
         }
 
         /// <summary>
@@ -1524,7 +1522,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 TunnelMode = (int)tunnelSession.Mode,
             };
 
-            channel.SendCTCPMessage("GO " + message.Encode(), QueuedMessageType.GAME_SETTINGS_MESSAGE, 11);
+            Session.SendGameOptions(message);
         }
 
         /// <summary>
@@ -1802,7 +1800,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             inputs["ReservedGamePort"] = tunnelHandler.ReservedGamePort;
         }
 
-        protected override void SendChatMessage(string message) => channel.SendChatMessage(message, chatColor);
+        protected override void SendChatMessage(string message) => Session.SendChatMessage(message);
 
         #region Notifications
 
@@ -1949,8 +1947,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void BroadcastDiceRoll(int dieSides, int[] results)
         {
-            string resultString = string.Join(",", results);
-            channel.SendCTCPMessage($"{DICE_ROLL_MESSAGE} {dieSides},{resultString}", QueuedMessageType.CHAT_MESSAGE, 0);
+            Session.SendDiceRoll(dieSides, results);
             PrintDiceRollResult(ProgramConstants.PLAYERNAME, dieSides, results);
         }
 

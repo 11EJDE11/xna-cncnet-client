@@ -32,18 +32,18 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private const double DROPOUT_TIMEOUT = 20.0;
         private const double GAME_BROADCAST_INTERVAL = 2.0;
 
-        private const string CHAT_COMMAND = "GLCHAT";
+        private const string CHAT_COMMAND = LanLobbySession.CHAT_COMMAND;
         private const string RETURN_COMMAND = "RETURN";
         private const string GET_READY_COMMAND = "GETREADY";
-        private const string PLAYER_OPTIONS_REQUEST_COMMAND = "POREQ";
-        private const string PLAYER_OPTIONS_BROADCAST_COMMAND = "POPTS";
+        private const string PLAYER_OPTIONS_REQUEST_COMMAND = LanLobbySession.PLAYER_OPTIONS_REQUEST_COMMAND;
+        private const string PLAYER_OPTIONS_BROADCAST_COMMAND = LanLobbySession.PLAYER_OPTIONS_BROADCAST_COMMAND;
         private const string PLAYER_JOIN_COMMAND = "JOIN";
         private const string PLAYER_QUIT_COMMAND = "QUIT";
-        private const string GAME_OPTIONS_COMMAND = "OPTS";
-        private const string PLAYER_READY_REQUEST = "READY";
+        private const string GAME_OPTIONS_COMMAND = LanLobbySession.GAME_OPTIONS_COMMAND;
+        private const string PLAYER_READY_REQUEST = LanLobbySession.PLAYER_READY_REQUEST;
         private const string LAUNCH_GAME_COMMAND = "LAUNCH";
         private const string FILE_HASH_COMMAND = "FHASH";
-        private const string DICE_ROLL_COMMAND = "DR";
+        private const string DICE_ROLL_COMMAND = LanLobbySession.DICE_ROLL_COMMAND;
         public const string PING = "PING";
 
         /// <summary>
@@ -59,6 +59,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         {
             this.chatColors = chatColors;
             encoding = Encoding.UTF8;
+            Session = new LanLobbySession(SendMessageToHost, BroadcastMessage, () => chatColorIndex);
             hostCommandHandlers = new CommandHandlerBase[]
             {
                 new StringCommandHandler(CHAT_COMMAND, GameHost_HandleChatCommand),
@@ -603,14 +604,14 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 pInfo.AutoReady && !pInfo.IsInGame && !LastMapChangeWasInvalid ? 2 : Convert.ToInt32(pInfo.IsAI || pInfo.Ready),
                 pInfo.IPAddress)).ToList();
 
-            BroadcastMessage(PLAYER_OPTIONS_BROADCAST_COMMAND + " " + new PlayerOptionsMessage(entries).Encode());
+            Session.SendPlayerOptions(new PlayerOptionsMessage(entries));
         }
 
         protected override void BroadcastPlayerExtraOptions()
         {
             var playerExtraOptions = GetPlayerExtraOptions();
 
-            BroadcastMessage(playerExtraOptions.ToLanMessage(), true);
+            Session.SendPlayerExtraOptions(playerExtraOptions);
         }
 
         protected override string MapSharingHostName => IsHost ? ProgramConstants.PLAYERNAME : LAN_HOST_SENDER;
@@ -633,21 +634,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void RequestPlayerOptions(int side, int color, int start, int team)
         {
-            var message = new PlayerOptionsRequestMessage(new PackedPlayerOptions(side, color, start, team));
-            SendMessageToHost(PLAYER_OPTIONS_REQUEST_COMMAND + " " + message.Encode());
+            Session.RequestPlayerOptions(new PackedPlayerOptions(side, color, start, team));
         }
 
-        protected override void RequestReadyStatus() =>
-            SendMessageToHost(PLAYER_READY_REQUEST + " " + new ReadyRequestMessage(chkAutoReady.Checked ? 2 : 1).Encode());
+        protected override void RequestReadyStatus() => Session.RequestReady(chkAutoReady.Checked ? 2 : 1);
 
-        protected override void SendChatMessage(string message)
-        {
-            var sb = new ExtendedStringBuilder(CHAT_COMMAND + " ", true);
-            sb.Separator = ProgramConstants.LAN_DATA_SEPARATOR;
-            sb.Append(chatColorIndex);
-            sb.Append(message);
-            SendMessageToHost(sb.ToString());
-        }
+        protected override void SendChatMessage(string message) => Session.SendChatMessage(message);
 
         protected override void OnGameOptionChanged()
         {
@@ -671,7 +663,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 MapName = Map?.UntranslatedName ?? string.Empty,
             };
 
-            BroadcastMessage(GAME_OPTIONS_COMMAND + " " + message.Encode());
+            Session.SendGameOptions(message);
         }
 
         protected override void GetReadyNotification()
@@ -1092,8 +1084,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         protected override void BroadcastDiceRoll(int dieSides, int[] results)
         {
-            string resultString = string.Join(",", results);
-            SendMessageToHost($"DR {dieSides},{resultString}");
+            Session.SendDiceRoll(dieSides, results);
         }
 
         private void Host_HandleDiceRoll(string sender, string result)
