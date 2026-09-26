@@ -89,7 +89,9 @@ public sealed class MatchmakingExchange : IDisposable
     /// alive and answering when the new one starts advertising — is recognised and ignored rather
     /// than adopted as agreement. Random rather than sequential so it cannot repeat across rounds.
     /// </summary>
+#pragma warning disable RS0030 // A matchmaking nonce must be unpredictable; it never affects the game
     private readonly uint _nonce = (uint)Random.Shared.Next(int.MinValue, int.MaxValue);
+#pragma warning restore RS0030
 
     /// <summary>
     /// The decider's encoded shortlist, kept so a peer that is still advertising can be answered
