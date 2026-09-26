@@ -177,6 +177,7 @@ namespace DTAClient
 
                     // Lookup all compile-time available strings
                     ClientCore.Generated.TranslationNotifier.Register();
+                    ClientLogic.Generated.TranslationNotifier.Register();
                     ClientGUI.Generated.TranslationNotifier.Register();
                     ClientUpdater.Generated.TranslationNotifier.Register();
                     DTAClient.Generated.TranslationNotifier.Register();
