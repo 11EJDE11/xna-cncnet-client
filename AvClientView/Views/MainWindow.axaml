@@ -24,5 +24,7 @@
       <views:GameRoomView />
     </DataTemplate>
   </Window.DataTemplates>
-  <ContentControl Content="{Binding CurrentPage}" />
+  <Grid x:Name="Root">
+    <ContentControl Content="{Binding CurrentPage}" />
+  </Grid>
 </Window>

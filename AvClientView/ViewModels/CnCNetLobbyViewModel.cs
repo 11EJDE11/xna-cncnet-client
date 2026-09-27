@@ -339,6 +339,14 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         BackRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>The top bar's Log Out: disconnects even in persistent mode.</summary>
+    public void LogOutFromTopBar()
+    {
+        timer.Stop();
+        lobby.Shutdown();
+        RefreshConnection();
+    }
+
     /// <summary>The client is closing.</summary>
     public void Shutdown()
     {

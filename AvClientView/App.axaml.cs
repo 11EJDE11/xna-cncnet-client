@@ -40,6 +40,7 @@ public sealed class App : Application
                 .AddClientLogic()
                 .AddSingleton<MainMenuViewModel>()
                 .AddSingleton<MainWindowViewModel>()
+                .AddSingleton<TopBarViewModel>()
                 .AddSingleton<SkirmishSession>()
                 .AddTransient<SkirmishViewModel>()
                 .AddSingleton<DirectDrawWrapperManager>()
