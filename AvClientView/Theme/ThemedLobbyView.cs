@@ -252,7 +252,7 @@ public static class ThemedLobbyView
                 "MapPreviewBox" => BuildMapPreview(layout, viewModel),
                 "lbMapList" => BuildMapList(layout, viewModel),
                 "ddGameMode" => BuildGameModes(layout, viewModel),
-                "tbMapSearch" => BuildMapSearch(layout),
+                "tbMapSearch" => BuildMapSearch(layout, viewModel),
                 "lbChatMessages" when viewModel is MultiplayerRoomViewModel room => BuildChat(layout, room),
                 "tbChatInput" when viewModel is MultiplayerRoomViewModel room => BuildChatInput(layout, room),
                 "chkAutoReady" when viewModel is MultiplayerRoomViewModel room => BuildAutoReady(layout, room),
@@ -394,8 +394,13 @@ public static class ThemedLobbyView
         return dropDown;
     }
 
-    private static Control BuildMapSearch(LayoutControl layout) =>
-        ThemedStyle.TextBox(layout.Width, layout.Height, layout.Attributes.GetValueOrDefault("Suggestion", string.Empty));
+    private static Control BuildMapSearch(LayoutControl layout, LobbyViewModelBase viewModel)
+    {
+        TextBox textBox = ThemedStyle.TextBox(layout.Width, layout.Height, layout.Attributes.GetValueOrDefault("Suggestion", string.Empty));
+        textBox.DataContext = viewModel;
+        textBox.Bind(TextBox.TextProperty, new Binding(nameof(LobbyViewModelBase.MapSearchText)) { Mode = BindingMode.TwoWay });
+        return textBox;
+    }
 
     private static Control BuildMapPreview(LayoutControl layout, LobbyViewModelBase viewModel)
     {

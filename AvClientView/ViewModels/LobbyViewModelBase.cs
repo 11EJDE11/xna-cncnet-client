@@ -180,9 +180,27 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         session.ChangeMap(currentMaps[value]);
     }
 
+    /// <summary>The map search text (the XNA lobby's tbMapSearch).</summary>
+    [ObservableProperty]
+    private string mapSearchText = string.Empty;
+
+    partial void OnMapSearchTextChanged(string value)
+    {
+        Refreshing = true;
+        try
+        {
+            ListMaps(SelectedGameMode);
+            SelectedMapIndex = session.GameModeMap == null ? -1 : currentMaps.IndexOf(session.GameModeMap);
+        }
+        finally
+        {
+            Refreshing = false;
+        }
+    }
+
     private void ListMaps(string gameMode)
     {
-        currentMaps = session.GameModeMapsOf(gameMode);
+        currentMaps = MapSearch.Filter(session.GameModeMapsOf(gameMode), MapSearchText);
         Maps.Clear();
         foreach (GameModeMap gmm in currentMaps)
             Maps.Add(gmm.Map.Name);
