@@ -89,7 +89,7 @@ public partial class MainMenuView : UserControl
             window.Height = height;
         }
 
-        var reader = new XnaLayoutReader(ThemeAssets.TextureSize, 1280, 768) { MeasureText = ThemeFonts.Measure };
+        var reader = new XnaLayoutReader(ThemeAssets.TextureSize, ThemeAssets.RenderWidth, ThemeAssets.RenderHeight) { MeasureText = ThemeFonts.Measure };
 
         foreach ((string name, string texture) in Buttons)
         {

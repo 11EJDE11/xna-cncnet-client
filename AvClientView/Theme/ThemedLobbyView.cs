@@ -35,8 +35,9 @@ public sealed record ThemedLobbyKind(string WindowName, string LayoutIniName, bo
 /// </summary>
 public static class ThemedLobbyView
 {
-    public const int RenderWidth = 1280;
-    public const int RenderHeight = 768;
+    public static int RenderWidth => ThemeAssets.RenderWidth;
+
+    public static int RenderHeight => ThemeAssets.RenderHeight;
 
     private const int DROP_DOWN_HEIGHT = 21;
     private const int MAX_PLAYER_COUNT = 8;

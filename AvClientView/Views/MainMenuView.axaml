@@ -4,9 +4,10 @@
              x:Class="AvClientView.Views.MainMenuView"
              x:DataType="vm:MainMenuViewModel"
              Background="Black">
-  <Grid RowDefinitions="*,Auto">
-    <!-- The theme's main menu (MainMenu.ini), built in code-behind -->
-    <ContentControl x:Name="MenuHost" Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" />
-    <TextBlock Grid.Row="1" Text="{Binding Status}" Margin="12,6" Opacity="0.7" Foreground="Silver" />
-  </Grid>
+  <Panel>
+    <!-- The theme's main menu (MainMenu.ini), centred as the XNA client centres it; built in code-behind -->
+    <ContentControl x:Name="MenuHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    <TextBlock Text="{Binding Status}" Margin="12,6" Opacity="0.7" Foreground="Silver"
+               HorizontalAlignment="Left" VerticalAlignment="Bottom" />
+  </Panel>
 </UserControl>

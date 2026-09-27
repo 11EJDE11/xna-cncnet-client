@@ -25,8 +25,9 @@ namespace AvClientView.Theme;
 /// </summary>
 public static class ThemedWindow
 {
-    public const int RenderWidth = ThemedLobbyView.RenderWidth;
-    public const int RenderHeight = ThemedLobbyView.RenderHeight;
+    public static int RenderWidth => ThemeAssets.RenderWidth;
+
+    public static int RenderHeight => ThemeAssets.RenderHeight;
 
     public static XnaLayoutReader CreateReader() =>
         new(ThemeAssets.TextureSize, RenderWidth, RenderHeight) { MeasureText = ThemeFonts.Measure };
