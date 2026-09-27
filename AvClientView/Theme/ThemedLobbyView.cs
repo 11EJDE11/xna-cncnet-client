@@ -316,7 +316,9 @@ public static class ThemedLobbyView
             }
         }
 
-        viewModel.Rows.CollectionChanged += (_, _) => UpdateRows();
+        void RowsRefreshed(object sender, EventArgs e) => UpdateRows();
+        root.AttachedToVisualTree += (_, _) => { viewModel.Refreshed += RowsRefreshed; UpdateRows(); };
+        root.DetachedFromVisualTree += (_, _) => viewModel.Refreshed -= RowsRefreshed;
         UpdateRows();
     }
 

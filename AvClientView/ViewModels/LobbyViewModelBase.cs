@@ -82,6 +82,9 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     /// <summary>True while the view shows the session's state; control changes then aren't user input.</summary>
     protected bool Refreshing { get; private set; }
 
+    /// <summary>The complete snapshot is ready; themed views must not rebuild for each inserted row or marker.</summary>
+    public event EventHandler Refreshed;
+
     public IReadOnlyList<string> GameModes { get; }
 
     public ObservableCollection<string> Maps { get; } = [];
@@ -308,6 +311,7 @@ public abstract partial class LobbyViewModelBase : ObservableObject
             OnPropertyChanged(nameof(CanChangeMap));
             OnPropertyChanged(nameof(CanChangeOptions));
             OnRefreshed();
+            Refreshed?.Invoke(this, EventArgs.Empty);
         }
         finally
         {
@@ -371,27 +375,42 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     private void RefreshPreview(GameModeMap gmm)
     {
         StartMarkers.Clear();
-        Preview = null;
 
         if (gmm == null)
         {
+            SetPreview(null, null);
             RefreshPreviewParts(null, null, default);
             return;
         }
 
-        using CacheLease<Image> lease = mapLoader.GetCachedPreviewImageFromMap(gmm.Map, syncLoadOnCacheMiss: true);
-        if (lease == null)
+        if (previewMap != gmm.Map || Preview == null)
         {
-            RefreshPreviewParts(null, null, default);
-            return;
+            using CacheLease<Image> lease = mapLoader.GetCachedPreviewImageFromMap(gmm.Map, syncLoadOnCacheMiss: true);
+            if (lease == null)
+            {
+                SetPreview(null, null);
+                RefreshPreviewParts(null, null, default);
+                return;
+            }
+
+            // Copy pixels directly: PNG compression and decoding on the UI thread is unnecessary.
+            using var rgba = lease.Value.CloneAs<SixLabors.ImageSharp.PixelFormats.Rgba32>();
+            byte[] pixels = new byte[checked(rgba.Width * rgba.Height * 4)];
+            rgba.CopyPixelDataTo(pixels);
+            var handle = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
+            try
+            {
+                SetPreview(gmm.Map, new Bitmap(Avalonia.Platform.PixelFormat.Rgba8888,
+                    Avalonia.Platform.AlphaFormat.Unpremul, handle.AddrOfPinnedObject(),
+                    new Avalonia.PixelSize(rgba.Width, rgba.Height), new Avalonia.Vector(96, 96), rgba.Width * 4));
+            }
+            finally
+            {
+                handle.Free();
+            }
         }
 
-        using var stream = new MemoryStream();
-        lease.Value.SaveAsPng(stream);
-        stream.Position = 0;
-        Preview = new Bitmap(stream);
-
-        var previewSize = new MapPoint(lease.Value.Width, lease.Value.Height);
+        var previewSize = new MapPoint(Preview.PixelSize.Width, Preview.PixelSize.Height);
         MapPreviewLayout layout = MapPreviewLayout.Fit((int)PreviewAreaWidth, (int)PreviewAreaHeight, previewSize.X, previewSize.Y);
         PreviewX = layout.X;
         PreviewY = layout.Y;
@@ -399,6 +418,16 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         PreviewImageHeight = layout.Height;
 
         RefreshPreviewParts(gmm, layout, previewSize);
+    }
+
+    private Map previewMap;
+
+    private void SetPreview(Map map, Bitmap bitmap)
+    {
+        Bitmap previous = Preview;
+        previewMap = map;
+        Preview = bitmap;
+        previous?.Dispose();
     }
 
     internal void ChangeSlot(int row, SlotField field, int index)

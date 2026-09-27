@@ -124,16 +124,18 @@ public sealed class MapPreviewView : Canvas
         };
         Children.Add(briefingBox);
 
-        viewModel.PropertyChanged += ViewModel_PropertyChanged;
-        viewModel.StartMarkers.CollectionChanged += (_, _) => RefreshIndicators();
-        viewModel.ExtraTextures.CollectionChanged += (_, _) => RefreshExtraTextures();
+        void Refreshed(object sender, EventArgs e)
+        {
+            RefreshIndicators();
+            RefreshExtraTextures();
+        }
 
         UpdateInterpolation();
-        viewModel.PropertyChanged += (_, e) =>
+        void InterpolationChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(LobbyViewModelBase.UseNearestNeighbour))
                 UpdateInterpolation();
-        };
+        }
 
         RefreshIndicators();
         RefreshExtraTextures();
@@ -141,8 +143,25 @@ public sealed class MapPreviewView : Canvas
         RefreshBriefing();
 
         timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => Tick());
-        AttachedToVisualTree += (_, _) => timer.Start();
-        DetachedFromVisualTree += (_, _) => timer.Stop();
+        AttachedToVisualTree += (_, _) =>
+        {
+            viewModel.PropertyChanged += ViewModel_PropertyChanged;
+            viewModel.PropertyChanged += InterpolationChanged;
+            viewModel.Refreshed += Refreshed;
+            Refreshed(null, EventArgs.Empty);
+            RefreshButtons();
+            RefreshBriefing();
+            UpdateInterpolation();
+            lastTick = DateTime.Now;
+            timer.Start();
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            timer.Stop();
+            viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+            viewModel.PropertyChanged -= InterpolationChanged;
+            viewModel.Refreshed -= Refreshed;
+        };
     }
 
     private ThemedButton SmallButton(string texture, string toolTip, Action onClick)
