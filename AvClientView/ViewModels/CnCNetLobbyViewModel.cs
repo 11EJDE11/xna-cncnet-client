@@ -233,7 +233,7 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         shownGames = lobby.Games.ToList();
         Games.Clear();
         foreach (HostedCnCNetGame game in shownGames)
-            Games.Add(new CnCNetGameItemViewModel(game));
+            Games.Add(new CnCNetGameItemViewModel(game, lobby.Room.Options));
 
         SelectedGameIndex = selected == null ? -1 : shownGames.FindIndex(g => g.HostName == selected.HostName);
     }
@@ -370,9 +370,17 @@ public sealed record UserItemViewModel(string Name, bool IsAdmin, CnCNetGame Gam
 }
 
 /// <summary>A hosted game in the CnCNet game list.</summary>
-public sealed class CnCNetGameItemViewModel(HostedCnCNetGame game)
+public sealed class CnCNetGameItemViewModel(HostedCnCNetGame game, ClientLogic.Options.GameOptionSet options)
 {
     public HostedCnCNetGame Game { get; } = game;
+
+    /// <summary>The broadcast option icons of the game list row (left of the name, and on the right).</summary>
+    public (List<string> Left, List<string> Right) OptionIcons { get; } =
+        ClientLogic.GameList.BroadcastedOptionDisplay.GameListIcons(options, game.BroadcastedGameOptionValues);
+
+    /// <summary>The game options section of the information panel.</summary>
+    public (List<ClientLogic.GameList.BroadcastedOptionIcon> IconsOnly, List<ClientLogic.GameList.BroadcastedOptionIcon> WithText) InformationOptions { get; } =
+        ClientLogic.GameList.BroadcastedOptionDisplay.InformationPanel(options, game.BroadcastedGameOptionValues);
 
     public string RoomName { get; } = game.RoomName + (game.Passworded ? " [password]" : string.Empty);
 

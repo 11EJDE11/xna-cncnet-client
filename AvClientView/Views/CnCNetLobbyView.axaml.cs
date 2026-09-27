@@ -292,14 +292,14 @@ public partial class CnCNetLobbyView : UserControl
         CnCNetGameItemViewModel shown = null;
         CnCNetGameItemViewModel hovered = null;
 
-        void Refresh()
+        void Refresh(bool force = false)
         {
             CnCNetGameItemViewModel game = list.SelectedItem as CnCNetGameItemViewModel ?? hovered;
-            if (game == shown)
+            if (game == shown && !force)
                 return;
 
             shown = game;
-            infoHost.Content = game == null ? null : GameInformationPanel.Build(game.Game, viewModel.FindMap);
+            infoHost.Content = game == null ? null : GameInformationPanel.Build(game.Game, viewModel.FindMap, game.InformationOptions);
         }
 
         list.PointerMoved += (_, e) =>
@@ -309,7 +309,7 @@ public partial class CnCNetLobbyView : UserControl
         };
         list.PointerExited += (_, _) => { hovered = null; Refresh(); };
         list.SelectionChanged += (_, _) => Refresh();
-        viewModel.Games.CollectionChanged += (_, _) => { shown = null; hovered = null; Refresh(); };
+        viewModel.Games.CollectionChanged += (_, _) => { hovered = null; Refresh(force: true); };
 
         list.AttachedToVisualTree += (_, _) =>
         {
@@ -354,9 +354,9 @@ public partial class CnCNetLobbyView : UserControl
     }
 
     /// <summary>
-    /// A game list row as the XNA GameListBox draws it: game icon (for other games, or if the theme shows it), locked
-    /// and incompatible icons, the room name (greyed if it can't be joined), and the password and skill level icons
-    /// on the right.
+    /// A game list row as the XNA GameListBox draws it: option icons, game icon (for other games, or if the theme
+    /// shows it), locked and incompatible icons, the room name (greyed if it can't be joined), and on the right the
+    /// right-side option icons, password and skill level icons. The game information panel replaces tooltips.
     /// </summary>
     private static Control GameRow(CnCNetGameItemViewModel item)
     {
@@ -376,10 +376,18 @@ public partial class CnCNetLobbyView : UserControl
             row.Children.Add(image);
         }
 
-        if (game.SkillLevel > 0)
-            AddIcon(ThemeAssets.LoadBitmap($"skillLevel{game.SkillLevel}.png"), Dock.Right);
+        // Right side, from the edge inwards: option icons, password, skill level
+        for (int i = item.OptionIcons.Right.Count - 1; i >= 0; i--)
+            AddIcon(ThemeAssets.LoadBitmap(item.OptionIcons.Right[i]), Dock.Right);
         if (game.Passworded)
             AddIcon(ThemeAssets.LoadBitmap("passwordedgame.png"), Dock.Right);
+        string skillIcon = $"skillLevel{game.SkillLevel}.png";
+        if (ThemeAssets.FindFile(skillIcon) != null)
+            AddIcon(ThemeAssets.LoadBitmap(skillIcon), Dock.Right);
+
+        // Left side: option icons, game icon, locked, incompatible
+        foreach (string icon in item.OptionIcons.Left)
+            AddIcon(ThemeAssets.LoadBitmap(icon), Dock.Left);
 
         bool showGameIcon = ClientCore.ClientConfiguration.Instance.ShowGameIconInGameList ||
             !string.Equals(game.Game?.InternalName, ClientCore.ClientConfiguration.Instance.LocalGame, StringComparison.OrdinalIgnoreCase);
@@ -399,7 +407,6 @@ public partial class CnCNetLobbyView : UserControl
         };
         row.Children.Add(text);
 
-        ToolTip.SetTip(row, item.Details + Environment.NewLine + item.Players);
         return row;
     }
 
