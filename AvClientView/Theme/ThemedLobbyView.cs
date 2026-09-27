@@ -9,8 +9,10 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 using AvClientView.ViewModels;
 using AvClientView.Views;
@@ -715,7 +717,60 @@ public static class ThemedLobbyView
             },
         });
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
+
+        // LbGameModeMapList_RightClick: select the map under the cursor and open the map menu
+        list.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
+        {
+            if (!e.GetCurrentPoint(list).Properties.IsRightButtonPressed)
+                return;
+
+            if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not ListBoxItem item)
+                return;
+
+            int index = list.IndexFromContainer(item);
+            if (index < 0)
+                return;
+
+            viewModel.SelectedMapIndex = index;
+            e.Handled = true;
+            OpenMapListMenu(container, e.GetPosition(container), viewModel);
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
         return container;
+    }
+
+    /// <summary>The map list's menu (GameLobbyBase.mapContextMenu).</summary>
+    private static void OpenMapListMenu(Canvas container, Point position, LobbyViewModelBase viewModel)
+    {
+        async void Copy(string text)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(container)?.Clipboard is { } clipboard)
+                    await clipboard.SetTextAsync(text);
+            }
+            catch (Exception)
+            {
+                (App.Services?.GetService(typeof(ClientLogic.UI.IDialogService)) as ClientLogic.UI.IDialogService)?.ShowMessage(
+                    "Error".L10N("Client:Main:Error"), "Unable to copy map name to clipboard.".L10N("Client:Main:ClipboardCopyMapNameFailed"));
+            }
+        }
+
+        var items = new List<ThemedMenuItem>
+        {
+            new(viewModel.IsFavoriteMap ? "Remove Favorite".L10N("Client:Main:RemoveFavorite") : "Add Favorite".L10N("Client:Main:AddFavorite"),
+                viewModel.ToggleFavoriteMap),
+            new("Copy Map Name".L10N("Client:Main:CopyMapName"), () => Copy(viewModel.SelectedMapName)),
+        };
+
+        if (viewModel.SelectedMapUntranslatedName != viewModel.SelectedMapName)
+            items.Add(new("Copy Original Name".L10N("Client:Main:CopyOriginalMapName"), () => Copy(viewModel.SelectedMapUntranslatedName)));
+
+        if (viewModel.CanDeleteMap && App.Services?.GetService(typeof(ClientLogic.UI.IDialogService)) is ClientLogic.UI.IDialogService dialogs)
+            items.Add(new("Delete Map".L10N("Client:Main:DeleteMap"), () => viewModel.DeleteSelectedMap(dialogs)));
+
+        items.Add(new("Show in Folder".L10N("Client:Main:ShowInFolder"), viewModel.ShowMapInFolder));
+        ThemedContextMenu.Open(container, position, items, 192);
     }
 
     private static Control BuildGameModes(LayoutControl layout, LobbyViewModelBase viewModel)
@@ -735,56 +790,8 @@ public static class ThemedLobbyView
         return textBox;
     }
 
-    private static Control BuildMapPreview(LayoutControl layout, LobbyViewModelBase viewModel)
-    {
-        viewModel.SetPreviewArea(layout.Width, layout.Height);
-
-        var canvas = new Canvas { Width = layout.Width, Height = layout.Height, Background = ThemedStyle.PanelBackground, ClipToBounds = true, DataContext = viewModel };
-
-        var image = new Image { Stretch = Stretch.Fill };
-        image.Bind(Image.SourceProperty, new Binding(nameof(LobbyViewModelBase.Preview)));
-        image.Bind(Canvas.LeftProperty, new Binding(nameof(LobbyViewModelBase.PreviewX)));
-        image.Bind(Canvas.TopProperty, new Binding(nameof(LobbyViewModelBase.PreviewY)));
-        image.Bind(Layoutable.WidthProperty, new Binding(nameof(LobbyViewModelBase.PreviewImageWidth)));
-        image.Bind(Layoutable.HeightProperty, new Binding(nameof(LobbyViewModelBase.PreviewImageHeight)));
-        canvas.Children.Add(image);
-
-        var markers = new ItemsControl
-        {
-            Width = layout.Width,
-            Height = layout.Height,
-            ItemsPanel = new FuncTemplate<Panel>(() => new Canvas()),
-            ItemTemplate = new FuncDataTemplate<StartMarkerViewModel>((marker, _) =>
-            {
-                var border = new Border
-                {
-                    Width = 20,
-                    Height = 20,
-                    CornerRadius = new CornerRadius(10),
-                    Background = Brushes.Black,
-                    BorderBrush = Brushes.White,
-                    BorderThickness = new Thickness(2),
-                    Child = new TextBlock
-                    {
-                        Text = marker?.Number.ToString(),
-                        Foreground = Brushes.White,
-                        FontSize = 11,
-                        FontWeight = FontWeight.Bold,
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    },
-                };
-                ToolTip.SetTip(border, marker?.Players);
-                Canvas.SetLeft(border, marker?.Left ?? 0);
-                Canvas.SetTop(border, marker?.Top ?? 0);
-                return new Canvas { Children = { border } };
-            }),
-        };
-        markers.Bind(ItemsControl.ItemsSourceProperty, new Binding(nameof(LobbyViewModelBase.StartMarkers)));
-        canvas.Children.Add(markers);
-
-        return canvas;
-    }
+    private static Control BuildMapPreview(LayoutControl layout, LobbyViewModelBase viewModel) =>
+        new MapPreviewView(layout, viewModel, viewModel.GameOptionsIni);
 
     private static Control BuildChat(LayoutControl layout, MultiplayerRoomViewModel room)
     {

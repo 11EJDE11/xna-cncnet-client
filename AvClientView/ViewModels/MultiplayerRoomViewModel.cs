@@ -32,6 +32,15 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
 
     public override bool CanChangeExtraOptions => room.IsHost;
 
+    /// <summary>Starts are forced random by the map or the extra options (MultiplayerGameLobby.UpdateMapPreviewBoxEnabledStatus).</summary>
+    private bool StartsForcedRandom => CurrentGameModeMap != null &&
+        (CurrentGameModeMap.ForceRandomStartLocations || ExtraOptions.ToPlayerExtraOptions().IsForceRandomStarts);
+
+    /// <summary>The host gets the start menu; players pick their own start by clicking.</summary>
+    public override bool EnableStartMenu => !StartsForcedRandom && room.IsHost;
+
+    public override bool EnableStartLocationSelection => !StartsForcedRandom;
+
     public bool IsHost => room.IsHost;
 
     public bool IsPlayer => !room.IsHost;

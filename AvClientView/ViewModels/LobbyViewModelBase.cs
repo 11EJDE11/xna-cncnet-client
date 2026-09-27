@@ -61,7 +61,8 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         this.session = session;
         this.mapLoader = mapLoader;
 
-        GameModes = mapLoader.GameModes.Where(gm => gm.Maps.Count > 0).Select(gm => gm.UIName).Distinct().ToList();
+        // The XNA map filter drop-down: "Favorites" first, then the game modes
+        GameModes = [FavoriteMapsLabel, .. mapLoader.GameModes.Where(gm => gm.Maps.Count > 0).Select(gm => gm.UIName).Distinct()];
 
         foreach (GameOption option in session.Options.CheckBoxes)
             CheckBoxOptions.Add(new CheckBoxOptionViewModel(option, () => CanChangeOptions));
@@ -202,8 +203,13 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         if (Refreshing)
             return;
 
+        // DdGameModeMapFilter_SelectedIndexChanged: the search is cleared; the map stays if the filter has it
+        mapSearchText = string.Empty;
+        OnPropertyChanged(nameof(MapSearchText));
         ListMaps(value);
-        session.ChangeMap(currentMaps.FirstOrDefault());
+
+        GameModeMap current = session.GameModeMap;
+        session.ChangeMap(current != null && currentMaps.Contains(current) ? current : currentMaps.FirstOrDefault());
     }
 
     partial void OnSelectedMapIndexChanged(int value)
@@ -246,7 +252,7 @@ public abstract partial class LobbyViewModelBase : ObservableObject
 
     private void ListMaps(string gameMode)
     {
-        List<GameModeMap> maps = session.GameModeMapsOf(gameMode);
+        List<GameModeMap> maps = MapsOfFilter(gameMode);
         maps = MapSortState switch
         {
             1 => maps.OrderBy(gmm => gmm.Map.Name).ToList(),
@@ -257,7 +263,7 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         currentMaps = MapSearch.Filter(maps, MapSearchText);
         Maps.Clear();
         foreach (GameModeMap gmm in currentMaps)
-            Maps.Add(gmm.Map.Name);
+            Maps.Add(MapListText(gmm));
     }
 
     /// <summary>Shows the session's state.</summary>
@@ -268,10 +274,15 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         {
             GameModeMap gmm = session.GameModeMap;
 
-            if (gmm != null && SelectedGameMode != gmm.GameMode.UIName)
+            // The filter follows the map's game mode, unless the current filter (e.g. the favourites) has the map
+            if (gmm != null && SelectedGameMode != gmm.GameMode.UIName && !MapsOfFilter(SelectedGameMode).Contains(gmm))
             {
                 SelectedGameMode = gmm.GameMode.UIName;
                 ListMaps(gmm.GameMode.UIName);
+            }
+            else if (gmm != null && !currentMaps.Contains(gmm))
+            {
+                ListMaps(SelectedGameMode);
             }
 
             SelectedMapIndex = gmm == null ? -1 : currentMaps.IndexOf(gmm);
@@ -363,11 +374,17 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         Preview = null;
 
         if (gmm == null)
+        {
+            RefreshPreviewParts(null, null, default);
             return;
+        }
 
         using CacheLease<Image> lease = mapLoader.GetCachedPreviewImageFromMap(gmm.Map, syncLoadOnCacheMiss: true);
         if (lease == null)
+        {
+            RefreshPreviewParts(null, null, default);
             return;
+        }
 
         using var stream = new MemoryStream();
         lease.Value.SaveAsPng(stream);
@@ -381,16 +398,7 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         PreviewImageWidth = layout.Width;
         PreviewImageHeight = layout.Height;
 
-        IReadOnlyList<MapPoint?> markers = layout.StartMarkers(gmm.Map, previewSize, gmm.AllowedStartingLocations);
-        for (int i = 0; i < markers.Count; i++)
-        {
-            if (markers[i] is MapPoint marker)
-            {
-                string players = string.Join(", ", session.Players.Concat(session.AIPlayers)
-                    .Where(p => p.StartingLocation == i + 1).Select(p => p.Name));
-                StartMarkers.Add(new StartMarkerViewModel(i + 1, marker.X, marker.Y, players));
-            }
-        }
+        RefreshPreviewParts(gmm, layout, previewSize);
     }
 
     internal void ChangeSlot(int row, SlotField field, int index)
@@ -582,6 +590,9 @@ public sealed partial class DropDownOptionViewModel : ObservableObject
 /// <summary>A start location marker on the map preview.</summary>
 public sealed record StartMarkerViewModel(int Number, double X, double Y, string Players)
 {
+    /// <summary>The players on this start, with their team tags and colours.</summary>
+    public IReadOnlyList<StartMarkerPlayer> PlayersOnStart { get; init; } = [];
+
     public double Left => X - 10;
 
     public double Top => Y - 10;

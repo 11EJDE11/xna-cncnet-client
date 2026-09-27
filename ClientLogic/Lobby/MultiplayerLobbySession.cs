@@ -180,6 +180,14 @@ public abstract class MultiplayerLobbySession : LobbySession
     /// The local player changed a player row: the host applies it and sends the players' options; a player asks the
     /// host to change their own options.
     /// </summary>
+    /// <summary>The host changed starts in the map preview: the others must ready up again and get the players' options.</summary>
+    protected override void OnStartsChangedFromMapPreview()
+    {
+        LobbyState.ClearReadyStatuses();
+        RaiseChanged();
+        BroadcastPlayerOptions();
+    }
+
     public override SlotChangeResult ChangeSlot(int row, SlotField field, int index)
     {
         if (IsHost)

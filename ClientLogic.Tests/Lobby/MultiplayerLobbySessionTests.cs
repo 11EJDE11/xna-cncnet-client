@@ -265,4 +265,31 @@ public class MultiplayerLobbySessionTests
         Assert.True(room.ExtraOptions.ForceRandomSides);
         Assert.DoesNotContain("extra options", room.Recorder.Sent);
     }
+
+    [Fact]
+    public void TheHostAssignsStartsFromTheMapPreviewAndThePlayersMustReadyAgain()
+    {
+        var room = new TestRoom(isHost: true);
+        room.Players[1].Ready = true;
+
+        room.AssignStartFromMapPreview(1, 2);
+
+        Assert.Equal(2, room.Players[1].StartingLocation);
+        Assert.False(room.Players[1].Ready);
+        Assert.Contains("player options", room.Recorder.Sent);
+
+        room.ClearStartFromMapPreview(2);
+        Assert.Equal(0, room.Players[1].StartingLocation);
+    }
+
+    [Fact]
+    public void APlayerPicksTheirOwnStartFromTheMapPreviewByAskingTheHost()
+    {
+        var room = new TestRoom(isHost: false);
+
+        room.SelectLocalStartFromMapPreview(3);
+
+        Assert.Equal(3, room.Recorder.LastRequest?.Start);
+        Assert.Contains("options request", room.Recorder.Sent);
+    }
 }

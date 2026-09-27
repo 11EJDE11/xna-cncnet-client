@@ -93,6 +93,57 @@ public static class ThemeAssets
         return bitmap;
     }
 
+    private static readonly Dictionary<(string, Color), Bitmap> tintedBitmaps = [];
+
+    /// <summary>
+    /// A texture drawn with a colour as XNA's SpriteBatch does: every channel (alpha too) multiplied by the colour's;
+    /// null if the texture doesn't exist.
+    /// </summary>
+    public static Bitmap TintedBitmap(string name, Color color)
+    {
+        if (color == Colors.White)
+            return LoadBitmap(name);
+
+        if (tintedBitmaps.TryGetValue((name, color), out Bitmap tinted))
+            return tinted;
+
+        string path = FindFile(name);
+        if (path != null)
+        {
+            try
+            {
+                using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>(path);
+                image.ProcessPixelRows(accessor =>
+                {
+                    for (int y = 0; y < accessor.Height; y++)
+                    {
+                        Span<SixLabors.ImageSharp.PixelFormats.Rgba32> row = accessor.GetRowSpan(y);
+                        for (int x = 0; x < row.Length; x++)
+                        {
+                            ref SixLabors.ImageSharp.PixelFormats.Rgba32 pixel = ref row[x];
+                            pixel.R = (byte)(pixel.R * color.R / 255);
+                            pixel.G = (byte)(pixel.G * color.G / 255);
+                            pixel.B = (byte)(pixel.B * color.B / 255);
+                            pixel.A = (byte)(pixel.A * color.A / 255);
+                        }
+                    }
+                });
+
+                using var stream = new MemoryStream();
+                SixLabors.ImageSharp.ImageExtensions.SaveAsPng(image, stream);
+                stream.Position = 0;
+                tinted = new Bitmap(stream);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("ThemeAssets: could not tint " + name + ": " + ex.Message);
+            }
+        }
+
+        tintedBitmaps[(name, color)] = tinted;
+        return tinted;
+    }
+
     private static readonly Dictionary<object, Bitmap> gameIcons = [];
 
     /// <summary>

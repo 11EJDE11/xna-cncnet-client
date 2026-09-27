@@ -240,6 +240,46 @@ public abstract partial class LobbySession : ObservableObject
     }
 
     /// <summary>Applies a change the local player made to a player row (see <see cref="PlayerSlotsState.ApplyChange"/>).</summary>
+    /// <summary>
+    /// The map preview's start menu (the host or the skirmish player): puts the player on a row (humans first, then
+    /// AIs) on a start; with EnforceMaxPlayers whoever was there moves to a random start.
+    /// </summary>
+    public void AssignStartFromMapPreview(int row, int start)
+    {
+        if (GameModeMap != null && Slots.AssignStart(row, start, onePlayerPerStart: GameModeMap.EnforceMaxPlayers))
+            OnStartsChangedFromMapPreview();
+    }
+
+    /// <summary>The map preview's right click (the host or the skirmish player): moves everyone on a start to a random start.</summary>
+    public void ClearStartFromMapPreview(int start)
+    {
+        Slots.ClearStart(start);
+        OnStartsChangedFromMapPreview();
+    }
+
+    /// <summary>Called after starts were changed from the map preview.</summary>
+    protected virtual void OnStartsChangedFromMapPreview() => RaiseChanged();
+
+    /// <summary>
+    /// A player picked their own start in the map preview (MapPreviewBox.LocalStartingLocationSelected): as picking
+    /// it in their start drop-down; spectators can't. With EnforceMaxPlayers an occupied start can't be picked.
+    /// </summary>
+    /// <param name="start">The start (1-based), or 0 to go back to a random start.</param>
+    public void SelectLocalStartFromMapPreview(int start)
+    {
+        PlayerInfo me = Players.Find(p => p.Name == ProgramConstants.PLAYERNAME);
+        if (me == null || me.SideId == SlotIndices.SpectatorSide || me.StartingLocation == start)
+            return;
+
+        if (start > 0 && GameModeMap != null && GameModeMap.EnforceMaxPlayers &&
+            Players.Concat(AIPlayers).Any(p => p.StartingLocation == start))
+        {
+            return;
+        }
+
+        ChangeSlot(Players.IndexOf(me), SlotField.Start, start);
+    }
+
     public virtual SlotChangeResult ChangeSlot(int row, SlotField field, int index)
     {
         SlotChangeResult result = Slots.ApplyChange(row, field, index, SlotIndices, isCoop: GameModeMap != null && GameModeMap.IsCoop);
@@ -259,6 +299,9 @@ public abstract partial class LobbySession : ObservableObject
     }
 
     protected abstract bool IsMultiplayer { get; }
+
+    /// <summary>Whether this is a LAN or CnCNet lobby (not skirmish).</summary>
+    public bool IsMultiplayerLobby => IsMultiplayer;
 
     public bool RemoveStartingLocations { get; protected set; }
 
