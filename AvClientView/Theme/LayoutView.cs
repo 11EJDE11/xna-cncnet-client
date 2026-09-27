@@ -27,7 +27,7 @@ public static class LayoutView
     /// <param name="skip">Controls not to draw (the screen draws them itself, or doesn't have them yet).</param>
     public static Canvas Build(LayoutControl window, Action<string> onClick, Func<LayoutControl, bool> skip = null)
     {
-        var canvas = new Canvas { Width = window.Width, Height = window.Height, ClipToBounds = true };
+        var canvas = new Canvas { Width = window.Width, Height = window.Height, ClipToBounds = false };
         AddPanelVisuals(canvas, window);
         AddChildren(canvas, window, onClick, skip ?? (_ => false));
         return canvas;
