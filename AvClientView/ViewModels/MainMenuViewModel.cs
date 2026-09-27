@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 using DTAClient.Domain.Multiplayer;
+using DTAClient.Domain.Multiplayer.CnCNet;
 
 using Rampastring.Tools;
 
@@ -21,10 +22,15 @@ public sealed partial class MainMenuViewModel : ObservableObject
     private readonly MapLoader mapLoader;
     private readonly IDialogService dialogs;
 
-    public MainMenuViewModel(MapLoader mapLoader, IDialogService dialogs)
+    public MainMenuViewModel(MapLoader mapLoader, IDialogService dialogs, IUiDispatcher uiDispatcher)
     {
         this.mapLoader = mapLoader;
         this.dialogs = dialogs;
+
+        // The online player count, as the XNA main menu shows it (the first query blocks, so not on the UI thread)
+        CnCNetPlayerCountTask.CnCNetGameCountUpdated += (_, e) => uiDispatcher.Post(() =>
+            PlayerCount = e.PlayerCount == -1 ? "N/A".L10N("Client:Main:N/A") : e.PlayerCount.ToString());
+        Task.Run(() => CnCNetPlayerCountTask.InitializeService(new System.Threading.CancellationTokenSource()));
         string windowTitle = ClientConfiguration.Instance.WindowTitle;
         Title = string.IsNullOrEmpty(windowTitle) ? string.Format("{0} Client", ClientConfiguration.Instance.LocalGame) : windowTitle;
         _ = LoadMapsAsync();
@@ -34,6 +40,9 @@ public sealed partial class MainMenuViewModel : ObservableObject
 
     [ObservableProperty]
     private string status = "Loading maps...";
+
+    [ObservableProperty]
+    private string playerCount = "-";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(OpenSkirmishCommand))]

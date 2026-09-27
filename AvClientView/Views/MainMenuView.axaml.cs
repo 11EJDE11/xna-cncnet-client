@@ -57,6 +57,16 @@ public partial class MainMenuView : UserControl
             if (LayoutView.FindNamed<TextBlock>(canvas, "lblVersion") is TextBlock version)
                 version.Text = ViewModel.Version;
 
+            if (LayoutView.FindNamed<TextBlock>(canvas, "lblCnCNetPlayerCount") is TextBlock playerCount)
+            {
+                playerCount.Text = ViewModel.PlayerCount;
+                ViewModel.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(MainMenuViewModel.PlayerCount))
+                        playerCount.Text = ViewModel.PlayerCount;
+                };
+            }
+
             MenuHost.Content = canvas;
         }
         catch (Exception ex)
