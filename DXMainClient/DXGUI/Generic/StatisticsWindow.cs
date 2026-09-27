@@ -1,6 +1,7 @@
 ﻿using ClientCore;
 using ClientCore.Statistics;
 using ClientGUI;
+using ClientLogic.Statistics;
 using DTAClient.Domain.Multiplayer;
 using DTAClient.DXGUI.Multiplayer;
 using ClientCore.Extensions;
@@ -486,14 +487,7 @@ namespace DTAClient.DXGUI.Generic
 
             MatchStatistics ms = sm.GetMatchByIndex(listedGameIndexes[lbGameList.SelectedIndex]);
 
-            List<PlayerStatistics> players = new List<PlayerStatistics>();
-
-            for (int i = 0; i < ms.GetPlayerCount(); i++)
-            {
-                players.Add(ms.GetPlayer(i));
-            }
-
-            players = players.OrderBy(p => p.Score).Reverse().ToList();
+            List<PlayerStatistics> players = StatisticsQuery.PlayersByScore(ms);
 
             Color textColor = UISettings.ActiveSettings.AltColor;
 
@@ -562,7 +556,7 @@ namespace DTAClient.DXGUI.Generic
                         items.Add(sideItem);
                     }
 
-                    items.Add(new XNAListBoxItem(TeamIndexToString(ps.Team), textColor));
+                    items.Add(new XNAListBoxItem(StatisticsQuery.TeamIndexToString(ps.Team), textColor));
                 }
 
                 if (!ps.IsLocalPlayer)
@@ -579,14 +573,6 @@ namespace DTAClient.DXGUI.Generic
             }
         }
 
-        private string TeamIndexToString(int teamIndex)
-        {
-            if (teamIndex < 1 || teamIndex >= ProgramConstants.TEAMS.Count)
-                return "-";
-
-            return ProgramConstants.TEAMS[teamIndex - 1];
-        }
-
         #region Statistics reading / game listing code
 
         private void ReadStatistics()
@@ -598,24 +584,11 @@ namespace DTAClient.DXGUI.Generic
 
         private void ListGameModes()
         {
-            int gameCount = sm.GetMatchCount();
-
-            List<string> gameModes = new List<string>();
-
             cmbGameModeFilter.Items.Clear();
 
             cmbGameModeFilter.AddItem("All".L10N("Client:Main:AllGameModes"));
 
-            for (int i = 0; i < gameCount; i++)
-            {
-                MatchStatistics ms = sm.GetMatchByIndex(i);
-                if (!gameModes.Contains(ms.GameMode))
-                    gameModes.Add(ms.GameMode);
-            }
-
-            gameModes.Sort();
-
-            foreach (string gm in gameModes)
+            foreach (string gm in StatisticsQuery.GameModes(StatisticsQuery.AllMatches(sm)))
                 cmbGameModeFilter.AddItem(new XNADropDownItem { Text = gm.L10N($"INI:GameModes:{gm}:UIName"), Tag = gm });
 
             cmbGameModeFilter.SelectedIndex = 0;
@@ -631,30 +604,14 @@ namespace DTAClient.DXGUI.Generic
 
             lbGameStatistics.ClearItems();
             lbGameList.ClearItems();
-            listedGameIndexes.Clear();
+            List<MatchStatistics> matches = StatisticsQuery.AllMatches(sm);
 
-            switch (cmbGameClassFilter.SelectedIndex)
-            {
-                case 0:
-                    ListAllGames();
-                    break;
-                case 1:
-                    ListOnlineGames();
-                    break;
-                case 2:
-                    ListPvPGames();
-                    break;
-                case 3:
-                    ListCoOpGames();
-                    break;
-                case 4:
-                    ListSkirmishGames();
-                    break;
-            }
+            // "All" doesn't have a tag
+            string gameMode = cmbGameModeFilter.SelectedIndex > 0 ? (string)cmbGameModeFilter.Items[cmbGameModeFilter.SelectedIndex].Tag : null;
+            listedGameIndexes = StatisticsQuery.ListGames(matches, (StatisticsGameClass)cmbGameClassFilter.SelectedIndex,
+                gameMode, chkIncludeSpectatedGames.Checked);
 
-            listedGameIndexes.Reverse();
-
-            SetTotalStatistics();
+            SetTotalStatistics(StatisticsQuery.Totals(matches, listedGameIndexes, sides.Length));
 
             foreach (int gameIndex in listedGameIndexes)
             {
@@ -676,338 +633,29 @@ namespace DTAClient.DXGUI.Generic
             }
         }
 
-        private void ListAllGames()
-        {
-            int gameCount = sm.GetMatchCount();
-
-            for (int i = 0; i < gameCount; i++)
-            {
-                ListGameIndexIfPrerequisitesMet(i);
-            }
-        }
-
-        private void ListOnlineGames()
-        {
-            int gameCount = sm.GetMatchCount();
-
-            for (int i = 0; i < gameCount; i++)
-            {
-                MatchStatistics ms = sm.GetMatchByIndex(i);
-
-                int pCount = ms.GetPlayerCount();
-                int hpCount = 0;
-
-                for (int j = 0; j < pCount; j++)
-                {
-                    PlayerStatistics ps = ms.GetPlayer(j);
-
-                    if (!ps.IsAI)
-                    {
-                        hpCount++;
-
-                        if (hpCount > 1)
-                        {
-                            ListGameIndexIfPrerequisitesMet(i);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        private void ListPvPGames()
-        {
-            int gameCount = sm.GetMatchCount();
-
-            for (int i = 0; i < gameCount; i++)
-            {
-                MatchStatistics ms = sm.GetMatchByIndex(i);
-
-                int pCount = ms.GetPlayerCount();
-                int pTeam = -1;
-
-                for (int j = 0; j < pCount; j++)
-                {
-                    PlayerStatistics ps = ms.GetPlayer(j);
-
-                    if (!ps.IsAI && !ps.WasSpectator)
-                    {
-                        // If we find a single player on a different team than another player,
-                        // we'll count the game as a PvP game
-                        if (pTeam > -1 && (ps.Team != pTeam || ps.Team == 0))
-                        {
-                            ListGameIndexIfPrerequisitesMet(i);
-                            break;
-                        }
-
-                        pTeam = ps.Team;
-                    }
-                }
-            }
-        }
-
-        private void ListCoOpGames()
-        {
-            int gameCount = sm.GetMatchCount();
-
-            for (int i = 0; i < gameCount; i++)
-            {
-                MatchStatistics ms = sm.GetMatchByIndex(i);
-
-                int pCount = ms.GetPlayerCount();
-                int hpCount = 0;
-                int pTeam = -1;
-                bool add = true;
-
-                for (int j = 0; j < pCount; j++)
-                {
-                    PlayerStatistics ps = ms.GetPlayer(j);
-
-                    if (!ps.IsAI && !ps.WasSpectator)
-                    {
-                        hpCount++;
-
-                        if (pTeam > -1 && (ps.Team != pTeam || ps.Team == 0))
-                        {
-                            add = false;
-                            break;
-                        }
-
-                        pTeam = ps.Team;
-                    }
-                }
-
-                if (add && hpCount > 1)
-                {
-                    ListGameIndexIfPrerequisitesMet(i);
-                }
-            }
-        }
-
-        private void ListSkirmishGames()
-        {
-            int gameCount = sm.GetMatchCount();
-
-            for (int i = 0; i < gameCount; i++)
-            {
-                MatchStatistics ms = sm.GetMatchByIndex(i);
-
-                int pCount = ms.GetPlayerCount();
-                int hpCount = 0;
-                bool add = true;
-
-                foreach (PlayerStatistics ps in ms.Players)
-                {
-                    if (!ps.IsAI)
-                    {
-                        hpCount++;
-
-                        if (hpCount > 1)
-                        {
-                            add = false;
-                            break;
-                        }
-                    }
-                }
-
-                if (add)
-                {
-                    ListGameIndexIfPrerequisitesMet(i);
-                }
-            }
-        }
-
-        private void ListGameIndexIfPrerequisitesMet(int gameIndex)
-        {
-            MatchStatistics ms = sm.GetMatchByIndex(gameIndex);
-
-            if (cmbGameModeFilter.SelectedIndex != 0)
-            {
-                // "All" doesn't have a tag but that doesn't matter since 0 is not checked
-                var gameMode = (string)cmbGameModeFilter.Items[cmbGameModeFilter.SelectedIndex].Tag;
-
-                if (ms.GameMode != gameMode)
-                    return;
-            }
-
-            PlayerStatistics ps = ms.Players.Find(p => p.IsLocalPlayer);
-
-            if (ps != null && !chkIncludeSpectatedGames.Checked)
-            {
-                if (ps.WasSpectator)
-                    return;
-            }
-
-            listedGameIndexes.Add(gameIndex);
-        }
-
         /// <summary>
         /// Adjusts the labels on the "Total statistics" tab.
         /// </summary>
-        private void SetTotalStatistics()
+        private void SetTotalStatistics(StatisticsTotals totals)
         {
-            int gamesStarted = 0;
-            int gamesFinished = 0;
-            int gamesPlayed = 0;
-            int wins = 0;
-            int gameLosses = 0;
-            TimeSpan timePlayed = TimeSpan.Zero;
-            int numEnemies = 0;
-            int numAllies = 0;
-            int totalKills = 0;
-            int totalLosses = 0;
-            int totalScore = 0;
-            int totalEconomy = 0;
-            int[] sideGameCounts = new int[sides.Length];
-            int numEasyAIs = 0;
-            int numMediumAIs = 0;
-            int numHardAIs = 0;
-
-            foreach (int gameIndex in listedGameIndexes)
-            {
-                MatchStatistics ms = sm.GetMatchByIndex(gameIndex);
-
-                gamesStarted++;
-
-                if (ms.SawCompletion)
-                    gamesFinished++;
-
-                timePlayed += TimeSpan.FromSeconds(ms.LengthInSeconds);
-
-                PlayerStatistics localPlayer = FindLocalPlayer(ms);
-
-                if (!localPlayer.WasSpectator)
-                {
-                    totalKills += localPlayer.Kills;
-                    totalLosses += localPlayer.Losses;
-                    totalScore += localPlayer.Score;
-                    totalEconomy += localPlayer.Economy;
-
-                    if (localPlayer.Side > 0 && localPlayer.Side <= sides.Length)
-                        sideGameCounts[localPlayer.Side - 1]++;
-
-                    if (!ms.SawCompletion)
-                        continue;
-
-                    if (localPlayer.Won)
-                        wins++;
-                    else
-                        gameLosses++;
-
-                    gamesPlayed++;
-
-                    for (int i = 0; i < ms.GetPlayerCount(); i++)
-                    {
-                        PlayerStatistics ps = ms.GetPlayer(i);
-
-                        if (!ps.WasSpectator && (!ps.IsLocalPlayer || ps.IsAI))
-                        {
-                            if (ps.Team == 0 || localPlayer.Team != ps.Team)
-                                numEnemies++;
-                            else
-                                numAllies++;
-
-                            if (ps.IsAI)
-                            {
-                                if (ps.AILevel == 0)
-                                    numEasyAIs++;
-                                else if (ps.AILevel == 1)
-                                    numMediumAIs++;
-                                else
-                                    numHardAIs++;
-                            }
-                        }
-                    }
-                }
-            }
-
-            lblGamesStartedValue.Text = gamesStarted.ToString();
-            lblGamesFinishedValue.Text = gamesFinished.ToString();
-            lblWinsValue.Text = wins.ToString();
-            lblLossesValue.Text = gameLosses.ToString();
-
-            if (gameLosses > 0)
-            {
-                lblWinLossRatioValue.Text = Math.Round(wins / (double)gameLosses, 2).ToString();
-            }
-            else
-                lblWinLossRatioValue.Text = "-";
-
-            if (gamesStarted > 0)
-            {
-                lblAverageGameLengthValue.Text = TimeSpan.FromSeconds((int)timePlayed.TotalSeconds / gamesStarted).ToString();
-            }
-            else
-                lblAverageGameLengthValue.Text = "-";
-
-            if (gamesPlayed > 0)
-            {
-                lblAverageEnemyCountValue.Text = Math.Round(numEnemies / (double)gamesPlayed, 2).ToString();
-                lblAverageAllyCountValue.Text = Math.Round(numAllies / (double)gamesPlayed, 2).ToString();
-                lblKillsPerGameValue.Text = (totalKills / gamesPlayed).ToString();
-                lblLossesPerGameValue.Text = (totalLosses / gamesPlayed).ToString();
-                lblAverageEconomyValue.Text = (totalEconomy / gamesPlayed).ToString();
-            }
-            else
-            {
-                lblAverageEnemyCountValue.Text = "-";
-                lblAverageAllyCountValue.Text = "-";
-                lblKillsPerGameValue.Text = "-";
-                lblLossesPerGameValue.Text = "-";
-                lblAverageEconomyValue.Text = "-";
-            }
-
-            if (totalLosses > 0)
-            {
-                lblKillLossRatioValue.Text = Math.Round(totalKills / (double)totalLosses, 2).ToString();
-            }
-            else
-                lblKillLossRatioValue.Text = "-";
-
-            lblTotalTimePlayedValue.Text = timePlayed.ToString();
-            lblTotalKillsValue.Text = totalKills.ToString();
-            lblTotalLossesValue.Text = totalLosses.ToString();
-            lblTotalScoreValue.Text = totalScore.ToString();
-            lblFavouriteSideValue.Text = sides[GetHighestIndex(sideGameCounts)].UIName;
-
-            if (numEasyAIs >= numMediumAIs && numEasyAIs >= numHardAIs)
-                lblAverageAILevelValue.Text = "Easy".L10N("Client:Main:EasyAI");
-            else if (numMediumAIs >= numEasyAIs && numMediumAIs >= numHardAIs)
-                lblAverageAILevelValue.Text = "Medium".L10N("Client:Main:MediumAI");
-            else
-                lblAverageAILevelValue.Text = "Hard".L10N("Client:Main:HardAI");
-        }
-
-        private PlayerStatistics FindLocalPlayer(MatchStatistics ms)
-        {
-            int pCount = ms.GetPlayerCount();
-
-            for (int pId = 0; pId < pCount; pId++)
-            {
-                PlayerStatistics ps = ms.GetPlayer(pId);
-
-                if (!ps.IsAI && ps.IsLocalPlayer)
-                    return ps;
-            }
-
-            return null;
-        }
-
-        private int GetHighestIndex(int[] t)
-        {
-            int highestIndex = -1;
-            int highest = Int32.MinValue;
-
-            for (int i = 0; i < t.Length; i++)
-            {
-                if (t[i] > highest)
-                {
-                    highest = t[i];
-                    highestIndex = i;
-                }
-            }
-
-            return highestIndex;
+            lblGamesStartedValue.Text = totals.GamesStarted;
+            lblGamesFinishedValue.Text = totals.GamesFinished;
+            lblWinsValue.Text = totals.Wins;
+            lblLossesValue.Text = totals.Losses;
+            lblWinLossRatioValue.Text = totals.WinLossRatio;
+            lblAverageGameLengthValue.Text = totals.AverageGameLength;
+            lblAverageEnemyCountValue.Text = totals.AverageEnemyCount;
+            lblAverageAllyCountValue.Text = totals.AverageAllyCount;
+            lblKillsPerGameValue.Text = totals.KillsPerGame;
+            lblLossesPerGameValue.Text = totals.LossesPerGame;
+            lblAverageEconomyValue.Text = totals.AverageEconomy;
+            lblKillLossRatioValue.Text = totals.KillLossRatio;
+            lblTotalTimePlayedValue.Text = totals.TotalTimePlayed;
+            lblTotalKillsValue.Text = totals.TotalKills;
+            lblTotalLossesValue.Text = totals.TotalLosses;
+            lblTotalScoreValue.Text = totals.TotalScore;
+            lblFavouriteSideValue.Text = sides[totals.FavouriteSideIndex].UIName;
+            lblAverageAILevelValue.Text = totals.AverageAILevel;
         }
 
         private void ClearAllStatistics()
