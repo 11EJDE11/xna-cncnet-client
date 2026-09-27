@@ -255,7 +255,7 @@ public static class ThemedLobbyView
                 "lbChatMessages" when viewModel is MultiplayerRoomViewModel room => BuildChat(layout, room),
                 "tbChatInput" when viewModel is MultiplayerRoomViewModel room => BuildChatInput(layout, room),
                 "chkAutoReady" when viewModel is MultiplayerRoomViewModel room => BuildAutoReady(layout, room),
-                _ when layout.Name.StartsWith("ddPlayer") => BuildPlayerColumn(layout, rowControls),
+                _ when layout.Name.StartsWith("ddPlayer") => BuildPlayerColumn(layout, rowControls, viewModel),
                 _ => BuildGameOption(layout, viewModel),
             };
 
@@ -282,7 +282,7 @@ public static class ThemedLobbyView
         UpdateRows();
     }
 
-    private static Control BuildPlayerColumn(LayoutControl layout, List<(int Row, Control Control)> rowControls)
+    private static Control BuildPlayerColumn(LayoutControl layout, List<(int Row, Control Control)> rowControls, LobbyViewModelBase viewModel)
     {
         string field = new string(layout.Name["ddPlayer".Length..].TakeWhile(char.IsLetter).ToArray());
         int row = int.Parse(layout.Name[("ddPlayer".Length + field.Length)..]);
@@ -306,6 +306,37 @@ public static class ThemedLobbyView
             // The ready status, as the XNA status indicator shows it
             ToolTip.SetTip(comboBox, null);
             comboBox.Bind(ToolTip.TipProperty, new Binding("Status"));
+        }
+
+        if (field == "Side")
+        {
+            // The side icons, as GameLobbyBase.AddSideToDropDown loads them
+            comboBox.ItemDecoration = index =>
+            {
+                if (index < 0 || index >= viewModel.SideItems.Count)
+                    return null;
+
+                string side = viewModel.SideItems[index];
+                string texture = index == 0 ? "randomicon.png" : side == "Spectator" ? "spectatoricon.png" : side + "icon.png";
+                return ThemeAssets.LoadBitmap(texture) is { } icon ? new Image { Source = icon, Stretch = Stretch.None } : null;
+            };
+        }
+        else if (field == "Color")
+        {
+            // The colour swatches of XNAClientColorDropDown (TextAndIcon)
+            int width = Conversions.IntFromString(layout.Attributes.GetValueOrDefault("ColorTextureWidth"), 18);
+            int height = Conversions.IntFromString(layout.Attributes.GetValueOrDefault("ColorTextureHeight"), 16);
+            string randomTexture = layout.Attributes.GetValueOrDefault("RandomColorTexture", "randomicon.png");
+
+            comboBox.ItemDecoration = index =>
+            {
+                if (index == 0)
+                    return ThemeAssets.LoadBitmap(randomTexture) is { } random ? new Image { Source = random, Width = width, Height = height, Stretch = Stretch.Fill } : null;
+
+                return index < viewModel.ColorValues.Count && viewModel.ColorValues[index] is (byte r, byte g, byte b)
+                    ? new Border { Width = width, Height = height, Background = new SolidColorBrush(Color.FromRgb(r, g, b)) }
+                    : null;
+            };
         }
 
         rowControls.Add((row, comboBox));

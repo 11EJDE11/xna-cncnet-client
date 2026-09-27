@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,6 +33,7 @@ public sealed class ThemedDropDown : Border
     private static readonly Bitmap Arrow = ThemeAssets.LoadBitmap("comboBoxArrow.png");
 
     private readonly TextBlock text;
+    private readonly ContentControl decoration;
     private readonly Image arrow;
     private readonly Popup popup;
     private readonly ListBox list;
@@ -61,6 +63,13 @@ public sealed class ThemedDropDown : Border
             ClipToBounds = true,
         };
 
+        decoration = new ContentControl
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(2, 0, 0, 0),
+        };
+
         arrow = new Image
         {
             Source = Arrow,
@@ -80,8 +89,14 @@ public sealed class ThemedDropDown : Border
             Padding = new Thickness(0),
             MinWidth = width,
             MaxHeight = 400,
-            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<object>((item, _) =>
-                new TextBlock { Text = item?.ToString(), Margin = new Thickness(3, 1) }),
+            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DropDownItem>((item, _) =>
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3, Margin = new Thickness(3, 1) };
+                if (item != null && ItemDecoration?.Invoke(item.Index) is Control itemDecoration)
+                    row.Children.Add(itemDecoration);
+                row.Children.Add(new TextBlock { Text = item?.Text, VerticalAlignment = VerticalAlignment.Center });
+                return row;
+            }),
         };
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
         list.SelectionChanged += (_, _) =>
@@ -101,7 +116,7 @@ public sealed class ThemedDropDown : Border
             IsLightDismissEnabled = true,
         };
 
-        Child = new Grid { Children = { text, arrow, popup } };
+        Child = new Grid { Children = { decoration, text, arrow, popup } };
         UpdateView();
     }
 
@@ -123,6 +138,11 @@ public sealed class ThemedDropDown : Border
         set => SetValue(CanChangeProperty, value);
     }
 
+    /// <summary>An icon or colour swatch drawn left of an item's text (XNA TextAndIcon items), by item index.</summary>
+    public Func<int, Control> ItemDecoration { get; set; }
+
+    private sealed record DropDownItem(int Index, string Text);
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
@@ -141,9 +161,20 @@ public sealed class ThemedDropDown : Border
 
         List<object> items = ItemsSource?.Cast<object>().ToList() ?? [];
         int index = SelectedIndex;
-        text.Text = index >= 0 && index < items.Count ? items[index]?.ToString() : string.Empty;
+        bool hasItem = index >= 0 && index < items.Count;
+        text.Text = hasItem ? items[index]?.ToString() : string.Empty;
         arrow.IsVisible = CanChange && IsEffectivelyEnabled && items.Count > 0;
-        text.Margin = new Thickness(3, 0, arrow.IsVisible && Arrow != null ? Arrow.PixelSize.Width : 0, 0);
+
+        Control itemDecoration = hasItem ? ItemDecoration?.Invoke(index) : null;
+        decoration.Content = itemDecoration;
+        double left = 3;
+        if (itemDecoration != null)
+        {
+            itemDecoration.Measure(Size.Infinity);
+            left = 2 + itemDecoration.DesiredSize.Width + 3;
+        }
+
+        text.Margin = new Thickness(left, 0, arrow.IsVisible && Arrow != null ? Arrow.PixelSize.Width : 0, 0);
         Cursor = arrow.IsVisible ? new Cursor(StandardCursorType.Hand) : Cursor.Default;
     }
 
@@ -154,7 +185,7 @@ public sealed class ThemedDropDown : Border
         if (!CanChange || !IsEffectivelyEnabled || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
 
-        list.ItemsSource = ItemsSource;
+        list.ItemsSource = ItemsSource?.Cast<object>().Select((item, i) => new DropDownItem(i, item?.ToString())).ToList();
         list.SelectedIndex = -1;
         popup.IsOpen = !popup.IsOpen;
         e.Handled = true;

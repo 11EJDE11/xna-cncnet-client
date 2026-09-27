@@ -71,6 +71,7 @@ public abstract partial class LobbyViewModelBase : ObservableObject
 
         SideItems = ["Random", .. session.RandomSelectorNames, .. session.Sides, "Spectator"];
         ColorItems = ["Random", .. session.MPColors.Select(c => c.Name)];
+        ColorValues = [null, .. session.MPColors.Select(c => ((byte)c.R, (byte)c.G, (byte)c.B))];
         TeamItems = ["-", .. ProgramConstants.TEAMS];
         NameItems = ["-", .. ProgramConstants.AI_PLAYER_NAMES];
 
@@ -95,6 +96,9 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     public IReadOnlyList<string> SideItems { get; }
 
     public IReadOnlyList<string> ColorItems { get; }
+
+    /// <summary>The colour of each <see cref="ColorItems"/> entry (null for Random).</summary>
+    public IReadOnlyList<(byte R, byte G, byte B)?> ColorValues { get; }
 
     public IReadOnlyList<string> TeamItems { get; }
 
