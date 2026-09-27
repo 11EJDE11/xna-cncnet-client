@@ -28,6 +28,8 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
 
     public override bool CanChangeMap => room.IsHost;
 
+    public override bool CanKickPlayers => room.IsHost;
+
     public override bool CanChangeOptions => room.IsHost;
 
     public override bool CanChangeExtraOptions => room.IsHost;

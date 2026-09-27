@@ -246,7 +246,7 @@ public sealed partial class PrivateMessagesViewModel : ObservableObject
     }
 
     /// <summary>The same player actions as GlobalContextMenu; the lobby passes the channel admin flag.</summary>
-    public IReadOnlyList<ThemedMenuItem> PlayerMenu(string name, bool isAdmin = false, bool allowInvite = false)
+    public IReadOnlyList<ThemedMenuItem> PlayerMenu(string name, bool isAdmin = false, bool allowInvite = false, bool allowJoin = true)
     {
         IRCUser user = connection.UserList.Find(u => u.Name == name) ?? new IRCUser(name);
         bool online = IsOnline(name);
@@ -266,7 +266,7 @@ public sealed partial class PrivateMessagesViewModel : ObservableObject
                     body += ";" + room.CustomPassword;
                 connection.SendCustomMessage(new QueuedMessage("PRIVMSG " + name + " :\u0001" + body + "\u0001", QueuedMessageType.CHAT_MESSAGE, 0));
             }));
-        if (online)
+        if (online && allowJoin)
             items.Add(new("Join".L10N("Client:Main:Join"), () => JoinRequested?.Invoke(this, name)));
         return items;
     }

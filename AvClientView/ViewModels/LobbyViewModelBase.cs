@@ -358,6 +358,9 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     {
     }
 
+    /// <summary>The local player hosts a multiplayer room: other players can be kicked and banned.</summary>
+    public virtual bool CanKickPlayers => false;
+
     /// <summary>
     /// The texture of each player slot's status indicator (8 entries), or null if the lobby has none (skirmish).
     /// </summary>
@@ -387,10 +390,14 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         foreach (PlayerInfo pInfo in session.Players)
         {
             bool editable = CanEditRow(pInfo, false);
-            Rows.Add(new PlayerRowViewModel(this, row++, pInfo, isHuman: true, isFreeRow: false, editable, GetPlayerStatus(pInfo))
+            Rows.Add(new PlayerRowViewModel(this, row, pInfo, isHuman: true, isFreeRow: false, editable, GetPlayerStatus(pInfo))
             {
                 Controls = ComputeSlotControls(isAi: false, editable),
+
+                // MultiplayerGameLobby.RenderPlayerSlots: the host's drop-down of the other players offers Kick and Ban
+                CanKick = CanKickPlayers && row > 0,
             });
+            row++;
         }
 
         foreach (PlayerInfo aiInfo in session.AIPlayers)
@@ -523,8 +530,16 @@ public sealed partial class PlayerRowViewModel : ObservableObject
 
     public IReadOnlyList<string> NameItems => owner.NameItems;
 
-    /// <summary>The name drop-down's items: the player's name for humans (as XNA shows it), the AI levels otherwise.</summary>
-    public IReadOnlyList<string> DisplayNameItems => IsHuman ? [PlayerName] : owner.NameItems;
+    /// <summary>The host can kick or ban this player from the name drop-down.</summary>
+    public bool CanKick { get; init; }
+
+    /// <summary>
+    /// The name drop-down's items: the player's name for humans (as XNA shows it, with Kick and Ban for the host), the
+    /// AI levels otherwise.
+    /// </summary>
+    public IReadOnlyList<string> DisplayNameItems => !IsHuman ? owner.NameItems
+        : CanKick ? [PlayerName, string.Empty, "Kick".L10N("Client:Main:Kick"), "Ban".L10N("Client:Main:Ban")]
+        : [PlayerName];
 
     public int DisplayNameIndex
     {
@@ -533,11 +548,13 @@ public sealed partial class PlayerRowViewModel : ObservableObject
         {
             if (!IsHuman && value >= 0)
                 NameIndex = value;
+            else if (IsHuman && CanKick && value is SlotIndexMapper.KickNameItem or SlotIndexMapper.BanNameItem)
+                owner.ChangeSlot(row, SlotField.Name, value);
         }
     }
 
-    /// <summary>The name drop-down can be changed (AI and free rows the local player may edit).</summary>
-    public bool CanChangeName => IsEditable && !IsHuman;
+    /// <summary>The name drop-down can be changed (AI and free rows the local player may edit, the host's kick and ban).</summary>
+    public bool CanChangeName => CanKick || (IsEditable && !IsHuman);
 
     public IReadOnlyList<string> SideItems => IsHuman ? owner.SideItems : owner.SideItems.Take(owner.SideItems.Count - 1).ToList();
 

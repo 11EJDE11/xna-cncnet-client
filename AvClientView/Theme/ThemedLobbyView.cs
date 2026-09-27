@@ -588,6 +588,23 @@ public static class ThemedLobbyView
             // The ready status, as the XNA status indicator shows it
             ToolTip.SetTip(comboBox, null);
             comboBox.Bind(ToolTip.TipProperty, new Binding("Status"));
+
+            // CnCNetGameLobby.MultiplayerName_RightClick: the player menu, without Join
+            if (viewModel is CnCNetGameRoomViewModel)
+            {
+                comboBox.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
+                {
+                    if (!e.GetCurrentPoint(comboBox).Properties.IsRightButtonPressed ||
+                        comboBox.DataContext is not PlayerRowViewModel rowViewModel || !rowViewModel.IsHuman ||
+                        rowViewModel.PlayerName == ProgramConstants.PLAYERNAME ||
+                        ProgramConstants.AI_PLAYER_NAMES.Contains(rowViewModel.PlayerName))
+                        return;
+
+                    var messages = (PrivateMessagesViewModel)App.Services.GetService(typeof(PrivateMessagesViewModel));
+                    ThemedContextMenu.Open(comboBox, e.GetPosition(comboBox), messages.PlayerMenu(rowViewModel.PlayerName, allowJoin: false));
+                    e.Handled = true;
+                }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+            }
         }
 
         if (field == "Side")
