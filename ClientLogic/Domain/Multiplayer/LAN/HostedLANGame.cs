@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net;
 
 using ClientCore;
@@ -10,7 +10,7 @@ using Rampastring.Tools;
 
 namespace DTAClient.Domain.LAN
 {
-    class HostedLANGame : GenericHostedGame
+    public class HostedLANGame : GenericHostedGame
     {
         public IPEndPoint EndPoint { get; set; }
 
