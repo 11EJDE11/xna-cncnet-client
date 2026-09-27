@@ -47,6 +47,30 @@ public static class ThemeFonts
     private const double DEFAULT_SIZE = 12;
 
     private static readonly List<(FontFamily Family, double Size)> fonts = [];
+    private static readonly Dictionary<int, double> centeringOffsets = [];
+
+    /// <summary>
+    /// XNA centres the visible capital H, not the font's line box (TTFFontWrapper). Apply this offset to text
+    /// that Avalonia has centred by line height, so check boxes and drop-downs use XNA's vertical centering.
+    /// </summary>
+    public static double CenteringOffset(int fontIndex)
+    {
+        if (centeringOffsets.TryGetValue(fontIndex, out double offset))
+            return offset;
+
+        (FontFamily family, double size) = Get(fontIndex);
+        var text = new FormattedText("H", System.Globalization.CultureInfo.InvariantCulture,
+            Avalonia.Media.FlowDirection.LeftToRight, new Typeface(family), size, Brushes.White);
+        Geometry geometry = text.BuildGeometry(default);
+        if (geometry != null && geometry.Bounds.Height > 0)
+        {
+            Avalonia.Rect bounds = geometry.Bounds;
+            offset = text.Height / 2 - (bounds.Top + bounds.Bottom) / 2;
+        }
+
+        centeringOffsets[fontIndex] = offset;
+        return offset;
+    }
 
     public static void Initialize()
     {

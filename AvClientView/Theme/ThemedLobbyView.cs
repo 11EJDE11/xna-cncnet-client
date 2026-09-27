@@ -363,7 +363,7 @@ public static class ThemedLobbyView
     {
         if (viewModel.CheckBoxOptions.FirstOrDefault(o => o.Option.Name == layout.Name) is CheckBoxOptionViewModel checkBox)
         {
-            var control = new ThemedCheckBox(checkBox.Label) { DataContext = checkBox };
+            var control = new ThemedCheckBox(checkBox.Label, layout.FontIndex) { DataContext = checkBox };
             control.Bind(ThemedCheckBox.IsCheckedProperty, new Binding(nameof(CheckBoxOptionViewModel.IsChecked)) { Mode = BindingMode.TwoWay });
             control.Bind(InputElement.IsEnabledProperty, new Binding(nameof(CheckBoxOptionViewModel.IsEnabled)));
             if (!string.IsNullOrEmpty(layout.ToolTip))
@@ -373,7 +373,7 @@ public static class ThemedLobbyView
 
         if (viewModel.DropDownOptions.FirstOrDefault(o => o.Option.Name == layout.Name) is DropDownOptionViewModel dropDown)
         {
-            var control = new ThemedDropDown(layout.Width > 0 ? layout.Width : 130, layout.Height > 0 ? layout.Height : DROP_DOWN_HEIGHT)
+            var control = new ThemedDropDown(layout.Width > 0 ? layout.Width : 130, layout.Height > 0 ? layout.Height : DROP_DOWN_HEIGHT, layout.FontIndex)
             {
                 DataContext = dropDown,
                 ItemsSource = dropDown.Items,

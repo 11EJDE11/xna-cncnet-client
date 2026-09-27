@@ -199,7 +199,7 @@ public sealed class ThemedButton : Border
         hover = ThemeAssets.LoadBitmap(button.HoverTexture) ?? idle;
         // XNAClientButton's default hover sound; HoverSoundEffect / ClickSoundEffect keys replace them
         hoverSound = button.Attributes.TryGetValue("HoverSoundEffect", out string hoverSoundName) ? ThemeSound.Load(hoverSoundName)
-            : button.TypeName == "XNAClientButton" ? ThemeSounds.ButtonHover : null;
+            : button.TypeName is "XNAClientButton" or "GameLaunchButton" ? ThemeSounds.ButtonHover : null;
         clickSound = button.Attributes.TryGetValue("ClickSoundEffect", out string clickSoundName) ? ThemeSound.Load(clickSoundName) : null;
 
         idleBrush = new SolidColorBrush(button.TextColor is { } idleColor ? ThemeAssets.ToColor(idleColor) : ThemeAssets.ButtonTextColor);

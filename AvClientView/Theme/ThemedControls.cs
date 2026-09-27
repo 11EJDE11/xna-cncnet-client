@@ -31,7 +31,7 @@ public sealed class ThemedCheckBox : StackPanel
     public ThemedCheckBox(string text, int fontIndex = 0)
     {
         Orientation = Orientation.Horizontal;
-        Spacing = 3;
+        Spacing = 5;
         Background = Brushes.Transparent;
         Cursor = new Cursor(StandardCursorType.Hand);
 
@@ -44,6 +44,7 @@ public sealed class ThemedCheckBox : StackPanel
             FontSize = size,
             Foreground = new SolidColorBrush(ThemeAssets.LabelColor),
             VerticalAlignment = VerticalAlignment.Center,
+            RenderTransform = new TranslateTransform(0, ThemeFonts.CenteringOffset(fontIndex)),
         };
 
         Children.Add(box);

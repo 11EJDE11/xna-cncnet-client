@@ -58,6 +58,7 @@ public sealed class ThemedDropDown : Border
             FontSize = size,
             Foreground = foreground,
             VerticalAlignment = VerticalAlignment.Center,
+            RenderTransform = new TranslateTransform(0, ThemeFonts.CenteringOffset(fontIndex)),
             Margin = new Thickness(3, 0, 0, 0),
             TextTrimming = TextTrimming.None,
             ClipToBounds = true,
@@ -94,7 +95,11 @@ public sealed class ThemedDropDown : Border
                 var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3, Margin = new Thickness(3, 1) };
                 if (item != null && ItemDecoration?.Invoke(item.Index) is Control itemDecoration)
                     row.Children.Add(itemDecoration);
-                row.Children.Add(new TextBlock { Text = item?.Text, VerticalAlignment = VerticalAlignment.Center });
+                var itemText = new TextBlock { Text = item?.Text, VerticalAlignment = VerticalAlignment.Center };
+                if (item != null && ItemTextColor?.Invoke(item.Index) is Color color)
+                    itemText.Foreground = new SolidColorBrush(color);
+
+                row.Children.Add(itemText);
                 return row;
             }),
         };
@@ -141,6 +146,9 @@ public sealed class ThemedDropDown : Border
     /// <summary>An icon or colour swatch drawn left of an item's text (XNA TextAndIcon items), by item index.</summary>
     public Func<int, Control> ItemDecoration { get; set; }
 
+    /// <summary>Per-item text colour, including the closed drop-down's selected item.</summary>
+    public Func<int, Color?> ItemTextColor { get; set; }
+
     private sealed record DropDownItem(int Index, string Text);
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -163,6 +171,7 @@ public sealed class ThemedDropDown : Border
         int index = SelectedIndex;
         bool hasItem = index >= 0 && index < items.Count;
         text.Text = hasItem ? items[index]?.ToString() : string.Empty;
+        text.Foreground = new SolidColorBrush(hasItem ? ItemTextColor?.Invoke(index) ?? ThemeAssets.ButtonTextColor : ThemeAssets.ButtonTextColor);
         arrow.IsVisible = CanChange && IsEffectivelyEnabled && items.Count > 0;
 
         Control itemDecoration = hasItem ? ItemDecoration?.Invoke(index) : null;

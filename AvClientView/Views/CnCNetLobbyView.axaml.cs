@@ -214,6 +214,24 @@ public partial class CnCNetLobbyView : UserControl
         Control DropDown(LayoutControl layout, string items, string index)
         {
             var dropDown = new ThemedDropDown(layout.Width, layout.Height) { DataContext = viewModel };
+
+        // XNA draws each chat colour in its colour and each channel with its game's icon
+        if (items == nameof(CnCNetLobbyViewModel.ChatColors))
+        {
+            dropDown.ItemTextColor = i =>
+            {
+                var color = viewModel.ChatColorOptions[i].Color;
+                return Color.FromArgb(color.A, color.R, color.G, color.B);
+            };
+        }
+        else if (items == nameof(CnCNetLobbyViewModel.ChatChannels))
+        {
+            IReadOnlyList<CnCNetGame> games = viewModel.ChatChannelGames;
+            dropDown.ItemDecoration = i => i >= 0 && i < games.Count
+                ? new Image { Source = ThemeAssets.GameIcon(games[i]), Stretch = Stretch.None }
+                : null;
+        }
+
             dropDown.Bind(ThemedDropDown.ItemsSourceProperty, new Binding(items));
             dropDown.Bind(ThemedDropDown.SelectedIndexProperty, new Binding(index) { Mode = BindingMode.TwoWay });
             return dropDown;

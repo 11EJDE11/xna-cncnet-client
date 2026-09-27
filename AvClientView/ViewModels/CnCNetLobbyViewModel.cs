@@ -76,6 +76,13 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
 
     public IReadOnlyList<string> ChatColors { get; }
 
+    /// <summary>The chat colours with their values (the colour drop-down shows each in its colour).</summary>
+    public IReadOnlyList<IRCColor> ChatColorOptions => lobby.ChatColors;
+
+    /// <summary>The games of the chat channels, in the channel drop-down's order (for their icons).</summary>
+    public IReadOnlyList<CnCNetGame> ChatChannelGames => gameCollection.GameList
+        .Where(game => game.Supported && !string.IsNullOrEmpty(game.ChatChannel)).ToList();
+
     public IReadOnlyList<string> ChatChannels => lobby.ChatChannelNames;
 
     public IReadOnlyList<string> SkillLevels { get; }
