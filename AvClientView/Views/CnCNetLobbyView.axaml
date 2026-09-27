@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:AvClientView.ViewModels"
+             xmlns:views="using:AvClientView.Views"
              x:Class="AvClientView.Views.CnCNetLobbyView"
              x:DataType="vm:CnCNetLobbyViewModel">
   <Panel>
@@ -30,7 +31,7 @@
       </ListBox>
 
       <!-- Chat -->
-      <ListBox Grid.Row="1" Grid.Column="1" Margin="12,0" ItemsSource="{Binding Messages}">
+      <ListBox Grid.Row="1" Grid.Column="1" Margin="12,0" ItemsSource="{Binding Messages}" views:ChatScroll.FollowNewItems="True">
         <ListBox.ItemTemplate>
           <DataTemplate DataType="vm:ChatLineViewModel">
             <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" TextWrapping="Wrap" />
