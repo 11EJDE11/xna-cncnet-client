@@ -94,6 +94,47 @@ public static class ThemeAssets
         return bitmap;
     }
 
+    private static readonly Dictionary<object, Bitmap> gameIcons = [];
+
+    /// <summary>A CnCNet game's icon (its embedded image), as the XNA lists draw it; null if it has none.</summary>
+    public static Bitmap GameIcon(DTAClient.Domain.Multiplayer.CnCNet.CnCNetGame game)
+    {
+        if (game == null)
+            return null;
+
+        if (gameIcons.TryGetValue(game, out Bitmap icon))
+            return icon;
+
+        // The theme's icon file first, as CnCNetGameTextures does
+        if (game.IconFilename != null && FindFile(game.IconFilename) != null)
+        {
+            icon = LoadBitmap(game.IconFilename);
+            gameIcons[game] = icon;
+            return icon;
+        }
+
+        try
+        {
+            if (game.Image is SixLabors.ImageSharp.Image image)
+            {
+                using var stream = new MemoryStream();
+                SixLabors.ImageSharp.ImageExtensions.SaveAsPng(image, stream);
+                stream.Position = 0;
+                icon = new Bitmap(stream);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"ThemeAssets: could not load the icon of {game.InternalName}: {ex.Message}");
+        }
+
+        if (icon == null)
+            Logger.Log($"ThemeAssets: no icon for game {game.InternalName} (IconFilename {game.IconFilename ?? "none"})");
+
+        gameIcons[game] = icon;
+        return icon;
+    }
+
     /// <summary>A texture's size in pixels, or null.</summary>
     public static (int Width, int Height)? TextureSize(string name) =>
         LoadBitmap(name) is Bitmap bitmap ? (bitmap.PixelSize.Width, bitmap.PixelSize.Height) : null;

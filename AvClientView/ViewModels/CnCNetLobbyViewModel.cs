@@ -343,6 +343,8 @@ public sealed record UserItemViewModel(string Name, bool IsAdmin)
 /// <summary>A hosted game in the CnCNet game list.</summary>
 public sealed class CnCNetGameItemViewModel(HostedCnCNetGame game)
 {
+    public HostedCnCNetGame Game { get; } = game;
+
     public string RoomName { get; } = game.RoomName + (game.Passworded ? " [password]" : string.Empty);
 
     public string Details { get; } = string.Format("{0} ({1}), {2}/{3} players, host {4}", game.Map, game.GameMode,

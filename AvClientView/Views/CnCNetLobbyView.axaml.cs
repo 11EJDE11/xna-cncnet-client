@@ -14,6 +14,8 @@ using AvClientView.ViewModels;
 
 using ClientLogic.Layout;
 
+using DTAClient.Domain.Multiplayer.CnCNet;
+
 using Rampastring.Tools;
 
 namespace AvClientView.Views;
@@ -279,16 +281,61 @@ public partial class CnCNetLobbyView : UserControl
     private static Control GameList(LayoutControl layout, CnCNetLobbyViewModel viewModel)
     {
         ListBox list = ThemedWindow.List(layout, viewModel, nameof(CnCNetLobbyViewModel.Games),
-            new FuncDataTemplate<CnCNetGameItemViewModel>((game, _) =>
-            {
-                var text = new TextBlock { Text = game?.RoomName, Margin = new Thickness(4, 1) };
-                ToolTip.SetTip(text, game == null ? null : game.Details + Environment.NewLine + game.Players);
-                return text;
-            }));
+            new FuncDataTemplate<CnCNetGameItemViewModel>((game, _) => GameRow(game)));
 
         list.Bind(SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(CnCNetLobbyViewModel.SelectedGameIndex)) { Mode = BindingMode.TwoWay });
         list.DoubleTapped += (_, _) => viewModel.JoinGameCommand.Execute(null);
         return list;
+    }
+
+    /// <summary>
+    /// A game list row as the XNA GameListBox draws it: game icon (for other games, or if the theme shows it), locked
+    /// and incompatible icons, the room name (greyed if it can't be joined), and the password and skill level icons
+    /// on the right.
+    /// </summary>
+    private static Control GameRow(CnCNetGameItemViewModel item)
+    {
+        var row = new DockPanel { Margin = new Thickness(2, 1), LastChildFill = true };
+        if (item == null)
+            return row;
+
+        HostedCnCNetGame game = item.Game;
+
+        void AddIcon(Avalonia.Media.Imaging.Bitmap bitmap, Dock dock)
+        {
+            if (bitmap == null)
+                return;
+
+            var image = new Image { Source = bitmap, Stretch = Stretch.None, Margin = new Thickness(0, 0, 2, 0), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            DockPanel.SetDock(image, dock);
+            row.Children.Add(image);
+        }
+
+        if (game.SkillLevel > 0)
+            AddIcon(ThemeAssets.LoadBitmap($"skillLevel{game.SkillLevel}.png"), Dock.Right);
+        if (game.Passworded)
+            AddIcon(ThemeAssets.LoadBitmap("passwordedgame.png"), Dock.Right);
+
+        bool showGameIcon = ClientCore.ClientConfiguration.Instance.ShowGameIconInGameList ||
+            !string.Equals(game.Game?.InternalName, ClientCore.ClientConfiguration.Instance.LocalGame, StringComparison.OrdinalIgnoreCase);
+        if (showGameIcon)
+            AddIcon(ThemeAssets.GameIcon(game.Game), Dock.Left);
+        if (game.Locked)
+            AddIcon(ThemeAssets.LoadBitmap("lockedgame.png"), Dock.Left);
+        if (game.Incompatible)
+            AddIcon(ThemeAssets.LoadBitmap("incompatible.png"), Dock.Left);
+
+        var text = new TextBlock
+        {
+            Text = game.RoomName + (game.IsLoadedGame ? " (Loaded Game)" : string.Empty),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Foreground = game.Locked || game.Incompatible ? Brushes.Gray : new SolidColorBrush(ThemeAssets.ButtonTextColor),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        row.Children.Add(text);
+
+        ToolTip.SetTip(row, item.Details + Environment.NewLine + item.Players);
+        return row;
     }
 
     private static Control DropDown(LayoutControl layout, CnCNetLobbyViewModel viewModel, string items, string index)
