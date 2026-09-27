@@ -1,5 +1,7 @@
 using System;
 
+using ClientCore.Extensions;
+
 using ClientLogic.Skirmish;
 using ClientLogic.UI;
 
@@ -27,6 +29,8 @@ public sealed partial class SkirmishViewModel : LobbyViewModelBase
     }
 
     public event EventHandler BackRequested;
+
+    protected override void ShowNotice(string message) => dialogs.ShowMessage("Message".L10N("Client:Main:MessageTitle"), message);
 
     [RelayCommand]
     private void Launch()

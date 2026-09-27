@@ -358,6 +358,24 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     {
     }
 
+    /// <summary>Loads a game option preset (HandleGameOptionPresetLoadCommand).</summary>
+    public virtual void LoadGameOptionPreset(string name) => ShowNotice(session.LoadGameOptionPreset(name)
+        ? "Game option preset loaded succesfully.".L10N("Client:Main:PresetLoaded")
+        : string.Format("Preset {0} not found!".L10N("Client:Main:PresetNotFound"), name));
+
+    /// <summary>Saves the game options as a preset (HandleGameOptionPresetSaveCommand).</summary>
+    public virtual void SaveGameOptionPreset(string name)
+    {
+        string error = session.SaveGameOptionPreset(name);
+        if (!string.IsNullOrEmpty(error))
+            ShowNotice(error);
+    }
+
+    /// <summary>The lobby's AddNotice: the room's chat, or a message box in skirmish.</summary>
+    protected virtual void ShowNotice(string message)
+    {
+    }
+
     /// <summary>The local player hosts a multiplayer room: other players can be kicked and banned.</summary>
     public virtual bool CanKickPlayers => false;
 

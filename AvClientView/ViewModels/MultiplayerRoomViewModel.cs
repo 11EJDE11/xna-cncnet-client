@@ -26,6 +26,8 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
 
     public ObservableCollection<ChatLineViewModel> Messages { get; } = [];
 
+    protected override void ShowNotice(string message) => room.AddNotice(message);
+
     public override bool CanChangeMap => room.IsHost;
 
     public override bool CanKickPlayers => room.IsHost;

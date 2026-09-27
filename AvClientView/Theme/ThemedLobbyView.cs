@@ -101,7 +101,7 @@ public static class ThemedLobbyView
         var hidden = new List<string> { "btnNegotiationStatus" };
         if (kind.IsMultiplayer && !isHost)
             hidden.AddRange(["ddGameMode", "lblGameModeSelect", "lbMapList", "tbMapSearch", "btnPickRandomMap", "btnMapSortAlphabetically", "btnLockGame",
-                "btnChangeTunnel", "btnGameLobbySettings"]);
+                "btnChangeTunnel", "btnGameLobbySettings", "btnSaveLoadGameOptions"]);
 
         foreach (string name in hidden)
         {
@@ -841,6 +841,20 @@ public static class ThemedLobbyView
         ChatScroll.SetFollowNewItems(list, true);
         ThemedWindow.OpenLinkOnDoubleClick(list);
         return list;
+    }
+
+    /// <summary>btnSaveLoadGameOptions: the Load / Save menu, then the preset window.</summary>
+    public static void OpenGameOptionPresetMenu(Control root, LobbyViewModelBase viewModel)
+    {
+        if (root is not Canvas canvas || LayoutView.FindNamed<ThemedButton>(canvas, "btnSaveLoadGameOptions") is not ThemedButton button)
+            return;
+
+        var presets = (GameOptionPresetsViewModel)App.Services.GetService(typeof(GameOptionPresetsViewModel));
+        ThemedContextMenu.Open(button, new Point(0, button.Bounds.Height),
+        [
+            new("Load".L10N("Client:Main:ButtonLoad"), () => presets.Open(true, viewModel.LoadGameOptionPreset, viewModel.SaveGameOptionPreset)),
+            new("Save".L10N("Client:Main:ButtonSave"), () => presets.Open(false, viewModel.LoadGameOptionPreset, viewModel.SaveGameOptionPreset)),
+        ], 75);
     }
 
     private static Control BuildChatInput(LayoutControl layout, MultiplayerRoomViewModel room)

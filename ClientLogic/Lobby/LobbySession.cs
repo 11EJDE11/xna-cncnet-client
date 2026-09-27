@@ -212,6 +212,39 @@ public abstract partial class LobbySession : ObservableObject
         UpdateDiscordPresence();
     }
 
+    /// <summary>The local player may change the game options (skirmish; the host of a room).</summary>
+    protected virtual bool CanChangeGameOptions => true;
+
+    /// <summary>Saves the game options as a preset (AddGameOptionPreset); returns why the name is invalid, or null.</summary>
+    public string SaveGameOptionPreset(string name)
+    {
+        string error = GameOptionPreset.IsNameValid(name);
+        if (!string.IsNullOrEmpty(error))
+            return error;
+
+        GameOptionPresets.Instance.AddPreset(Options.CreatePreset(name));
+        return null;
+    }
+
+    /// <summary>Applies a saved preset (LoadGameOptionPreset); false if it doesn't exist.</summary>
+    public bool LoadGameOptionPreset(string name)
+    {
+        GameOptionPreset preset = GameOptionPresets.Instance.GetPreset(name);
+        if (preset == null)
+            return false;
+
+        // Only check boxes are also locked for players who aren't the host
+        Options.ApplyPreset(preset, _ => CanChangeGameOptions);
+        OnGameOptionChanged();
+        RaiseChanged();
+        return true;
+    }
+
+    /// <summary>The saved presets' names, sorted.</summary>
+    public static List<string> GameOptionPresetNames() => GameOptionPresets.Instance.GetPresetNames().OrderBy(name => name).ToList();
+
+    public static void DeleteGameOptionPreset(string name) => GameOptionPresets.Instance.DeletePreset(name);
+
     /// <summary>Discord rich presence (the front end sets it; null for none).</summary>
     public DTAClient.Domain.DiscordHandler DiscordHandler { get; set; }
 

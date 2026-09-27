@@ -64,6 +64,7 @@ public partial class MainWindow : Window
                 Root.Children.Add(new LoadGameView(viewModel.LoadGame) { ZIndex = 8500 });
                 Root.Children.Add(new ExtrasView(viewModel.Extras) { ZIndex = 8500 });
                 Root.Children.Add(new StatisticsView(viewModel.Statistics) { ZIndex = 8500 });
+                Root.Children.Add(new GameOptionPresetsView(App.Services.GetRequiredService<GameOptionPresetsViewModel>()) { ZIndex = 8600 });
                 Root.Children.Add(new OptionsWindowView(viewModel.Options) { ZIndex = 9000 });
                 Root.Children.Add(new HotkeyWindowView(viewModel.Options.Hotkeys) { ZIndex = 11000 });
                 topBar = new TopBarView(viewModel.TopBar) { ZIndex = 10000 };

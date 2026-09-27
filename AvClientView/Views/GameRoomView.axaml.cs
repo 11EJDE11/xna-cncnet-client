@@ -115,6 +115,9 @@ public partial class GameRoomView : UserControl
             case "btnPickRandomMap":
                 viewModel.PickRandomMap();
                 break;
+            case "btnSaveLoadGameOptions":
+                ThemedLobbyView.OpenGameOptionPresetMenu(LobbyHost.Content as Control, viewModel);
+                break;
             case "btnChangeTunnel":
                 (viewModel as CnCNetGameRoomViewModel)?.Tunnels.Open();
                 break;

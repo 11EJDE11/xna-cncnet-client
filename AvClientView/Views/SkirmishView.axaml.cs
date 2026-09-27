@@ -36,7 +36,7 @@ public partial class SkirmishView : UserControl
         }
     }
 
-    private static void OnButton(SkirmishViewModel viewModel, string name, LayoutControl layout)
+    private void OnButton(SkirmishViewModel viewModel, string name, LayoutControl layout)
     {
         switch (name)
         {
@@ -48,6 +48,9 @@ public partial class SkirmishView : UserControl
                 break;
             case "btnPickRandomMap":
                 viewModel.PickRandomMap();
+                break;
+            case "btnSaveLoadGameOptions":
+                ThemedLobbyView.OpenGameOptionPresetMenu(LobbyHost.Content as Control, viewModel);
                 break;
             default:
                 ThemeAssets.OpenUrl(layout?.Url);

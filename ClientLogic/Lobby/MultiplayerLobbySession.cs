@@ -351,10 +351,45 @@ public abstract class MultiplayerLobbySession : LobbySession, IMapSharingLobby, 
             SetMaxAhead),
         new ChatBoxCommand("PROTOCOLVERSION", string.Format("Change ProtocolVersion (default {0}) (game host only)".L10N("Client:Main:ChatboxCommandProtocolVersionHelpV2"), ClientConfiguration.Instance.DefaultProtocolVersion), true,
             SetProtocolVersion),
+        new ChatBoxCommand("LOADMAP", "Load a custom map with given filename from /Maps/Custom/ folder.".L10N("Client:Main:ChatboxCommandLoadMapHelp"), true, LoadCustomMap),
         new ChatBoxCommand("RANDOMSTARTS", "Enables completely random starting locations (Tiberian Sun based games only).".L10N("Client:Main:ChatboxCommandRandomStartsHelp"), true,
             SetStartingLocationClearance),
         new ChatBoxCommand("ROLL", "Roll dice, for example /roll 3d6".L10N("Client:Main:ChatboxCommandRollHelp"), false, RollDice),
+        new ChatBoxCommand("SAVEOPTIONS", "Save game option preset so it can be loaded later".L10N("Client:Main:ChatboxCommandSaveOptionsHelp"), false, HandleGameOptionPresetSaveCommand),
+        new ChatBoxCommand("LOADOPTIONS", "Load game option preset".L10N("Client:Main:ChatboxCommandLoadOptionsHelp"), true, HandleGameOptionPresetLoadCommand),
     ];
+
+    protected override bool CanChangeGameOptions => IsHost;
+
+    /// <summary>The /LOADMAP command: loads a map from Maps/Custom.</summary>
+    private void LoadCustomMap(string mapName)
+    {
+        Map map = MapLoader.LoadCustomMap($"Maps/Custom/{mapName}", out string resultMessage);
+        if (map != null)
+        {
+            AddNotice(resultMessage);
+            RaiseMapsChanged();
+        }
+        else
+        {
+            AddNotice(resultMessage, ChatColor.Red);
+        }
+    }
+
+    public void HandleGameOptionPresetSaveCommand(string presetName)
+    {
+        string error = SaveGameOptionPreset(presetName);
+        if (!string.IsNullOrEmpty(error))
+            AddNotice(error);
+    }
+
+    public void HandleGameOptionPresetLoadCommand(string presetName)
+    {
+        if (LoadGameOptionPreset(presetName))
+            AddNotice("Game option preset loaded succesfully.".L10N("Client:Main:PresetLoaded"));
+        else
+            AddNotice(string.Format("Preset {0} not found!".L10N("Client:Main:PresetNotFound"), presetName));
+    }
 
     /// <summary>
     /// Handles the chat box input: a /command, or a chat message.
