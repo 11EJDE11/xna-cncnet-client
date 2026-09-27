@@ -59,8 +59,16 @@ public partial class MainWindow : Window
             if (topBar == null)
             {
                 Root.Children.Add(new OptionsWindowView(viewModel.Options) { ZIndex = 9000 });
+                Root.Children.Add(new HotkeyWindowView(viewModel.Options.Hotkeys) { ZIndex = 11000 });
                 topBar = new TopBarView(viewModel.TopBar) { ZIndex = 10000 };
                 Root.Children.Add(topBar);
+
+                // The XNA options disable the top bar while the hotkey window is open
+                viewModel.Options.Hotkeys.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(HotkeyWindowViewModel.IsOpen))
+                        topBar.IsVisible = !viewModel.Options.Hotkeys.IsOpen;
+                };
                 viewModel.RestartRequested += (_, _) => Restart();
             }
         }

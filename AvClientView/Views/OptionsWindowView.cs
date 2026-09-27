@@ -208,6 +208,9 @@ public sealed class OptionsWindowView : Panel
             case "btnCancel":
                 viewModel.Cancel();
                 break;
+            case "btnConfigureHotkeys":
+                viewModel.Hotkeys.Open();
+                break;
             default:
                 if (!string.IsNullOrEmpty(layout?.Url))
                     ThemeAssets.OpenUrl(layout.Url);

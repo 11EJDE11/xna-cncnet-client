@@ -39,9 +39,10 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
     private readonly IDialogService dialogs;
 
     public OptionsWindowViewModel(DirectDrawWrapperManager directDrawWrapperManager, GameCollection gameCollection,
-        TunnelHandler tunnelHandler, GameProcessService gameProcess, IDialogService dialogs)
+        TunnelHandler tunnelHandler, GameProcessService gameProcess, IDialogService dialogs, HotkeyWindowViewModel hotkeys)
     {
         this.dialogs = dialogs;
+        Hotkeys = hotkeys;
 
         Display = new DisplayOptionsModel(directDrawWrapperManager, new ScreenResolutions(new Services.WindowsDisplayModeSource()));
         Audio = new AudioOptionsModel();
@@ -59,6 +60,9 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
                 panel.OnGameExited();
         });
     }
+
+    /// <summary>The Game tab's Configure Hotkeys window.</summary>
+    public HotkeyWindowViewModel Hotkeys { get; }
 
     public DisplayOptionsModel Display { get; }
 
