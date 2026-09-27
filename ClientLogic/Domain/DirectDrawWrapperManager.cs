@@ -4,7 +4,7 @@ using System.Linq;
 
 using ClientCore;
 
-using ClientGUI;
+using ClientLogic.Launch;
 
 using Rampastring.Tools;
 
@@ -17,11 +17,14 @@ namespace DTAClient.Domain
 
         private string defaultRenderer;
         private DirectDrawWrapper selectedRenderer;
+        private readonly GameProcessService gameProcess;
         public DirectDrawWrapper SelectedRenderer => selectedRenderer;
 
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor
-        public DirectDrawWrapperManager()
+        public DirectDrawWrapperManager(GameProcessService gameProcess)
         {
+            this.gameProcess = gameProcess;
+
             // This method sets up `renderers`, `defaultRenderer`, and `selectedRenderer`
             RefreshRenderers();
         }
@@ -61,8 +64,8 @@ namespace DTAClient.Domain
                 ?? renderers.Find(r => r.InternalName == defaultRenderer)
                 ?? throw new ClientConfigurationException("Missing renderer: " + renderer);
 
-            GameProcessLogic.UseQres = selectedRenderer.UseQres;
-            GameProcessLogic.SingleCoreAffinity = selectedRenderer.SingleCoreAffinity;
+            gameProcess.UseQres = selectedRenderer.UseQres;
+            gameProcess.SingleCoreAffinity = selectedRenderer.SingleCoreAffinity;
         }
 
         public void Save(DirectDrawWrapper? newSelectedRenderer)
@@ -81,8 +84,8 @@ namespace DTAClient.Domain
 
             selectedRenderer.Apply();
 
-            GameProcessLogic.UseQres = selectedRenderer.UseQres;
-            GameProcessLogic.SingleCoreAffinity = selectedRenderer.SingleCoreAffinity;
+            gameProcess.UseQres = selectedRenderer.UseQres;
+            gameProcess.SingleCoreAffinity = selectedRenderer.SingleCoreAffinity;
 
             UserINISettings.Instance.Renderer.Value = selectedRenderer.InternalName;
         }

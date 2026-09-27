@@ -11,6 +11,7 @@ using AvClientView.Views;
 using ClientLogic;
 using ClientLogic.Skirmish;
 
+using DTAClient.Domain;
 using DTAClient.Online;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -37,7 +38,12 @@ public sealed class App : Application
                 .AddSingleton<MainWindowViewModel>()
                 .AddSingleton<SkirmishSession>()
                 .AddTransient<SkirmishViewModel>()
+                .AddSingleton<DirectDrawWrapperManager>()
                 .BuildServiceProvider();
+
+            // As the XNA client does at start-up: the selected renderer sets the game process's qres and single-core
+            // affinity options
+            Services.GetRequiredService<DirectDrawWrapperManager>();
 
             mainWindow.DataContext = Services.GetRequiredService<MainWindowViewModel>();
             desktop.MainWindow = mainWindow;
