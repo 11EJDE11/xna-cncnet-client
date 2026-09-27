@@ -756,7 +756,14 @@ public static class ThemedLobbyView
             Children =
             {
                 new Image { Source = item == null ? null : rankTextures[item.RankIndex], Width = rankWidth, Stretch = Stretch.None },
-                new TextBlock { Text = item?.Text, Margin = new Thickness(3, 1), VerticalAlignment = VerticalAlignment.Center },
+                new TextBlock
+                {
+                    Text = item?.Text,
+                    Margin = new Thickness(3, 1),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = item?.IsDisabled == true ? new SolidColorBrush(ThemeAssets.DisabledItemColor) : null,
+                    [ToolTip.TipProperty] = item?.ToolTip,
+                },
             },
         });
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
@@ -830,6 +837,24 @@ public static class ThemedLobbyView
         TextBox textBox = ThemedStyle.TextBox(layout.Width, layout.Height, layout.Attributes.GetValueOrDefault("Suggestion", string.Empty));
         textBox.DataContext = viewModel;
         textBox.Bind(TextBox.TextProperty, new Binding(nameof(LobbyViewModelBase.MapSearchText)) { Mode = BindingMode.TwoWay });
+
+        // TbMapSearch_RightClick: search the current mode or all modes ("< " marks the current choice)
+        textBox.ContextMenu = null;
+        textBox.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
+        {
+            if (!e.GetCurrentPoint(textBox).Properties.IsRightButtonPressed)
+                return;
+
+            ThemedContextMenu.Open(textBox, e.GetPosition(textBox),
+            [
+                new(("Search current mode".L10N("Client:Main:SearchCurrentMode")) + (!viewModel.SearchAllGameModes ? "  <" : string.Empty),
+                    () => viewModel.SetSearchAllGameModes(false)),
+                new(("Search all modes".L10N("Client:Main:SearchAllModes")) + (viewModel.SearchAllGameModes ? "  <" : string.Empty),
+                    () => viewModel.SetSearchAllGameModes(true)),
+            ]);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
         return textBox;
     }
 

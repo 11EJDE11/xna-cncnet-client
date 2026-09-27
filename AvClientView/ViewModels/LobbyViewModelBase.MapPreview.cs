@@ -213,11 +213,24 @@ public abstract partial class LobbyViewModelBase
 
     /// <summary>The maps of a filter: the favourites, or a game mode's maps.</summary>
     private List<GameModeMap> MapsOfFilter(string filter) =>
-        filter == FavoriteMapsLabel ? FavoriteGameModeMaps().ToList() : session.GameModeMapsOf(filter);
+        SearchAllGameModes ? session.GameModeMaps.ToList()
+        : filter == FavoriteMapsLabel ? FavoriteGameModeMaps().ToList() : session.GameModeMapsOf(filter);
+
+    /// <summary>The map list lists every game mode's maps (the search box menu's "Search all modes").</summary>
+    public bool SearchAllGameModes => UserINISettings.Instance.SearchAllGameModes.Value;
+
+    /// <summary>The search box menu (SetSearchAllGameModes).</summary>
+    public void SetSearchAllGameModes(bool value)
+    {
+        UserINISettings.Instance.SearchAllGameModes.Value = value;
+        UserINISettings.Instance.SaveSettings();
+        OnPropertyChanged(nameof(SearchAllGameModes));
+        OnMapSearchTextChanged(MapSearchText);
+    }
 
     /// <summary>The map list's text for a map: with the game mode while viewing the favourites.</summary>
     private string MapListText(GameModeMap gmm) =>
-        SelectedGameMode == FavoriteMapsLabel ? gmm.Map.Name + " - " + gmm.GameMode.UIName : gmm.Map.Name;
+        SelectedGameMode == FavoriteMapsLabel || SearchAllGameModes ? gmm.Map.Name + " - " + gmm.GameMode.UIName : gmm.Map.Name;
 
     /// <summary>Fills the preview's start markers, extra textures and briefing (MapPreviewBox.UpdateMap).</summary>
     private void RefreshPreviewParts(GameModeMap gmm, ClientLogic.MapPreview.MapPreviewLayout layout, MapPoint previewSize)

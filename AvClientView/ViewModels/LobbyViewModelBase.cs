@@ -298,7 +298,13 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         currentMaps = MapSearch.Filter(maps, MapSearchText);
         Maps.Clear();
         foreach (GameModeMap gmm in currentMaps)
-            Maps.Add(new MapListItem(MapListText(gmm), session.MapListRankIndex(gmm)));
+            Maps.Add(new MapListItem(MapListText(gmm), session.MapListRankIndex(gmm))
+            {
+                // Grayed in skirmish (DisabledItemColor); the original name as the tooltip (mapListTooltip)
+                IsDisabled = gmm.MultiplayerOnly && !session.IsMultiplayerLobby,
+                ToolTip = gmm.Map.UntranslatedName != gmm.Map.Name
+                    ? "Original name:".L10N("Client:Main:OriginalMapName") + " " + gmm.Map.UntranslatedName : null,
+            });
     }
 
     /// <summary>Shows the session's state.</summary>
@@ -689,6 +695,10 @@ public sealed partial class DropDownOptionViewModel : ObservableObject
 /// <summary>A map list row: the map's text and its rank icon (an index into LobbyStatistics.RankTextureNames).</summary>
 public sealed record MapListItem(string Text, int RankIndex)
 {
+    public bool IsDisabled { get; init; }
+
+    public string ToolTip { get; init; }
+
     public override string ToString() => Text;
 }
 
