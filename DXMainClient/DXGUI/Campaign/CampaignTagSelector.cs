@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 
 using ClientCore;
+using ClientLogic.Campaign;
 
 using ClientGUI;
 
@@ -25,8 +26,9 @@ namespace DTAClient.DXGUI.Campaign
             this.discordHandler = discordHandler;
         }
 
-        public IReadOnlyDictionary<int, Mission> UniqueIDToMissions => CampaignSelector.UniqueIDToMissions;
-        public IReadOnlyCollection<Mission> AllMissions => CampaignSelector.AllMissions;
+        public CampaignCatalog Catalog => CampaignSelector.Catalog;
+        public IReadOnlyDictionary<int, Mission> UniqueIDToMissions => Catalog.UniqueIDToMissions;
+        public IReadOnlyCollection<Mission> AllMissions => Catalog.AllMissions;
 
         protected XNAClientButton btnCancel;
         protected XNAClientButton btnShowAllMission;

@@ -51,7 +51,7 @@ public static class CampaignLauncher
     public static int GetComputerDifficulty(int difficulty) => Math.Abs(difficulty - 2);
 
     /// <summary>
-    /// Writes the spawn files of a mission and saves the difficulty in the settings; the game can then be started.
+    /// Writes the spawn files of a mission; the front end saves its settings and starts the game afterwards.
     /// </summary>
     /// <param name="difficulty">0 easy, 1 medium, 2 hard.</param>
     /// <param name="checkBoxes">The campaign check-box options, in the selector's order.</param>
@@ -161,9 +161,6 @@ public static class CampaignLauncher
 
             mapIni.WriteIniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, "spawnmap.ini"));
         }
-
-        UserINISettings.Instance.Difficulty.Value = difficulty;
-        UserINISettings.Instance.SaveSettings();
 
         launchCapture?.Complete(ProgramConstants.PLAYERNAME);
         return difficultyName;

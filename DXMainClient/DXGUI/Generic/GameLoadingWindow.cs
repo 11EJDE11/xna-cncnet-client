@@ -146,13 +146,13 @@ namespace DTAClient.DXGUI.Generic
             if (mission != null)
             {
                 spawnIniSettings.AddKey("CustomMissionID", sg.CustomMissionID.ToString());
-                CampaignSelector.WriteMissionSectionToSpawnIni(spawnIni, mission);
+                ClientLogic.Campaign.CampaignLauncher.WriteMissionSectionToSpawnIni(spawnIni, mission);
             }
 
             // Apply forced options from GameOptions.ini
             IniFile gameOptionsIni = new IniFile(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(),
                 ClientConfiguration.GAME_OPTIONS));
-            CampaignSelector.ApplyCampaignForcedSpawnIniOptions(spawnIni, gameOptionsIni);
+            ClientLogic.Campaign.CampaignLauncher.ApplyCampaignForcedSpawnIniOptions(spawnIni, gameOptionsIni);
 
             spawnIni.WriteIniFile(spawnerSettingsFile.FullName);
 
