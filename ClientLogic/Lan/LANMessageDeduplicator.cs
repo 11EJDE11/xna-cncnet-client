@@ -14,7 +14,7 @@ namespace DTAClient.DXGUI.Multiplayer;
 /// to filter out duplicates. Message IDs expire after a configurable timeout to prevent
 /// memory leaks. Cleanup is performed automatically in a background thread.
 /// </summary>
-internal class LANMessageDeduplicator : IDisposable
+public class LANMessageDeduplicator : IDisposable
 {
     private readonly Random random;
     private readonly object lockObject = new();
