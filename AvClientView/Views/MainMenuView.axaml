@@ -2,15 +2,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:AvClientView.ViewModels"
              x:Class="AvClientView.Views.MainMenuView"
-             x:DataType="vm:MainMenuViewModel">
+             x:DataType="vm:MainMenuViewModel"
+             Background="Black">
   <Grid RowDefinitions="*,Auto">
-    <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="240">
-      <TextBlock Text="{Binding Title}" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,12" />
-      <Button Content="Skirmish" Command="{Binding OpenSkirmishCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-      <Button Content="CnCNet" Command="{Binding OpenCnCNetCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-      <Button Content="LAN" Command="{Binding OpenLanCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-      <Button Content="Exit" Command="{Binding ExitCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-    </StackPanel>
-    <TextBlock Grid.Row="1" Text="{Binding Status}" Margin="12,6" Opacity="0.7" />
+    <!-- The theme's main menu (MainMenu.ini), built in code-behind -->
+    <ContentControl x:Name="MenuHost" Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    <TextBlock Grid.Row="1" Text="{Binding Status}" Margin="12,6" Opacity="0.7" Foreground="Silver" />
   </Grid>
 </UserControl>

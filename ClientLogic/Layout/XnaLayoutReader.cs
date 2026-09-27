@@ -96,7 +96,12 @@ public sealed class XnaLayoutReader
                     throw new ClientConfigurationException("Invalid ExtraControl specified in " + window.Name + ": " + kvp.Value);
 
                 if (!window.Children.Any(c => c.Name == parts[0]))
-                    window.AddChild(new LayoutControl(parts[0], parts[1], KindOf(parts[1])));
+                {
+                    window.AddChild(new LayoutControl(parts[0], parts[1], KindOf(parts[1]))
+                    {
+                        DrawOrder = -window.Children.Count,
+                    });
+                }
             }
         }
 
@@ -143,6 +148,9 @@ public sealed class XnaLayoutReader
         switch (key)
         {
             // Common (XNAControl, through the translation parser)
+            case "DrawOrder":
+                control.DrawOrder = ParseInt(value);
+                return;
             case "Text":
                 control.Text = Localize(control, key, value.FromIniString());
                 return;

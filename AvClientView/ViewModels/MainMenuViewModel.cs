@@ -77,4 +77,36 @@ public sealed partial class MainMenuViewModel : ObservableObject
 
     [RelayCommand]
     private void Exit() => ExitRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>The game version, as the XNA main menu shows it.</summary>
+    public string Version => ProgramConstants.GAME_VERSION;
+
+    /// <summary>
+    /// A themed main menu button was clicked (the XNA button names). Buttons for screens the preview doesn't have
+    /// yet say so in the status line.
+    /// </summary>
+    public void Click(string buttonName, string buttonText)
+    {
+        switch (buttonName)
+        {
+            case "btnSkirmish":
+                if (OpenSkirmishCommand.CanExecute(null))
+                    OpenSkirmishCommand.Execute(null);
+                break;
+            case "btnCnCNet":
+                if (OpenCnCNetCommand.CanExecute(null))
+                    OpenCnCNetCommand.Execute(null);
+                break;
+            case "btnLan":
+                if (OpenLanCommand.CanExecute(null))
+                    OpenLanCommand.Execute(null);
+                break;
+            case "btnExit":
+                Exit();
+                break;
+            default:
+                Status = string.Format("{0} isn't in the Avalonia preview yet.", string.IsNullOrWhiteSpace(buttonText) ? buttonName : buttonText.Replace(Environment.NewLine, " "));
+                break;
+        }
+    }
 }

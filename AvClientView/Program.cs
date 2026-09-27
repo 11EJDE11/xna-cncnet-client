@@ -71,6 +71,9 @@ internal static class Program
         // The INI preprocessor, as the XNA client's Startup starts it; launching the game waits for it
         PreprocessorBackgroundTask.Instance.Run();
 
+        // The theme's textures and fonts are found as the XNA client finds them
+        AvClientView.Theme.ThemeAssets.Initialize();
+
         try
         {
             FileInfo translationThemeFile = SafePath.GetFile(UserINISettings.Instance.TranslationThemeFolderPath, ClientConfiguration.Instance.TranslationIniName);

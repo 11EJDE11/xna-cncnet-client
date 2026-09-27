@@ -30,6 +30,8 @@ public sealed class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            AvClientView.Theme.ThemeFonts.Initialize();
+
             var mainWindow = new MainWindow();
 
             Services = new ServiceCollection()

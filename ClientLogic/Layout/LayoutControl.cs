@@ -50,6 +50,9 @@ public sealed class LayoutControl(string name, string typeName, LayoutControlKin
 
     public string ToolTip { get; set; }
 
+    /// <summary>Lower draws first (behind); extra controls get negative values, as in XNA.</summary>
+    public int DrawOrder { get; set; }
+
     public bool Visible { get; set; } = true;
 
     public bool Enabled { get; set; } = true;
