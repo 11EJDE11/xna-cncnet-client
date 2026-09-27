@@ -71,6 +71,7 @@ public partial class MainWindow : Window
 
                 Root.Children.Add(new PrivateMessagesOverlay(viewModel.PrivateMessages) { ZIndex = 9500 });
                 Root.Children.Add(new PrivateMessageNotificationView(viewModel.PrivateMessages) { ZIndex = 12000 });
+                Root.Children.Add(new PrivacyNotificationView { ZIndex = 11500 });
                 Root.Children.Add(new GameInProgressView(App.Services.GetRequiredService<ClientLogic.Launch.GameInProgressTracker>()) { ZIndex = 13000 });
                 Root.Children.Add(new GameInvitationsView(App.Services.GetRequiredService<GameInvitationsViewModel>()) { ZIndex = 12000 });
 
