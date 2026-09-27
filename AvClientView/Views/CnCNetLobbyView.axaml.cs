@@ -44,8 +44,7 @@ public partial class CnCNetLobbyView : UserControl
                 new Dictionary<string, Func<LayoutControl, Control>>
                 {
                     ["lbGameList"] = layout => GameList(layout, viewModel),
-                    ["lbPlayerList"] = layout => ThemedWindow.List(layout, viewModel, nameof(CnCNetLobbyViewModel.Users),
-                        new FuncDataTemplate<UserItemViewModel>((user, _) => UserRow(user))),
+                    ["lbPlayerList"] = layout => PlayerList(layout, viewModel),
                     ["lbChatMessages"] = layout => ThemedWindow.ChatList(layout, viewModel),
                     ["tbChatInput"] = layout => ThemedWindow.ChatInput(layout, viewModel, viewModel.SendChatCommand),
                     ["ddColor"] = layout => DropDown(layout, viewModel, nameof(CnCNetLobbyViewModel.ChatColors), nameof(CnCNetLobbyViewModel.SelectedChatColorIndex)),
@@ -332,6 +331,37 @@ public partial class CnCNetLobbyView : UserControl
 
         row.Children.Add(new TextBlock { Text = user.ToString(), Foreground = user.Brush, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
         return row;
+    }
+
+    /// <summary>The player list: right click opens the player menu (GlobalContextMenu), double click a private chat.</summary>
+    private static Control PlayerList(LayoutControl layout, CnCNetLobbyViewModel viewModel)
+    {
+        var messages = (PrivateMessagesViewModel)App.Services.GetService(typeof(PrivateMessagesViewModel));
+        ListBox list = null;
+        list = ThemedWindow.List(layout, viewModel, nameof(CnCNetLobbyViewModel.Users),
+            new FuncDataTemplate<UserItemViewModel>((user, _) =>
+            {
+                Control row = UserRow(user);
+                if (row is Panel panel)
+                    panel.Background = Brushes.Transparent;
+
+                row.PointerPressed += (_, e) =>
+                {
+                    if (user == null || !e.GetCurrentPoint(row).Properties.IsRightButtonPressed)
+                        return;
+
+                    list.SelectedItem = user;
+                    ThemedContextMenu.Open(row, e.GetPosition(row), messages.PlayerMenu(user.Name, user.IsAdmin));
+                    e.Handled = true;
+                };
+                row.DoubleTapped += (_, _) =>
+                {
+                    if (user != null)
+                        messages.OpenConversation(user.Name);
+                };
+                return row;
+            }));
+        return list;
     }
 
     private static Control DropDown(LayoutControl layout, CnCNetLobbyViewModel viewModel, string items, string index)

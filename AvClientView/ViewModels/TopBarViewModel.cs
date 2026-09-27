@@ -67,6 +67,10 @@ public sealed partial class TopBarViewModel : ObservableObject
     [ObservableProperty]
     private bool canOpenOptions = true;
 
+    /// <summary>Unread private messages (XNA doesn't show the count on its button: it doesn't fit).</summary>
+    [ObservableProperty]
+    private int unreadPrivateMessages;
+
     public bool LanMode { get; private set; }
 
     /// <summary>A connection event: the bar comes down for a while (EVENT_DOWN_TIME_WAIT_SECONDS).</summary>

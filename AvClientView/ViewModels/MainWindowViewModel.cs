@@ -19,6 +19,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Menu = menu;
         TopBar = topBar;
         Options = options;
+        PrivateMessages = services.GetRequiredService<PrivateMessagesViewModel>();
         Title = menu.Title;
         currentPage = menu;
         primaryPage = menu;
@@ -45,6 +46,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         topBar.MainRequested += (_, _) => CurrentPage = primaryPage;
         topBar.CnCNetLobbyRequested += (_, _) => OpenCnCNet();
+        topBar.PrivateMessagesRequested += (_, _) => PrivateMessages.Open();
+        PrivateMessages.OpenRequested += (_, _) => CurrentPage = PrivateMessages;
+        PrivateMessages.JoinRequested += (_, name) =>
+        {
+            OpenCnCNet();
+            cncnetLobby.JoinUser(name);
+        };
+        PrivateMessages.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PrivateMessagesViewModel.UnreadCount))
+                TopBar.UnreadPrivateMessages = PrivateMessages.UnreadCount;
+        };
         topBar.LogOutRequested += (_, _) =>
         {
             cncnetLobby?.LogOutFromTopBar();
@@ -59,6 +72,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public OptionsWindowViewModel Options { get; }
 
     public CampaignViewModel Campaign { get; }
+
+    public PrivateMessagesViewModel PrivateMessages { get; }
 
     /// <summary>The options were saved and the user chose to restart the client.</summary>
     public event EventHandler RestartRequested;
@@ -87,6 +102,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private object currentPage;
+
+    partial void OnCurrentPageChanged(object value)
+    {
+        if (value != PrivateMessages)
+            PrivateMessages.Close();
+    }
 
     public event EventHandler ExitRequested
     {

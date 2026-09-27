@@ -96,12 +96,26 @@ public static class ThemedWindow
         list.DataContext = dataContext;
         list.Background = layout.SolidBackground is { } background ? new SolidColorBrush(ThemeAssets.ToColor(background)) : ThemedStyle.PanelBackground;
         list.Bind(ItemsControl.ItemsSourceProperty, new Binding("Messages"));
-        list.ItemTemplate = new FuncDataTemplate<ChatLineViewModel>((line, _) => new TextBlock
+        list.ItemTemplate = new FuncDataTemplate<ChatLineViewModel>((line, _) =>
         {
-            Text = line?.Text,
-            Foreground = line?.Brush,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(4, 0),
+            var text = new TextBlock
+            {
+                Text = line?.Text,
+                Foreground = line?.Brush,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(4, 0),
+            };
+            if (dataContext is PrivateMessagesViewModel or CnCNetLobbyViewModel)
+                text.PointerPressed += (_, e) =>
+                {
+                    if (line?.Message != null && e.GetCurrentPoint(text).Properties.IsRightButtonPressed)
+                    {
+                        list.SelectedItem = line;
+                        PlayerMessageContextMenu.Open(text, e.GetPosition(text), line.Message);
+                        e.Handled = true;
+                    }
+                };
+            return text;
         });
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
         ChatScroll.SetFollowNewItems(list, true);

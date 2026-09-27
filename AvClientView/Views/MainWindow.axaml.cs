@@ -64,6 +64,8 @@ public partial class MainWindow : Window
                 topBar = new TopBarView(viewModel.TopBar) { ZIndex = 10000 };
                 Root.Children.Add(topBar);
 
+                Root.Children.Add(new PrivateMessageNotificationView(viewModel.PrivateMessages) { ZIndex = 12000 });
+
                 // The XNA options disable the top bar while the hotkey window is open
                 viewModel.Options.Hotkeys.PropertyChanged += (_, e) =>
                 {

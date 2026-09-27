@@ -305,6 +305,20 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         Join(shownGames[SelectedGameIndex], string.Empty);
     }
 
+    /// <summary>The player menu's Join: joins the game the player is in, or says they aren't in one.</summary>
+    public void JoinUser(string name)
+    {
+        HostedCnCNetGame game = shownGames.FirstOrDefault(g => g.Players.Contains(name));
+        if (game == null)
+        {
+            lobby.AddNotice(string.Format("{0} is not in a game!".L10N("Client:Main:UserNotInGame"), name));
+            return;
+        }
+
+        SelectedGameIndex = shownGames.IndexOf(game);
+        Join(game, string.Empty);
+    }
+
     private void Join(HostedCnCNetGame game, string password)
     {
         Room.Start();
