@@ -104,5 +104,10 @@ internal static class Program
             playerName = Environment.UserName.Substring(Environment.UserName.IndexOf('\\') + 1);
 
         ProgramConstants.PLAYERNAME = NameValidator.GetValidOfflineName(playerName);
+
+        // The game version sent in game announcements, as the XNA client sets it from the updater's version file
+        ProgramConstants.GAME_VERSION = ClientConfiguration.Instance.ModMode ? "N/A" :
+            new IniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, "version")).GetStringValue("DTA", "Version", "N/A");
+        Logger.Log("Game version: " + ProgramConstants.GAME_VERSION);
     }
 }
