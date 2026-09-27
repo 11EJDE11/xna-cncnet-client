@@ -28,6 +28,9 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
 
     protected override void ShowNotice(string message) => room.AddNotice(message);
 
+    /// <summary>The map list is shown: the host, unless /HIDEMAPS hid it.</summary>
+    public bool ShowMapList => room.IsHost && !room.MapListHidden;
+
     public override bool CanChangeMap => room.IsHost;
 
     public override bool CanKickPlayers => room.IsHost;
@@ -94,6 +97,7 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
     protected override void OnRefreshed()
     {
         OnPropertyChanged(nameof(IsHost));
+        OnPropertyChanged(nameof(ShowMapList));
         OnPropertyChanged(nameof(IsPlayer));
         OnPropertyChanged(nameof(LaunchText));
         OnPropertyChanged(nameof(LockText));

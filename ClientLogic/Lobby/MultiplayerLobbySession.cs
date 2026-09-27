@@ -168,6 +168,7 @@ public abstract class MultiplayerLobbySession : LobbySession, IMapSharingLobby, 
     {
         LobbyState.IsHost = isHost;
         LobbyState.Locked = false;
+        MapListHidden = false;
         NormalisePlayers();
 
         if (isHost)
@@ -345,6 +346,10 @@ public abstract class MultiplayerLobbySession : LobbySession, IMapSharingLobby, 
     /// </summary>
     protected virtual List<ChatBoxCommand> CreateChatCommands() =>
     [
+        new ChatBoxCommand("HIDEMAPS", "Hide map list (game host only)".L10N("Client:Main:ChatboxCommandHideMapsHelp"), true,
+            _ => SetMapListHidden(true)),
+        new ChatBoxCommand("SHOWMAPS", "Show map list (game host only)".L10N("Client:Main:ChatboxCommandShowMapsHelp"), true,
+            _ => SetMapListHidden(false)),
         new ChatBoxCommand("FRAMESENDRATE", string.Format("Change order lag / FrameSendRate (default {0}) (game host only)".L10N("Client:Main:ChatboxCommandFrameSendRateHelpV2"), ClientConfiguration.Instance.DefaultFrameSendRate), true,
             SetFrameSendRate),
         new ChatBoxCommand("MAXAHEAD", string.Format("Change MaxAhead (default {0}) (game host only)".L10N("Client:Main:ChatboxCommandMaxAheadHelpV2"), ClientConfiguration.Instance.DefaultMaxAhead), true,
@@ -360,6 +365,15 @@ public abstract class MultiplayerLobbySession : LobbySession, IMapSharingLobby, 
     ];
 
     protected override bool CanChangeGameOptions => IsHost;
+
+    /// <summary>The host hid the map list (/HIDEMAPS): the room shows the player layout, with the host's controls.</summary>
+    public bool MapListHidden { get; private set; }
+
+    private void SetMapListHidden(bool hidden)
+    {
+        MapListHidden = hidden;
+        RaiseChanged();
+    }
 
     /// <summary>The /LOADMAP command: loads a map from Maps/Custom.</summary>
     private void LoadCustomMap(string mapName)

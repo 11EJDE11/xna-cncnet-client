@@ -54,8 +54,11 @@ public static class ThemedLobbyView
     public static ThemedLobbyKind Multiplayer(string layoutIniName) => new("MultiplayerGameLobby", layoutIniName, true);
 
     /// <summary>Builds the lobby; <paramref name="onButton"/> gets the XNA names of the clicked buttons.</summary>
-    public static Control Build(LobbyViewModelBase viewModel, ThemedLobbyKind kind, bool isHost, Action<string, LayoutControl> onButton)
+    /// <param name="showMapList">The map list is shown (default: for the host; /HIDEMAPS hides it).</param>
+    public static Control Build(LobbyViewModelBase viewModel, ThemedLobbyKind kind, bool isHost, Action<string, LayoutControl> onButton,
+        bool? showMapList = null)
     {
+        bool mapListShown = showMapList ?? isHost;
         var window = new LayoutControl(kind.WindowName, "INItializableWindow", LayoutControlKind.Panel)
         {
             Width = RenderWidth - 60,
@@ -73,7 +76,7 @@ public static class ThemedLobbyView
         if (kind.IsMultiplayer)
         {
             // The multiplayer lobby places the chat by role (MultiplayerGameLobby)
-            string role = isHost ? "_Host" : "_Player";
+            string role = mapListShown ? "_Host" : "_Player";
             if (window.Find("lbChatMessages") is LayoutControl chat)
                 reader.ReadInitializableControl(ini, chat, parser, "lbChatMessages" + role);
             if (window.Find("tbChatInput") is LayoutControl input)
@@ -99,9 +102,10 @@ public static class ThemedLobbyView
         // Players don't see the map list (MultiplayerGameLobby.HideMapList), nor the host's tunnel and room settings
         // buttons (disabled XNA controls are hidden); the negotiation status panel isn't in the preview yet
         var hidden = new List<string> { "btnNegotiationStatus" };
+        if (kind.IsMultiplayer && !mapListShown)
+            hidden.AddRange(["ddGameMode", "lblGameModeSelect", "lbMapList", "tbMapSearch", "btnPickRandomMap", "btnMapSortAlphabetically"]);
         if (kind.IsMultiplayer && !isHost)
-            hidden.AddRange(["ddGameMode", "lblGameModeSelect", "lbMapList", "tbMapSearch", "btnPickRandomMap", "btnMapSortAlphabetically", "btnLockGame",
-                "btnChangeTunnel", "btnGameLobbySettings", "btnSaveLoadGameOptions"]);
+            hidden.AddRange(["btnLockGame", "btnChangeTunnel", "btnGameLobbySettings", "btnSaveLoadGameOptions"]);
 
         foreach (string name in hidden)
         {

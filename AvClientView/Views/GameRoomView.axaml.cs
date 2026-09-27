@@ -19,7 +19,7 @@ namespace AvClientView.Views;
 public partial class GameRoomView : UserControl
 {
     private MultiplayerRoomViewModel viewModel;
-    private bool? builtAsHost;
+    private (bool IsHost, bool ShowMapList)? builtAs;
 
     public GameRoomView()
     {
@@ -40,7 +40,7 @@ public partial class GameRoomView : UserControl
         }
 
         viewModel = newViewModel;
-        builtAsHost = null;
+        builtAs = null;
 
         WindowHost.Children.Clear();
         if (viewModel is CnCNetGameRoomViewModel cncnet)
@@ -57,11 +57,11 @@ public partial class GameRoomView : UserControl
         }
     }
 
-    private void ViewModel_Opened(object sender, EventArgs e) => builtAsHost = null;
+    private void ViewModel_Opened(object sender, EventArgs e) => builtAs = null;
 
     private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MultiplayerRoomViewModel.IsHost))
+        if (e.PropertyName is nameof(MultiplayerRoomViewModel.IsHost) or nameof(MultiplayerRoomViewModel.ShowMapList))
             BuildIfRoleChanged();
         else if (e.PropertyName is nameof(MultiplayerRoomViewModel.LaunchText) or nameof(MultiplayerRoomViewModel.LockText))
             UpdateButtonTexts();
@@ -69,15 +69,15 @@ public partial class GameRoomView : UserControl
 
     private void BuildIfRoleChanged()
     {
-        if (viewModel == null || builtAsHost == viewModel.IsHost)
+        if (viewModel == null || builtAs == (viewModel.IsHost, viewModel.ShowMapList))
             return;
 
-        builtAsHost = viewModel.IsHost;
+        builtAs = (viewModel.IsHost, viewModel.ShowMapList);
 
         try
         {
             LobbyHost.Content = ThemedLobbyView.Build(viewModel, ThemedLobbyView.Multiplayer(viewModel.LayoutIniName),
-                viewModel.IsHost, OnButton);
+                viewModel.IsHost, OnButton, viewModel.ShowMapList);
             UpdateButtonTexts();
         }
         catch (Exception ex)
