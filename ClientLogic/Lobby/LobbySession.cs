@@ -28,7 +28,10 @@ public abstract partial class LobbySession : ObservableObject
 {
     public const int MAX_PLAYER_COUNT = 8;
 
-    protected LobbySession(string windowName, MapLoader mapLoader, GameProcessService gameProcess, IDialogService dialogs, Random random)
+    /// <param name="windowName">The layout INI's window section the game options are read from.</param>
+    /// <param name="layoutIniName">The layout INI file (without .ini), if not named after the window (the XNA lobby's IniNameOverride).</param>
+    protected LobbySession(string windowName, MapLoader mapLoader, GameProcessService gameProcess, IDialogService dialogs, Random random,
+        string layoutIniName = null)
     {
         MapLoader = mapLoader;
         GameProcess = gameProcess;
@@ -42,7 +45,7 @@ public abstract partial class LobbySession : ObservableObject
         SlotIndices = new SlotIndexMapper(Sides.Count, RandomSelectors.Count + 1);
         MPColors = MultiplayerColor.LoadColors();
 
-        foreach (GameOptionDefinition definition in GameOptionCatalog.Load(new CCIniFile(FindLayoutIni(windowName)), windowName))
+        foreach (GameOptionDefinition definition in GameOptionCatalog.Load(new CCIniFile(FindLayoutIni(layoutIniName ?? windowName)), windowName))
             Options.Add(new GameOption(definition, definition.DefaultValue));
 
         // As the XNA lobby does from its Initialize on: record the host's choices

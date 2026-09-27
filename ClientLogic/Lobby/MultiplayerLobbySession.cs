@@ -26,8 +26,8 @@ namespace ClientLogic.Lobby;
 public abstract class MultiplayerLobbySession : LobbySession
 {
     protected MultiplayerLobbySession(string windowName, MapLoader mapLoader, GameProcessService gameProcess,
-        IDialogService dialogs, ISoundService sounds, IUiDispatcher uiDispatcher, Random random)
-        : base(windowName, mapLoader, gameProcess, dialogs, random)
+        IDialogService dialogs, ISoundService sounds, IUiDispatcher uiDispatcher, Random random, string layoutIniName = null)
+        : base(windowName, mapLoader, gameProcess, dialogs, random, layoutIniName)
     {
         Sounds = sounds;
         UiDispatcher = uiDispatcher;

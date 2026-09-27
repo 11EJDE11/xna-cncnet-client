@@ -45,8 +45,11 @@ public sealed class LanGameRoom : MultiplayerLobbySession
     private const string DICE_ROLL_COMMAND = LanLobbySession.DICE_ROLL_COMMAND;
     public const string PING = "PING";
 
-    /// <summary>The window name the XNA LAN lobby reads its layout and options from.</summary>
-    public const string WINDOW_NAME = "LANGameLobby";
+    /// <summary>The window section the XNA LAN lobby reads its game options from.</summary>
+    public const string WINDOW_NAME = "MultiplayerGameLobby";
+
+    /// <summary>The layout INI the XNA LAN lobby reads (its IniNameOverride).</summary>
+    public const string LAYOUT_INI_NAME = "LANGameLobby";
 
     private readonly LanGameConnection connection;
     private readonly string localGame;
@@ -60,7 +63,7 @@ public sealed class LanGameRoom : MultiplayerLobbySession
 
     public LanGameRoom(MapLoader mapLoader, GameProcessService gameProcess, IDialogService dialogs,
         ISoundService sounds, IUiDispatcher uiDispatcher, Random random)
-        : base(WINDOW_NAME, mapLoader, gameProcess, dialogs, sounds, uiDispatcher, random)
+        : base(WINDOW_NAME, mapLoader, gameProcess, dialogs, sounds, uiDispatcher, random, LAYOUT_INI_NAME)
     {
         localGame = ClientConfiguration.Instance.LocalGame;
 
