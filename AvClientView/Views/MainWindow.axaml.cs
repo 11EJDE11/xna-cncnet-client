@@ -4,6 +4,8 @@ using Avalonia.Controls;
 
 using AvClientView.ViewModels;
 
+using Microsoft.Extensions.DependencyInjection;
+
 namespace AvClientView.Views;
 
 public partial class MainWindow : Window
@@ -66,6 +68,7 @@ public partial class MainWindow : Window
                 Root.Children.Add(topBar);
 
                 Root.Children.Add(new PrivateMessageNotificationView(viewModel.PrivateMessages) { ZIndex = 12000 });
+                Root.Children.Add(new GameInvitationsView(App.Services.GetRequiredService<GameInvitationsViewModel>()) { ZIndex = 12000 });
 
                 // The XNA options disable the top bar while the hotkey window is open
                 viewModel.Options.Hotkeys.PropertyChanged += (_, e) =>

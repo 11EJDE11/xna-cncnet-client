@@ -31,6 +31,7 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     private readonly GameCollection gameCollection;
     private readonly MapLoader mapLoader;
     private readonly CnCNetUserData userData;
+    private readonly GameInvitationsViewModel invitations;
     private readonly DispatcherTimer timer;
     private readonly Stopwatch stopwatch = new();
     private List<HostedCnCNetGame> shownGames = [];
@@ -38,8 +39,9 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     private bool initialized;
 
     public CnCNetLobbyViewModel(CnCNetLobbyService lobby, CnCNetGameRoomViewModel roomViewModel, IDialogService dialogs,
-        GameCollection gameCollection, MapLoader mapLoader, CnCNetUserData userData)
+        GameCollection gameCollection, MapLoader mapLoader, CnCNetUserData userData, GameInvitationsViewModel invitations)
     {
+        this.invitations = invitations;
         this.userData = userData;
         this.mapLoader = mapLoader;
         this.lobby = lobby;
@@ -60,6 +62,17 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         AvClientView.Theme.ThemeSound gameCreatedSound = AvClientView.Theme.ThemeSound.Load("gamecreated.wav");
         lobby.GameHostedNotification += (_, _) => gameCreatedSound.Play();
         lobby.ConnectionChanged += (_, _) => RefreshConnection();
+
+        AvClientView.Theme.ThemeSound inviteSound = AvClientView.Theme.ThemeSound.Load("pm.wav");
+        lobby.InvitationReceived += (_, invitation) =>
+        {
+            int gameId = lobby.FindUserGameId(invitation.Sender);
+            invitations.Add(invitation, gameId >= 0 && gameId < gameCollection.GameList.Count ? gameCollection.GameList[gameId] : null);
+            inviteSound.Play();
+        };
+        lobby.InvitationDismissed += (_, invitation) => invitations.Remove(invitation);
+        invitations.Accepted += (_, invitation) => AcceptInvitation(invitation);
+        invitations.Declined += (_, invitation) => lobby.DeclineInvitation(invitation);
         lobby.RoomEntered += (_, _) => RoomEntered?.Invoke(this, EventArgs.Empty);
         lobby.RoomLeft += (_, _) => RoomLeft?.Invoke(this, EventArgs.Empty);
 
@@ -170,6 +183,9 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     public event EventHandler RoomLeft;
 
     public event EventHandler BackRequested;
+
+    /// <summary>The lobby page must be shown (an accepted invitation needs the password prompt).</summary>
+    public event EventHandler ShowRequested;
 
     partial void OnSelectedChatColorIndexChanged(int value) => lobby.ChatColorIndex = value;
 
@@ -389,6 +405,26 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
             passwordGame = game;
             JoinPassword = string.Empty;
             ShowPasswordPrompt = true;
+        }
+    }
+
+    /// <summary>An invitation's Yes: leaves the current room and joins the invited game.</summary>
+    private void AcceptInvitation(GameInvitation invitation)
+    {
+        Room.Start();
+
+        switch (lobby.AcceptInvitation(invitation))
+        {
+            case CnCNetLobbyService.JoinResult.Failed:
+                dialogs.ShowMessage("Failed to join".L10N("Client:Main:JoinFailedTitle"),
+                    string.Format("Unable to join {0}'s game. The game may be locked or closed.".L10N("Client:Main:JoinFailedText"), invitation.Sender));
+                break;
+            case CnCNetLobbyService.JoinResult.NeedsPassword:
+                passwordGame = lobby.Games.FirstOrDefault(g => g.ChannelName == invitation.ChannelName);
+                JoinPassword = string.Empty;
+                ShowPasswordPrompt = passwordGame != null;
+                ShowRequested?.Invoke(this, EventArgs.Empty);
+                break;
         }
     }
 

@@ -23,8 +23,8 @@ namespace ClientLogic.CnCNet;
 /// <summary>
 /// The CnCNet lobby without a user interface, as the XNA client's CnCNet lobby does it: connecting, the chat
 /// channels, the game list from the broadcast channels, and hosting and joining game rooms (a
-/// <see cref="CnCNetGameRoom"/>). The front end calls <see cref="Update"/> regularly. Private messages, invitations,
-/// saved-game rooms, game filters and the update check are not supported yet.
+/// <see cref="CnCNetGameRoom"/>), and game invitations. The front end calls <see cref="Update"/> regularly.
+/// Saved-game rooms and the update check are not supported yet.
 /// </summary>
 public sealed class CnCNetLobbyService
 {
@@ -69,6 +69,7 @@ public sealed class CnCNetLobbyService
         connectionManager.Disconnected += ConnectionManager_Disconnected;
         connectionManager.ConnectionLost += ConnectionManager_ConnectionLost;
         connectionManager.BannedFromChannel += ConnectionManager_BannedFromChannel;
+        connectionManager.PrivateCTCPReceived += ConnectionManager_PrivateCTCPReceived;
 
         room.Left += (_, _) => Room_Left();
 
@@ -113,6 +114,15 @@ public sealed class CnCNetLobbyService
     /// (PlaySoundOnGameHosted); the XNA lobby plays gamecreated.wav.
     /// </summary>
     public event EventHandler GameHostedNotification;
+
+    /// <summary>
+    /// A game invitation to show (the XNA lobby's ChoiceNotificationBox); answer it with
+    /// <see cref="AcceptInvitation"/> or <see cref="DeclineInvitation"/>.
+    /// </summary>
+    public event EventHandler<GameInvitation> InvitationReceived;
+
+    /// <summary>An open invitation's game is no longer listed: its notification goes away.</summary>
+    public event EventHandler<GameInvitation> InvitationDismissed;
 
     /// <summary>The connection state changed.</summary>
     public event EventHandler ConnectionChanged;
@@ -454,7 +464,10 @@ public sealed class CnCNetLobbyService
     private void GameBroadcastChannel_UserLeftOrQuit(object sender, UserNameEventArgs e)
     {
         if (State.GameList.RemoveByHost(e.UserName))
+        {
             GamesChanged?.Invoke(this, EventArgs.Empty);
+            DismissInvalidInvitations();
+        }
     }
 
     private void GameBroadcastChannel_CTCPReceived(object sender, ChannelCTCPEventArgs e)
@@ -580,7 +593,10 @@ public sealed class CnCNetLobbyService
             if (broadcast.IsClosed)
             {
                 if (State.GameList.RemoveByHost(e.UserName))
+                {
                     GamesChanged?.Invoke(this, EventArgs.Empty);
+                    DismissInvalidInvitations();
+                }
 
                 return;
             }
@@ -598,6 +614,120 @@ public sealed class CnCNetLobbyService
         catch (Exception ex)
         {
             Logger.Log("Game parsing error: " + ex);
+        }
+    }
+
+    #endregion
+
+    #region Invitations
+
+    private void ConnectionManager_PrivateCTCPReceived(object sender, PrivateCTCPEventArgs e)
+    {
+        string invite = ProgramConstants.GAME_INVITE_CTCP_COMMAND;
+        if (e.Message.Length >= invite.Length + 1 && e.Message.StartsWith(invite))
+        {
+            HandleGameInvite(e.Sender, e.Message.Substring(invite.Length + 1));
+            return;
+        }
+
+        if (e.Message == ProgramConstants.GAME_INVITATION_FAILED_CTCP_COMMAND)
+        {
+            HandleGameInvitationFailed(e.Sender);
+            return;
+        }
+
+        Logger.Log("Unhandled private CTCP command: " + e.Message + " from " + e.Sender);
+    }
+
+    /// <summary>The game a user is in (their IRC user's game index), or -1 if unknown.</summary>
+    public int FindUserGameId(string name) => connectionManager.UserList.Find(u => u.Name == name)?.GameID ?? -1;
+
+    /// <summary>The XNA lobby's HandleGameInviteCommand.</summary>
+    private void HandleGameInvite(string sender, string arguments)
+    {
+        // arguments are semicolon-delimited: a channel name, a (human-friendly) game name and optionally a password
+        if (!GameInvitation.TryParse(sender, arguments, out GameInvitation invitation))
+            return;
+
+        IRCUser inviter = connectionManager.UserList.Find(u => u.Name == sender);
+        int gameIndex = State.GameList.Games.FindIndex(hg => ((HostedCnCNetGame)hg).ChannelName == invitation.ChannelName);
+
+        InvitationResponse response = State.Invitations.Decide(invitation,
+            senderIsKnown: inviter != null,
+            senderIsIgnored: inviter != null && cncnetUserData.IsIgnored(inviter.Ident),
+            joinError: State.JoinErrorByIndex(gameIndex),
+            friendsOnly: UserINISettings.Instance.AllowGameInvitesFromFriendsOnly,
+            senderIsFriend: cncnetUserData.IsFriend(sender));
+
+        if (response == InvitationResponse.Decline)
+        {
+            // let the host know that we can't accept
+            connectionManager.SendCustomMessage(new QueuedMessage("PRIVMSG " + sender + " :" +
+                ProgramConstants.GAME_INVITATION_FAILED_CTCP_COMMAND + "",
+                QueuedMessageType.CHAT_MESSAGE, 0));
+
+            return;
+        }
+
+        // an invitation from this user for this game is still shown: we don't show another, and the host
+        // isn't told, since their old invitation is still available to us
+        if (response != InvitationResponse.Show)
+            return;
+
+        State.Invitations.Add(invitation, invitation);
+        InvitationReceived?.Invoke(this, invitation);
+    }
+
+    private void HandleGameInvitationFailed(string sender)
+    {
+        IRCUser user = connectionManager.UserList.Find(u => u.Name == sender);
+
+        // no messages from people we share no channel with, or have blocked
+        if (user == null || cncnetUserData.IsIgnored(user.Ident))
+            return;
+
+        if (State.IsInGameRoom && !ProgramConstants.IsInGame)
+        {
+            Room.AddNotice(string.Format(("{0} could not receive your invitation. They might be in game " +
+                "or only accepting invitations from friends. Ensure your game is " +
+                "unlocked and visible in the lobby before trying again.").L10N("Client:Main:InviteNotDelivered"), sender),
+                new ChatColor(255, 255, 0));
+        }
+    }
+
+    /// <summary>
+    /// The invitation's Yes: leaves the current game room and joins the invited game with the invitation's password.
+    /// </summary>
+    /// <returns><see cref="JoinResult.Failed"/> if the game can't be joined: the front end says so.</returns>
+    public JoinResult AcceptInvitation(GameInvitation invitation)
+    {
+        State.Invitations.Remove(invitation.Sender, invitation.ChannelName);
+
+        // if we're currently in a game lobby, first leave that channel
+        if (State.IsInGameRoom)
+            Room.Leave();
+
+        int gameIndex = State.GameList.Games.FindIndex(hg => ((HostedCnCNetGame)hg).ChannelName == invitation.ChannelName);
+        string error = State.JoinErrorByIndex(gameIndex);
+        if (!string.IsNullOrEmpty(error))
+        {
+            AddNotice(error);
+            return JoinResult.Failed;
+        }
+
+        return JoinGame((HostedCnCNetGame)State.GameList.Games[gameIndex], invitation.Password);
+    }
+
+    /// <summary>The invitation's No.</summary>
+    public void DeclineInvitation(GameInvitation invitation) =>
+        State.Invitations.Remove(invitation.Sender, invitation.ChannelName);
+
+    private void DismissInvalidInvitations()
+    {
+        foreach ((string sender, string channel) in State.Invitations.FindInvalid(State.GameList.Games.Cast<HostedCnCNetGame>()))
+        {
+            if (State.Invitations.Remove(sender, channel) is GameInvitation invitation)
+                InvitationDismissed?.Invoke(this, invitation);
         }
     }
 
