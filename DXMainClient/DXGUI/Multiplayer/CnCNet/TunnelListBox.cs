@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ClientCore;
+using ClientLogic.Tunnels;
 using System.IO;
 using System.Reflection;
 
@@ -26,6 +27,7 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         public TunnelListBox(WindowManager windowManager, TunnelHandler tunnelHandler) : base(windowManager)
         {
             this.tunnelHandler = tunnelHandler;
+            state = new TunnelListState(() => tunnelHandler.Tunnels);
 
             tunnelHandler.TunnelsRefreshed += TunnelHandler_TunnelsRefreshed;
             tunnelHandler.TunnelPinged += TunnelHandler_TunnelPinged;
@@ -61,17 +63,14 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
             AllowKeyboardInput = true;
         }
 
-        private int? _targetVersion;
         public int? TargetVersion
         {
-            get => _targetVersion;
+            get => state.TargetVersion;
             set
             {
-                if (_targetVersion != value)
+                if (state.TargetVersion != value)
                 {
-                    _targetVersion = value;
-                    isManuallySelectedTunnel = false;
-                    manuallySelectedTunnelKey = null;
+                    state.TargetVersion = value;
                     if (ItemCount > 0)
                         TunnelHandler_TunnelsRefreshed(this, EventArgs.Empty);
                 }
@@ -81,23 +80,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         public event EventHandler ListRefreshed;
 
         private readonly TunnelHandler tunnelHandler;
+        private readonly TunnelListState state;
         private Texture2D flagsSpriteSheet;
-
-        private int bestTunnelIndex = 0;
-        private int lowestTunnelRating = int.MaxValue;
-
-        private bool isManuallySelectedTunnel;
-        private string manuallySelectedTunnelKey;
-
-        private List<CnCNetTunnel> GetFilteredTunnels()
-        {
-            int targetVersion = TargetVersion ?? ((TunnelMode)UserINISettings.Instance.TunnelMode.Value == TunnelMode.V2Legacy ? 2 : 3);
-            return tunnelHandler.Tunnels.Where(tunnel => tunnel.Version == targetVersion).ToList();
-        }
-
-        private static string GetTunnelKey(CnCNetTunnel tunnel) => GetTunnelKey(tunnel.Address, tunnel.Port);
-
-        private static string GetTunnelKey(string address, int port) => $"{address}:{port}";
 
         /// <summary>
         /// Selects a tunnel from the list with the given address and port.
@@ -106,13 +90,8 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         /// <param name="port">The port of the tunnel server to select.</param>
         public void SelectTunnel(string address, int port)
         {
-            int index = GetFilteredTunnels().FindIndex(t => t.Address == address && t.Port == port);
-            if (index > -1)
-            {
-                SelectedIndex = index;
-                isManuallySelectedTunnel = true;
-                manuallySelectedTunnelKey = GetTunnelKey(address, port);
-            }
+            state.SelectTunnel(address, port);
+            SelectedIndex = state.SelectedIndex;
         }
 
         /// <summary>
@@ -121,21 +100,16 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
         /// <param name="address">The address of the tunnel server</param>
         /// <param name="port">The port of the tunnel server</param>
         /// <returns>True if tunnel with given address is selected, otherwise false.</returns>
-        public bool IsTunnelSelected(string address, int port)
-        {
-            return GetFilteredTunnels().FindIndex(t => t.Address == address && t.Port == port) == SelectedIndex;
-        }
+        public bool IsTunnelSelected(string address, int port) => state.IsTunnelSelected(address, port);
 
         private void TunnelHandler_TunnelsRefreshed(object sender, EventArgs e)
         {
             ClearItems();
 
-            var filteredTunnels = GetFilteredTunnels();
-            int tunnelIndex = 0;
-            bestTunnelIndex = 0;
-            lowestTunnelRating = int.MaxValue;
+            state.Refresh();
 
-            foreach (CnCNetTunnel tunnel in filteredTunnels)
+            int tunnelIndex = 0;
+            foreach (CnCNetTunnel tunnel in state.Tunnels)
             {
                 List<string> info = new List<string>();
 
@@ -151,107 +125,30 @@ namespace DTAClient.DXGUI.Multiplayer.CnCNet
                 if (flagItem != null)
                     flagItem.Tag = GetFlagRectangle(tunnel.CountryCode);
 
-                if ((tunnel.Official || tunnel.Recommended) && tunnel.Ping.IsValid())
-                {
-                    int rating = GetTunnelRating(tunnel);
-                    if (rating < lowestTunnelRating)
-                    {
-                        bestTunnelIndex = tunnelIndex;
-                        lowestTunnelRating = rating;
-                    }
-                }
-
                 tunnelIndex++;
             }
 
-            if (filteredTunnels.Count > 0)
-            {
-                if (!isManuallySelectedTunnel)
-                {
-                    SelectedIndex = bestTunnelIndex;
-                    isManuallySelectedTunnel = false;
-                }
-                else
-                {
-                    int manuallySelectedIndex = filteredTunnels.FindIndex(t => GetTunnelKey(t) == manuallySelectedTunnelKey);
-
-                    if (manuallySelectedIndex == -1)
-                    {
-                        SelectedIndex = bestTunnelIndex;
-                        isManuallySelectedTunnel = false;
-                        manuallySelectedTunnelKey = null;
-                    }
-                    else
-                        SelectedIndex = manuallySelectedIndex;
-                }
-            }
+            SelectedIndex = state.SelectedIndex;
 
             ListRefreshed?.Invoke(this, EventArgs.Empty);
         }
 
         private void TunnelHandler_TunnelPinged(string address, int port)
         {
-            var filteredTunnels = GetFilteredTunnels();
-
-            CnCNetTunnel tunnel = tunnelHandler.Tunnels.FirstOrDefault(t => t.Address == address && t.Port == port);
-            if (tunnel == null)
-                return;
-
-            int filteredIndex = filteredTunnels.FindIndex(t => t.Address == address && t.Port == port);
+            int filteredIndex = state.OnTunnelPinged(address, port);
             if (filteredIndex == -1)
                 return;
 
+            CnCNetTunnel tunnel = tunnelHandler.Tunnels.First(t => t.Address == address && t.Port == port);
             XNAListBoxItem lbItem = GetItem(3, filteredIndex);
             lbItem.Text = tunnel.Ping.ToString();
 
-            if (tunnel.Ping.IsValid())
-            {
-                int rating = GetTunnelRating(tunnel);
-
-                if (isManuallySelectedTunnel)
-                    return;
-
-                if ((tunnel.Recommended || tunnel.Official) && rating < lowestTunnelRating)
-                {
-                    bestTunnelIndex = filteredIndex;
-                    lowestTunnelRating = rating;
-                    SelectedIndex = filteredIndex;
-                }
-            }
+            SelectedIndex = state.SelectedIndex;
         }
 
-        private int GetTunnelRating(CnCNetTunnel tunnel)
-        {
-            double usageRatio = (double)tunnel.Clients / tunnel.MaxClients;
+        public CnCNetTunnel GetSelectedTunnel() => IsValidIndexSelected() ? state.GetSelectedTunnel() : null;
 
-            if (usageRatio == 0)
-                usageRatio = 0.1;
-
-            usageRatio *= 100.0;
-
-            return Convert.ToInt32(Math.Pow(tunnel.Ping.Milliseconds, 2.0) * usageRatio);
-        }
-
-        public CnCNetTunnel GetSelectedTunnel()
-        {
-            if (!IsValidIndexSelected())
-                return null;
-
-            return GetFilteredTunnels()[SelectedIndex];
-        }
-
-        private void TunnelListBox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (!IsValidIndexSelected())
-                return;
-
-            var filteredTunnels = GetFilteredTunnels();
-            if (SelectedIndex >= 0 && SelectedIndex < filteredTunnels.Count)
-            {
-                isManuallySelectedTunnel = true;
-                manuallySelectedTunnelKey = GetTunnelKey(filteredTunnels[SelectedIndex]);
-            }
-        }
+        private void TunnelListBox_SelectedIndexChanged(object sender, EventArgs e) => state.Select(SelectedIndex);
 
         private static Dictionary<string, int> ParseCountryCodeFlagOffsets()
         {
