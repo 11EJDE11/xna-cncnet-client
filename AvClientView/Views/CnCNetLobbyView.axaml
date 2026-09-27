@@ -9,21 +9,8 @@
     <!-- The theme's CnCNetLobby layout, built in code-behind -->
     <ContentControl x:Name="LobbyHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-    <!-- Login -->
-    <Border IsVisible="{Binding ShowLogin}" Background="#F0000000" BorderBrush="#A8A8A8" BorderThickness="1" Padding="16"
-            HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
-      <StackPanel Spacing="8">
-        <TextBlock Text="Connect to CnCNet" FontSize="18" FontWeight="Bold" />
-        <TextBlock Text="Player name:" />
-        <TextBox Text="{Binding PlayerName}" />
-        <CheckBox Content="Remember me" IsChecked="{Binding RememberMe}" />
-        <CheckBox Content="Stay connected outside of the CnCNet lobby" IsChecked="{Binding PersistentMode}" />
-        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-          <Button Content="Connect" Command="{Binding ConnectCommand}" IsDefault="True" />
-          <Button Content="Cancel" Command="{Binding BackCommand}" />
-        </StackPanel>
-      </StackPanel>
-    </Border>
+    <!-- Login: the theme's CnCNetLoginWindow, built in code-behind -->
+    <ContentControl x:Name="LoginHost" IsVisible="{Binding ShowLogin}" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
     <!-- Create game -->
     <Border IsVisible="{Binding ShowCreateGame}" Background="#F0000000" BorderBrush="#A8A8A8" BorderThickness="1" Padding="16"

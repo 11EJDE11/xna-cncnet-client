@@ -94,7 +94,25 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     private bool rememberMe = UserINISettings.Instance.SkipConnectDialog;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAutoConnect))]
     private bool persistentMode = UserINISettings.Instance.PersistentMode;
+
+    [ObservableProperty]
+    private bool autoConnect = UserINISettings.Instance.AutomaticCnCNetLogin;
+
+    /// <summary>Auto-connect needs "remember me" and persistent mode (the XNA login window's rule).</summary>
+    public bool CanAutoConnect => RememberMe && PersistentMode;
+
+    partial void OnRememberMeChanged(bool value) => OnCanAutoConnectChanged();
+
+    partial void OnPersistentModeChanged(bool value) => OnCanAutoConnectChanged();
+
+    private void OnCanAutoConnectChanged()
+    {
+        OnPropertyChanged(nameof(CanAutoConnect));
+        if (!CanAutoConnect)
+            AutoConnect = false;
+    }
 
     [ObservableProperty]
     private int selectedChatColorIndex;
@@ -212,7 +230,7 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     [RelayCommand]
     private void Connect()
     {
-        string error = lobby.Connect(PlayerName, RememberMe, PersistentMode, autoConnect: false);
+        string error = lobby.Connect(PlayerName, RememberMe, PersistentMode, AutoConnect && CanAutoConnect);
         if (error != null)
             dialogs.ShowMessage("Invalid Player Name".L10N("Client:Main:InvalidPlayerName"), error);
 

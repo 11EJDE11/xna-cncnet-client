@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
+using Avalonia.Input;
 using Avalonia.Media;
 
 using AvClientView.Theme;
@@ -48,6 +49,8 @@ public partial class CnCNetLobbyView : UserControl
                     ["ddCurrentChannel"] = layout => DropDown(layout, viewModel, nameof(CnCNetLobbyViewModel.ChatChannels), nameof(CnCNetLobbyViewModel.SelectedChannelIndex)),
                     ["tbGameSearch"] = layout => ThemedStyle.TextBox(layout.Width, layout.Height, "Filter by name, map, game mode, player..."),
                 });
+
+            LoginHost.Content = BuildLoginWindow(viewModel);
 
             if (LobbyHost.Content is Canvas root && LayoutView.FindNamed<TextBlock>(root, "lblOnlineCount") is TextBlock onlineCount)
             {
@@ -104,6 +107,65 @@ public partial class CnCNetLobbyView : UserControl
         tbGameSearch.Visible = false;
 
         return window;
+    }
+
+    /// <summary>The login window, laid out as the XNA CnCNetLoginWindow, with the theme's INI applied.</summary>
+    private static Control BuildLoginWindow(CnCNetLobbyViewModel viewModel)
+    {
+        var window = new LayoutControl("CnCNetLoginWindow", "XNAWindow", LayoutControlKind.Panel)
+        {
+            Width = 300,
+            Height = 220,
+            BackgroundTexture = "logindialogbg.png",
+        };
+
+        string title = "CONNECT TO CNCNET";
+        (int titleWidth, int titleHeight) = ThemeFonts.Measure(title, 1);
+        LayoutControl lblTitle = ThemedWindow.Add(window, "lblConnectToCnCNet", "XNALabel", (window.Width - titleWidth) / 2, 12, titleWidth, titleHeight, title);
+        lblTitle.FontIndex = 1;
+
+        LayoutControl tbPlayerName = ThemedWindow.Add(window, "tbPlayerName", "XNATextBox", window.Width - 132, 50, 120, 19);
+        LayoutControl lblPlayerName = ThemedWindow.Add(window, "lblPlayerName", "XNALabel", 12, tbPlayerName.Y + 1, 0, 0, "PLAYER NAME:");
+        lblPlayerName.FontIndex = 1;
+
+        // The check boxes are placed before their size is known, as in XNA (hence the 30-pixel steps)
+        LayoutControl chkRememberMe = ThemedWindow.Add(window, "chkRememberMe", "XNAClientCheckBox", 12, tbPlayerName.Y + tbPlayerName.Height + 12, 0, 0, "Remember me");
+        LayoutControl chkPersistentMode = ThemedWindow.Add(window, "chkPersistentMode", "XNAClientCheckBox", 12, chkRememberMe.Y + 30, 0, 0, "Stay connected outside of the CnCNet lobby");
+        ThemedWindow.Add(window, "chkAutoConnect", "XNAClientCheckBox", 12, chkPersistentMode.Y + 30, 0, 0, "Connect automatically on client startup");
+
+        LayoutControl btnConnect = ThemedWindow.Add(window, "btnConnect", "XNAClientButton", 12, window.Height - 35, 110, 23, "Connect");
+        ThemedWindow.Add(window, "btnCancel", "XNAClientButton", window.Width - 122, btnConnect.Y, 110, 23, "Cancel");
+
+        Control CheckBox(LayoutControl layout, string property, string enabledProperty = null)
+        {
+            var checkBox = new ThemedCheckBox(layout.Text) { DataContext = viewModel };
+            checkBox.Bind(ThemedCheckBox.IsCheckedProperty, new Binding(property) { Mode = BindingMode.TwoWay });
+            if (enabledProperty != null)
+                checkBox.Bind(InputElement.IsEnabledProperty, new Binding(enabledProperty));
+            return checkBox;
+        }
+
+        return ThemedWindow.Build(window, (name, layout) =>
+            {
+                if (name == "btnConnect")
+                    viewModel.ConnectCommand.Execute(null);
+                else if (name == "btnCancel")
+                    viewModel.BackCommand.Execute(null);
+            },
+            new Dictionary<string, Func<LayoutControl, Control>>
+            {
+                ["tbPlayerName"] = layout =>
+                {
+                    TextBox textBox = ThemedStyle.TextBox(layout.Width, layout.Height, string.Empty);
+                    textBox.DataContext = viewModel;
+                    textBox.Bind(TextBox.TextProperty, new Binding(nameof(CnCNetLobbyViewModel.PlayerName)) { Mode = BindingMode.TwoWay });
+                    textBox.KeyBindings.Add(new Avalonia.Input.KeyBinding { Gesture = new Avalonia.Input.KeyGesture(Avalonia.Input.Key.Enter), Command = viewModel.ConnectCommand });
+                    return textBox;
+                },
+                ["chkRememberMe"] = layout => CheckBox(layout, nameof(CnCNetLobbyViewModel.RememberMe)),
+                ["chkPersistentMode"] = layout => CheckBox(layout, nameof(CnCNetLobbyViewModel.PersistentMode)),
+                ["chkAutoConnect"] = layout => CheckBox(layout, nameof(CnCNetLobbyViewModel.AutoConnect), nameof(CnCNetLobbyViewModel.CanAutoConnect)),
+            });
     }
 
     private static Control GameList(LayoutControl layout, CnCNetLobbyViewModel viewModel)
