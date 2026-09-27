@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using ClientCore.Extensions;
 
 using ClientGUI;
+using ClientLogic.Tunnels;
 
 using DTAClient.Domain.Multiplayer.CnCNet;
 
@@ -33,7 +34,6 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     private const int LIST_BAR_COLUMN_WIDTH = 160;
     private const int LIST_PING_TEXT_COLUMN_WIDTH = 70;
     private const int LIST_BAR_MAX_WIDTH = 150;
-    private const int LIST_BAR_MAX_PING = 500;
     private const int LIST_BAR_HEIGHT = 14;
 
     private const int LIST_MIN_VISIBLE_ROWS = 3;
@@ -280,8 +280,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
 
                 var status = negotiationData.GetNegotiationStatus(players[i], players[j]);
                 var ping = negotiationData.GetPing(players[i], players[j]);
-                var displayStatus = inferInProgress && status == NegotiationStatus.NotStarted
-                    ? NegotiationStatus.InProgress : status;
+                var displayStatus = NegotiationStatusRows.DisplayStatus(status, inferInProgress);
 
                 UpdateCell(statusCell, displayStatus, ping);
                 statusCell.AnchorPoint = new Vector2(CELL_WIDTH / 2f, CELL_HEIGHT / 2f);
@@ -295,47 +294,17 @@ public class TunnelNegotiationStatusPanel : XNAPanel
     private void BuildListView(List<string> players, NegotiationDataManager negotiationData,
         int previousTopIndex, bool inferInProgress = false)
     {
-        var pairs = new List<(string p1, string p2, NegotiationStatus status, PingValue? ping)>();
-
-        foreach (var (p1, p2) in negotiationData.GetPlayerPairs(players))
-        {
-            var status = negotiationData.GetNegotiationStatus(p1, p2);
-            if (inferInProgress && status == NegotiationStatus.NotStarted)
-                status = NegotiationStatus.InProgress;
-            var ping = negotiationData.GetPing(p1, p2);
-            pairs.Add((p1, p2, status, ping));
-        }
-
-        // Worst first, so problems are visible at a glance without scrolling:
-        // failed pairs on top, then negotiated pairs from highest to lowest ping.
-        pairs.Sort((a, b) =>
-        {
-            int rankA = GetSortRank(a.status, a.ping);
-            int rankB = GetSortRank(b.status, b.ping);
-            if (rankA != rankB)
-                return rankA.CompareTo(rankB);
-            if (a.ping.HasValue && b.ping.HasValue)
-                return b.ping.Value.Milliseconds.CompareTo(a.ping.Value.Milliseconds);
-            return 0;
-        });
-
         EnsureBarTextures();
 
-        foreach (var (p1, p2, status, ping) in pairs)
+        foreach (NegotiationPairRow row in NegotiationStatusRows.ListPairs(players, negotiationData, inferInProgress))
         {
-            var (pingText, pingColor) = GetListRowLabel(status, ping);
-
             // The bar column's Tag carries the ping to render; null means no bar.
-            object? barPing = status == NegotiationStatus.Succeeded && ping.HasValue && ping.Value.IsValid()
-                ? ping.Value.Milliseconds
-                : null;
-
             lbPairs.AddItem(new[]
             {
-                new XNAListBoxItem(p1, Color.LightBlue) { Selectable = false },
-                new XNAListBoxItem(p2, Color.LightBlue) { Selectable = false },
-                new XNAListBoxItem(string.Empty) { Selectable = false, Tag = barPing },
-                new XNAListBoxItem(pingText, pingColor) { Selectable = false }
+                new XNAListBoxItem(row.Player1, Color.LightBlue) { Selectable = false },
+                new XNAListBoxItem(row.Player2, Color.LightBlue) { Selectable = false },
+                new XNAListBoxItem(string.Empty) { Selectable = false, Tag = row.BarPing },
+                new XNAListBoxItem(row.Text, PingQualityVisuals.GetTextColor(row.TextTier)) { Selectable = false }
             });
         }
 
@@ -343,26 +312,6 @@ public class TunnelNegotiationStatusPanel : XNAPanel
         if (previousTopIndex > 0 && lbPairs.ItemCount > 0)
             lbPairs.SetTopIndex(Math.Min(previousTopIndex, lbPairs.ItemCount - 1));
     }
-
-    private static int GetSortRank(NegotiationStatus status, PingValue? ping) => status switch
-    {
-        NegotiationStatus.Failed => 0,
-        NegotiationStatus.Succeeded when ping.HasValue && ping.Value.IsValid() => 1,
-        NegotiationStatus.Succeeded => 2,
-        NegotiationStatus.InProgress => 3,
-        NegotiationStatus.NotStarted => 4,
-        _ => 5
-    };
-
-    private static (string text, Color color) GetListRowLabel(NegotiationStatus status, PingValue? ping) => status switch
-    {
-        NegotiationStatus.NotStarted => ("-", Color.Gray),
-        NegotiationStatus.InProgress => ("...", Color.Yellow),
-        NegotiationStatus.Succeeded when ping.HasValue => (ping.Value.ToString(), PingQualityVisuals.GetTextColor(PingQualityRules.GetV3Tier(ping.Value))),
-        NegotiationStatus.Succeeded => ("OK".L10N("Client:Main:NegStatusOK"), Color.LightGreen),
-        NegotiationStatus.Failed => ("FAIL".L10N("Client:Main:NegStatusFail"), Color.Red),
-        _ => ("?", Color.Gray)
-    };
 
     private static void EnsureBarTextures()
     {
@@ -381,7 +330,9 @@ public class TunnelNegotiationStatusPanel : XNAPanel
 
     private static void UpdateCell(XNALabel cell, NegotiationStatus status, PingValue? ping)
     {
-        (cell.Text, cell.TextColor) = GetListRowLabel(status, ping);
+        (string text, PingQualityTier tier) = NegotiationStatusRows.GetLabel(status, ping);
+        cell.Text = text;
+        cell.TextColor = PingQualityVisuals.GetTextColor(tier);
     }
 
     /// <summary>
@@ -417,7 +368,7 @@ public class TunnelNegotiationStatusPanel : XNAPanel
                     DrawTexture(sharedBarBackground!,
                         new Rectangle(2, barY, LIST_BAR_MAX_WIDTH, barHeight), Color.White);
 
-                    int fillWidth = Math.Max(2, Math.Min(LIST_BAR_MAX_WIDTH, ms * LIST_BAR_MAX_WIDTH / LIST_BAR_MAX_PING));
+                    int fillWidth = Math.Max(2, Math.Min(LIST_BAR_MAX_WIDTH, ms * LIST_BAR_MAX_WIDTH / NegotiationStatusRows.BAR_MAX_PING));
                     DrawTexture(pingBarTextures![PingQualityVisuals.GetTextureIndex(PingQualityRules.GetV3Tier(ms))],
                         new Rectangle(2, barY, fillWidth, barHeight), Color.White);
                 }
