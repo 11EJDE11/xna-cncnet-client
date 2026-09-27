@@ -123,6 +123,24 @@ public static class ThemedWindow
         list.Bind(ItemsControl.ItemsSourceProperty, new Binding(itemsPath));
         list.ItemTemplate = template ?? new FuncDataTemplate<object>((item, _) => new TextBlock { Text = item?.ToString(), Margin = new Thickness(4, 1) });
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
+
+        // XNAListBox: the focus colour behind the selected item, nothing on hover
+        var focus = new SolidColorBrush(ThemeAssets.ListFocusColor);
+        list.Resources["ListBoxItemBackgroundSelected"] = focus;
+        list.Resources["ListBoxItemBackgroundSelectedPointerOver"] = focus;
+        list.Resources["ListBoxItemBackgroundSelectedPressed"] = focus;
+        list.Resources["ListBoxItemBackgroundPointerOver"] = Brushes.Transparent;
+        list.Resources["ListBoxItemBackgroundPressed"] = Brushes.Transparent;
+        return list;
+    }
+
+    /// <summary>A game list (CnCNet or LAN): as <see cref="List"/>, with the HoverOnGameColor behind the hovered game.</summary>
+    public static ListBox GameList(LayoutControl layout, object dataContext, string itemsPath, IDataTemplate template)
+    {
+        ListBox list = List(layout, dataContext, itemsPath, template);
+        var hover = new SolidColorBrush(ThemeAssets.HoverOnGameColor);
+        list.Resources["ListBoxItemBackgroundPointerOver"] = hover;
+        list.Resources["ListBoxItemBackgroundPressed"] = hover;
         return list;
     }
 }

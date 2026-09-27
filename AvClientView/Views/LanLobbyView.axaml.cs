@@ -81,14 +81,7 @@ public partial class LanLobbyView : UserControl
 
     private static Control GameList(LayoutControl layout, LanLobbyViewModel viewModel)
     {
-        ListBox list = ThemedWindow.List(layout, viewModel, nameof(LanLobbyViewModel.Games),
-            new FuncDataTemplate<LanGameItemViewModel>((game, _) =>
-            {
-                var text = new TextBlock { Text = game?.RoomName, Margin = new Thickness(4, 1) };
-                ToolTip.SetTip(text, game == null ? null : game.Details + Environment.NewLine + game.Players);
-                return text;
-            }));
-
+        ListBox list = GameListView.Create(layout, viewModel, nameof(LanLobbyViewModel.Games), viewModel.Games, viewModel.FindMap);
         list.Bind(SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(LanLobbyViewModel.SelectedGameIndex)) { Mode = BindingMode.TwoWay });
         list.DoubleTapped += (_, _) => viewModel.JoinGameCommand.Execute(null);
         return list;

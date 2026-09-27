@@ -191,5 +191,11 @@ public static class ThemeAssets
     public static Color ButtonHoverColor => ParseColor(ClientConfiguration.Instance.ButtonHoverColor, Colors.White);
 
     /// <summary>The theme's panel border colour (PanelBorderColor).</summary>
+    /// <summary>The list selection colour (UISettings.FocusColor from ListBoxFocusColor).</summary>
+    public static Color ListFocusColor => ParseColor(ClientConfiguration.Instance.ListBoxFocusColor, Color.FromRgb(64, 64, 168));
+
+    /// <summary>The hovered game's row colour in the game lists (HoverOnGameColor).</summary>
+    public static Color HoverOnGameColor => ParseColor(ClientConfiguration.Instance.HoverOnGameColor, Color.FromRgb(32, 32, 84));
+
     public static Color PanelBorderColor => ParseColor(ClientConfiguration.Instance.PanelBorderColor, Colors.Gray);
 }

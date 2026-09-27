@@ -70,7 +70,7 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
 
     public ObservableCollection<UserItemViewModel> Users { get; } = [];
 
-    public ObservableCollection<CnCNetGameItemViewModel> Games { get; } = [];
+    public ObservableCollection<HostedGameItemViewModel> Games { get; } = [];
 
     public IReadOnlyList<string> ChatColors { get; }
 
@@ -233,27 +233,14 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         shownGames = lobby.Games.ToList();
         Games.Clear();
         foreach (HostedCnCNetGame game in shownGames)
-            Games.Add(new CnCNetGameItemViewModel(game, lobby.Room.Options));
+            Games.Add(new HostedGameItemViewModel(game, lobby.Room.Options));
 
         SelectedGameIndex = selected == null ? -1 : shownGames.FindIndex(g => g.HostName == selected.HostName);
     }
 
-    /// <summary>A hosted game's map name and preview, as the XNA game information panel finds them by map hash.</summary>
-    public (string MapName, Avalonia.Media.Imaging.Bitmap Preview) FindMap(GenericHostedGame game)
-    {
-        Map map = string.IsNullOrEmpty(game.MapHash) ? null : mapLoader.FindMapByHash(game.MapHash);
-        if (map == null)
-            return (null, null);
-
-        using ClientCore.Caching.CacheLease<SixLabors.ImageSharp.Image> lease = mapLoader.GetCachedPreviewImageFromMap(map, syncLoadOnCacheMiss: true);
-        if (lease == null)
-            return (map.Name ?? map.UntranslatedName, null);
-
-        using var stream = new System.IO.MemoryStream();
-        SixLabors.ImageSharp.ImageExtensions.SaveAsPng(lease.Value, stream);
-        stream.Position = 0;
-        return (map.Name ?? map.UntranslatedName, new Avalonia.Media.Imaging.Bitmap(stream));
-    }
+    /// <summary>A hosted game's map name and preview, as the XNA game information panel finds them.</summary>
+    public (string MapName, Avalonia.Media.Imaging.Bitmap Preview) FindMap(GenericHostedGame game) =>
+        HostedGameItemViewModel.FindMap(mapLoader, game);
 
     [RelayCommand]
     private void Connect()
@@ -367,30 +354,4 @@ public sealed record UserItemViewModel(string Name, bool IsAdmin, CnCNetGame Gam
         : new Avalonia.Media.SolidColorBrush(AvClientView.Theme.ThemeAssets.ButtonTextColor);
 
     public override string ToString() => IsAdmin ? Name + " " + "(Admin)".L10N("Client:Main:AdminSuffix") : Name;
-}
-
-/// <summary>A hosted game in the CnCNet game list.</summary>
-public sealed class CnCNetGameItemViewModel(HostedCnCNetGame game, ClientLogic.Options.GameOptionSet options)
-{
-    public HostedCnCNetGame Game { get; } = game;
-
-    /// <summary>The broadcast option icons of the game list row (left of the name, and on the right).</summary>
-    public (List<string> Left, List<string> Right) OptionIcons { get; } =
-        ClientLogic.GameList.BroadcastedOptionDisplay.GameListIcons(options, game.BroadcastedGameOptionValues);
-
-    /// <summary>The game options section of the information panel.</summary>
-    public (List<ClientLogic.GameList.BroadcastedOptionIcon> IconsOnly, List<ClientLogic.GameList.BroadcastedOptionIcon> WithText) InformationOptions { get; } =
-        ClientLogic.GameList.BroadcastedOptionDisplay.InformationPanel(options, game.BroadcastedGameOptionValues);
-
-    public string RoomName { get; } = game.RoomName + (game.Passworded ? " [password]" : string.Empty);
-
-    public string Details { get; } = string.Format("{0} ({1}), {2}/{3} players, host {4}", game.Map, game.GameMode,
-        game.Players.Length, game.MaxPlayers, game.HostName) +
-        (game.Locked ? ", locked" : string.Empty) +
-        (game.IsLoadedGame ? ", saved game" : string.Empty) +
-        (game.Incompatible ? ", different game version" : string.Empty) +
-        (game.Game != null && !string.Equals(game.Game.InternalName, ClientConfiguration.Instance.LocalGame, StringComparison.OrdinalIgnoreCase)
-            ? ", " + game.Game.UIName : string.Empty);
-
-    public string Players { get; } = string.Join(", ", game.Players);
 }

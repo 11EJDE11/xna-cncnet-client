@@ -15,6 +15,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 using DTAClient.Domain.LAN;
+using DTAClient.Domain.Multiplayer;
 using DTAClient.Online;
 
 namespace AvClientView.ViewModels;
@@ -24,13 +25,15 @@ public sealed partial class LanLobbyViewModel : ObservableObject
 {
     private readonly LanLobby lobby;
     private readonly LanGameRoom room;
+    private readonly MapLoader mapLoader;
     private readonly DispatcherTimer timer;
     private readonly Stopwatch stopwatch = new();
     private List<HostedLANGame> shownGames = [];
 
-    public LanLobbyViewModel(LanLobby lobby, LanGameRoom room, LanGameRoomViewModel roomViewModel)
+    public LanLobbyViewModel(LanLobby lobby, LanGameRoom room, LanGameRoomViewModel roomViewModel, MapLoader mapLoader)
     {
         this.lobby = lobby;
+        this.mapLoader = mapLoader;
         this.room = room;
         Room = roomViewModel;
 
@@ -51,11 +54,15 @@ public sealed partial class LanLobbyViewModel : ObservableObject
 
     public LanGameRoomViewModel Room { get; }
 
+    /// <summary>A hosted game's map name and preview, as the XNA game information panel finds them.</summary>
+    public (string MapName, Avalonia.Media.Imaging.Bitmap Preview) FindMap(GenericHostedGame game) =>
+        HostedGameItemViewModel.FindMap(mapLoader, game);
+
     public ObservableCollection<ChatLineViewModel> Messages { get; } = [];
 
     public ObservableCollection<string> Players { get; } = [];
 
-    public ObservableCollection<LanGameItemViewModel> Games { get; } = [];
+    public ObservableCollection<HostedGameItemViewModel> Games { get; } = [];
 
     public IReadOnlyList<string> ChatColors { get; }
 
@@ -118,7 +125,7 @@ public sealed partial class LanLobbyViewModel : ObservableObject
         shownGames = lobby.Games.ToList();
         Games.Clear();
         foreach (HostedLANGame game in shownGames)
-            Games.Add(new LanGameItemViewModel(game));
+            Games.Add(new HostedGameItemViewModel(game));
 
         SelectedGameIndex = selected == null ? -1 : shownGames.FindIndex(g => g.EndPoint.Equals(selected.EndPoint));
     }
@@ -189,16 +196,3 @@ public sealed partial class LanLobbyViewModel : ObservableObject
     }
 }
 
-/// <summary>A hosted game in the LAN game list.</summary>
-public sealed class LanGameItemViewModel(HostedLANGame game)
-{
-    public string RoomName { get; } = game.RoomName;
-
-    public string Details { get; } = string.Format("{0} ({1}), {2} {3}", game.Map, game.GameMode, game.Players.Length,
-        game.Players.Length == 1 ? "player" : "players") +
-        (game.Locked ? ", locked" : string.Empty) +
-        (game.IsLoadedGame ? ", saved game" : string.Empty) +
-        (game.Incompatible ? ", different game version" : string.Empty);
-
-    public string Players { get; } = string.Join(", ", game.Players);
-}
