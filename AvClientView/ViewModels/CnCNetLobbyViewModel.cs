@@ -43,6 +43,8 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         TunnelHandler tunnelHandler)
     {
         LoadingRoom = new CnCNetGameLoadingRoomViewModel(lobby.LoadingRoom, tunnelHandler);
+        CreationTunnels = new TunnelListViewModel(tunnelHandler);
+        CreationTunnels.Changed += (_, _) => OnPropertyChanged(nameof(CanCreateGame));
         lobby.LoadingRoomEntered += (_, _) => LoadingRoomEntered?.Invoke(this, EventArgs.Empty);
         lobby.LoadingRoomLeft += (_, _) => LoadingRoomLeft?.Invoke(this, EventArgs.Empty);
         lobby.LoadingRoom.ShowRequested += (_, _) => LoadingRoomEntered?.Invoke(this, EventArgs.Empty);
@@ -95,6 +97,49 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     /// <summary>The creation window's Load Game can be used (the local player hosted the saved game).</summary>
     [ObservableProperty]
     private bool canLoadGame;
+
+    /// <summary>The creation window's tunnel mode and tunnel list (its advanced options).</summary>
+    public TunnelListViewModel CreationTunnels { get; }
+
+    /// <summary>The creation window shows its advanced options (GameCreationWindow_Advanced).</summary>
+    [ObservableProperty]
+    private bool showAdvancedCreationOptions;
+
+    /// <summary>The creation window's tunnel mode (saved in the TunnelMode setting).</summary>
+    [ObservableProperty]
+    private int creationTunnelModeIndex;
+
+    /// <summary>A game can be created: tunnels are listed (LbTunnelList_ListRefreshed).</summary>
+    public bool CanCreateGame => CreationTunnels.Tunnels.Count > 0;
+
+    partial void OnCreationTunnelModeIndexChanged(int value)
+    {
+        TunnelMode mode = TunnelListViewModel.ModeAt(value);
+        CreationTunnels.SetMode(mode);
+
+        if ((TunnelMode)UserINISettings.Instance.TunnelMode.Value != mode)
+        {
+            UserINISettings.Instance.TunnelMode.Value = (int)mode;
+            UserINISettings.Instance.SaveSettings();
+        }
+    }
+
+    /// <summary>The creation window's Advanced Options button.</summary>
+    public void ShowAdvancedOptions() => ShowAdvancedCreationOptions = true;
+
+    /// <summary>The tunnel to create the game on: null for dynamic tunnels; false if a static mode has none selected.</summary>
+    private bool TryGetCreationTunnel(out CnCNetTunnel tunnel)
+    {
+        tunnel = null;
+        if ((TunnelMode)UserINISettings.Instance.TunnelMode.Value == TunnelMode.V3Dynamic)
+            return true;
+
+        if (!CreationTunnels.State.IsValidIndexSelected)
+            return false;
+
+        tunnel = CreationTunnels.State.GetSelectedTunnel();
+        return true;
+    }
 
     /// <summary>The player entered the saved game room.</summary>
     public event EventHandler LoadingRoomEntered;
@@ -372,6 +417,13 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         NewRoomName = CnCNetLobbyService.DefaultRoomName;
         NewRoomPassword = string.Empty;
         CanLoadGame = !ClientConfiguration.Instance.DisableMultiplayerGameLoading && CnCNetLobbyService.CanHostLoadedGame();
+        ShowAdvancedCreationOptions = ShowAdvancedCreationOptions || UserINISettings.Instance.AlwaysDisplayTunnelList;
+
+        // GameCreationWindow.Refresh: the mode from the settings
+        CreationTunnels.EnsureListed();
+        CreationTunnelModeIndex = TunnelListViewModel.IndexOf((TunnelMode)UserINISettings.Instance.TunnelMode.Value);
+        CreationTunnels.SetMode(TunnelListViewModel.ModeAt(CreationTunnelModeIndex));
+        OnPropertyChanged(nameof(CanCreateGame));
         ShowCreateGame = true;
     }
 
@@ -381,8 +433,11 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     [RelayCommand]
     private void CreateGame()
     {
+        if (!CanCreateGame || !TryGetCreationTunnel(out CnCNetTunnel tunnel))
+            return;
+
         Room.Start();
-        string error = lobby.CreateGame(NewRoomName, NewRoomPassword, int.Parse(MaxPlayerItems[Math.Max(0, NewRoomMaxPlayersIndex)]), NewRoomSkillLevel);
+        string error = lobby.CreateGame(NewRoomName, NewRoomPassword, int.Parse(MaxPlayerItems[Math.Max(0, NewRoomMaxPlayersIndex)]), NewRoomSkillLevel, tunnel);
         if (error != null)
         {
             dialogs.ShowMessage("Invalid game name".L10N("Client:Main:InvalidGameName"), error);
@@ -396,11 +451,11 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     [RelayCommand]
     private void LoadGame()
     {
-        if (!CanLoadGame)
+        if (!CanLoadGame || !CanCreateGame || !TryGetCreationTunnel(out CnCNetTunnel tunnel))
             return;
 
         LoadingRoom.Start();
-        string error = lobby.CreateLoadedGame(NewRoomName);
+        string error = lobby.CreateLoadedGame(NewRoomName, tunnel);
         if (error != null)
         {
             dialogs.ShowMessage("Invalid game name".L10N("Client:Main:InvalidGameName"), error);

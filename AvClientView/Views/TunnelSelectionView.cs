@@ -46,7 +46,7 @@ public sealed class TunnelSelectionView : Panel
     ];
 
     private readonly TunnelSelectionViewModel viewModel;
-    private readonly Dictionary<int, CroppedBitmap> flags = [];
+    private static readonly Dictionary<int, CroppedBitmap> flags = [];
 
     public TunnelSelectionView(TunnelSelectionViewModel viewModel)
     {
@@ -107,7 +107,7 @@ public sealed class TunnelSelectionView : Panel
         {
             ["lblDescription"] = Description,
             ["ddMode"] = Mode,
-            ["lbTunnelList"] = TunnelList,
+            ["lbTunnelList"] = layout => TunnelList(layout, viewModel.List),
         });
 
         if (LayoutView.FindNamed<ThemedButton>(canvas, "btnApply") is ThemedButton apply)
@@ -138,12 +138,12 @@ public sealed class TunnelSelectionView : Panel
     private Control Mode(LayoutControl layout)
     {
         var dropDown = new ThemedDropDown(layout.Width, layout.Height, layout.FontIndex) { DataContext = viewModel };
-        dropDown.Bind(ThemedDropDown.ItemsSourceProperty, new Binding(nameof(TunnelSelectionViewModel.ModeItems)));
+        dropDown.Bind(ThemedDropDown.ItemsSourceProperty, new Binding(nameof(TunnelSelectionViewModel.List) + "." + nameof(TunnelListViewModel.ModeItems)));
         dropDown.Bind(ThemedDropDown.SelectedIndexProperty, new Binding(nameof(TunnelSelectionViewModel.SelectedModeIndex)) { Mode = BindingMode.TwoWay });
         return dropDown;
     }
 
-    private IImage FlagImage(int? offset)
+    private static IImage FlagImage(int? offset)
     {
         if (offset is not int y || ThemeAssets.EmbeddedIcon("flags16.png") is not Bitmap sheet)
             return null;
@@ -158,7 +158,7 @@ public sealed class TunnelSelectionView : Panel
     }
 
     /// <summary>The TunnelListBox, with the translucent black cover of dynamic mode (pnlTunnelListDisabledOverlay).</summary>
-    private Control TunnelList(LayoutControl layout)
+    public static Control TunnelList(LayoutControl layout, TunnelListViewModel viewModel)
     {
         int headerHeight = HeaderHeight + 3;
         (FontFamily headerFamily, double headerSize) = ThemeFonts.Get(1);
@@ -191,8 +191,8 @@ public sealed class TunnelSelectionView : Panel
         list.Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
         list.DataContext = viewModel;
-        list.Bind(ItemsControl.ItemsSourceProperty, new Binding(nameof(TunnelSelectionViewModel.Tunnels)));
-        list.Bind(SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(TunnelSelectionViewModel.SelectedTunnelIndex)) { Mode = BindingMode.TwoWay });
+        list.Bind(ItemsControl.ItemsSourceProperty, new Binding(nameof(TunnelListViewModel.Tunnels)));
+        list.Bind(SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(TunnelListViewModel.SelectedTunnelIndex)) { Mode = BindingMode.TwoWay });
         list.ItemTemplate = new FuncDataTemplate<TunnelRow>((row, _) =>
         {
             var grid = new Grid { Height = LineHeight };
@@ -215,10 +215,10 @@ public sealed class TunnelSelectionView : Panel
 
             return grid;
         });
-        list.Bind(IsHitTestVisibleProperty, new Binding(nameof(TunnelSelectionViewModel.IsListEnabled)));
+        list.Bind(IsHitTestVisibleProperty, new Binding(nameof(TunnelListViewModel.IsListEnabled)));
 
         var cover = new Border { Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)), DataContext = viewModel };
-        cover.Bind(IsVisibleProperty, new Binding(nameof(TunnelSelectionViewModel.IsListEnabled)) { Converter = Avalonia.Data.Converters.BoolConverters.Not });
+        cover.Bind(IsVisibleProperty, new Binding(nameof(TunnelListViewModel.IsListEnabled)) { Converter = Avalonia.Data.Converters.BoolConverters.Not });
 
         return new Grid
         {

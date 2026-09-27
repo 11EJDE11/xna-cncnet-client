@@ -67,6 +67,11 @@ public partial class CnCNetLobbyView : UserControl
 
             LoginHost.Content = BuildLoginWindow(viewModel);
             CreateHost.Content = BuildGameCreationWindow(viewModel);
+            viewModel.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(CnCNetLobbyViewModel.ShowAdvancedCreationOptions))
+                    CreateHost.Content = BuildGameCreationWindow(viewModel);
+            };
             PasswordHost.Content = BuildPasswordWindow(viewModel);
 
             if (LobbyHost.Content is Canvas root && LayoutView.FindNamed<TextBlock>(root, "lblOnlineCount") is TextBlock onlineCount)
@@ -191,14 +196,15 @@ public partial class CnCNetLobbyView : UserControl
     }
 
     /// <summary>
-    /// The game creation window, laid out as the XNA GameCreationWindow (without the advanced tunnel options, which
-    /// the preview doesn't have).
+    /// The game creation window, laid out as the XNA GameCreationWindow; with its advanced options (tunnel mode and
+    /// tunnel list) it is GameCreationWindow_Advanced.
     /// </summary>
     private static Control BuildGameCreationWindow(CnCNetLobbyViewModel viewModel)
     {
         const int sides = 6, margin = 6, tunnelListWidth = 466;
+        bool advanced = viewModel.ShowAdvancedCreationOptions;
 
-        var window = new LayoutControl("GameCreationWindow", "XNAWindow", LayoutControlKind.Panel)
+        var window = new LayoutControl(advanced ? "GameCreationWindow_Advanced" : "GameCreationWindow", "XNAWindow", LayoutControlKind.Panel)
         {
             Width = tunnelListWidth + (sides * 2) + (margin * 2),
             BackgroundTexture = "gamecreationoptionsbg.png",
@@ -215,8 +221,27 @@ public partial class CnCNetLobbyView : UserControl
         LayoutControl lblPassword = ThemedWindow.Add(window, "lblPassword", "XNALabel", left, tbPassword.Y + 1, 0, 0, "Password (leave blank for none):");
         (_, int labelHeight) = ThemeFonts.Measure(lblPassword.Text, 0);
 
-        int advancedOptionsY = tbPassword.Y + 1 + labelHeight + (margin * 3);
-        LayoutControl btnCreateGame = ThemedWindow.Add(window, "btnCreateGame", "XNAClientButton", left, advancedOptionsY + 23 + (margin * 3), 133, 23, "Create Game");
+        int passwordBottom = tbPassword.Y + 1 + labelHeight;
+        int createY;
+        if (advanced)
+        {
+            LayoutControl lblTunnelServer = ThemedWindow.Add(window, "lblTunnelServer", "XNALabel", left, passwordBottom + margin * 4, 0, 0,
+                "Tunnel mode:".L10N("Client:Main:TunnelModeLabel"));
+            (_, int tunnelLabelHeight) = ThemeFonts.Measure(lblTunnelServer.Text, 0);
+            LayoutControl ddTunnelMode = ThemedWindow.Add(window, "ddTunnelMode", "XNADropDown", left, lblTunnelServer.Y + tunnelLabelHeight + margin, 220, 23);
+            int listHeight = ThemeFonts.Measure("Test String @", 0).Height - 1;
+            listHeight = listHeight * 12 + ThemeFonts.Measure("Name", 1).Height + 3;
+            LayoutControl lbTunnelList = ThemedWindow.Add(window, "lbTunnelList", "TunnelListBox", left, ddTunnelMode.Y + ddTunnelMode.Height + margin, tunnelListWidth, listHeight);
+            createY = lbTunnelList.Y + lbTunnelList.Height + margin * 3;
+        }
+        else
+        {
+            int advancedOptionsY = passwordBottom + (margin * 3);
+            ThemedWindow.Add(window, "btnDisplayAdvancedOptions", "XNAClientButton", left, advancedOptionsY, 133, 23, "Advanced Options".L10N("Client:Main:AdvancedOptions"));
+            createY = advancedOptionsY + 23 + (margin * 3);
+        }
+
+        LayoutControl btnCreateGame = ThemedWindow.Add(window, "btnCreateGame", "XNAClientButton", left, createY, 133, 23, "Create Game");
         LayoutControl btnCancel = ThemedWindow.Add(window, "btnCancel", "XNAClientButton", window.Width - 133 - sides - margin, btnCreateGame.Y, 133, 23, "Cancel");
         if (!ClientCore.ClientConfiguration.Instance.DisableMultiplayerGameLoading)
         {
@@ -265,6 +290,8 @@ public partial class CnCNetLobbyView : UserControl
             {
                 if (name == "btnCreateGame")
                     viewModel.CreateGameCommand.Execute(null);
+                else if (name == "btnDisplayAdvancedOptions")
+                    viewModel.ShowAdvancedOptions();
                 else if (name == "btnLoadMPGame")
                     viewModel.LoadGameCommand.Execute(null);
                 else if (name == "btnCancel")
@@ -281,12 +308,26 @@ public partial class CnCNetLobbyView : UserControl
                 ["tbPassword"] = layout => BoundTextBox(layout, nameof(CnCNetLobbyViewModel.NewRoomPassword)),
                 ["ddMaxPlayers"] = layout => DropDown(layout, nameof(CnCNetLobbyViewModel.MaxPlayerItems), nameof(CnCNetLobbyViewModel.NewRoomMaxPlayersIndex)),
                 ["ddSkillLevel"] = layout => DropDown(layout, nameof(CnCNetLobbyViewModel.SkillLevels), nameof(CnCNetLobbyViewModel.NewRoomSkillLevel)),
+                ["ddTunnelMode"] = layout =>
+                {
+                    var dropDown = new ThemedDropDown(layout.Width, layout.Height, layout.FontIndex) { DataContext = viewModel };
+                    dropDown.Bind(ThemedDropDown.ItemsSourceProperty, new Binding(nameof(CnCNetLobbyViewModel.CreationTunnels) + "." + nameof(TunnelListViewModel.ModeItems)));
+                    dropDown.Bind(ThemedDropDown.SelectedIndexProperty, new Binding(nameof(CnCNetLobbyViewModel.CreationTunnelModeIndex)) { Mode = BindingMode.TwoWay });
+                    return dropDown;
+                },
+                ["lbTunnelList"] = layout => TunnelSelectionView.TunnelList(layout, viewModel.CreationTunnels),
             });
 
         if (LayoutView.FindNamed<ThemedButton>(createCanvas, "btnLoadMPGame") is ThemedButton loadButton)
         {
             loadButton.DataContext = viewModel;
             loadButton.Bind(IsEnabledProperty, new Binding(nameof(CnCNetLobbyViewModel.CanLoadGame)));
+        }
+
+        if (LayoutView.FindNamed<ThemedButton>(createCanvas, "btnCreateGame") is ThemedButton createButton)
+        {
+            createButton.DataContext = viewModel;
+            createButton.Bind(IsEnabledProperty, new Binding(nameof(CnCNetLobbyViewModel.CanCreateGame)));
         }
 
         return createCanvas;

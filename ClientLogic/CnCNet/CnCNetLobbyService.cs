@@ -904,7 +904,7 @@ public sealed class CnCNetLobbyService
     /// comes from the saved game's ID.
     /// </summary>
     /// <returns>Why the game can't be created, or null.</returns>
-    public string CreateLoadedGame(string roomName)
+    public string CreateLoadedGame(string roomName, CnCNetTunnel selectedTunnel = null)
     {
         if (State.IsInGameRoom || State.IsJoiningGame || LoadingRoom.IsActive)
             return null;
@@ -919,7 +919,7 @@ public sealed class CnCNetLobbyService
         var tunnelMode = (TunnelMode)UserINISettings.Instance.TunnelMode.Value;
         if (tunnelMode != TunnelMode.V3Dynamic)
         {
-            tunnel = PickBestTunnel(tunnelMode == TunnelMode.V2Legacy ? 2 : 3);
+            tunnel = selectedTunnel ?? PickBestTunnel(tunnelMode == TunnelMode.V2Legacy ? 2 : 3);
             if (tunnel == null)
                 return "No tunnel server is available. Try again in a moment, or use dynamic tunnels.";
         }
@@ -995,7 +995,8 @@ public sealed class CnCNetLobbyService
     /// official or recommended tunnel for the static modes).
     /// </summary>
     /// <returns>Why the game can't be created, or null.</returns>
-    public string CreateGame(string roomName, string password, int maxPlayers, int skillLevel)
+    /// <param name="selectedTunnel">The tunnel picked in the creation window's list, or null for the best one.</param>
+    public string CreateGame(string roomName, string password, int maxPlayers, int skillLevel, CnCNetTunnel selectedTunnel = null)
     {
         if (State.IsInGameRoom || State.IsJoiningGame)
             return null;
@@ -1010,7 +1011,7 @@ public sealed class CnCNetLobbyService
         var tunnelMode = (TunnelMode)UserINISettings.Instance.TunnelMode.Value;
         if (tunnelMode != TunnelMode.V3Dynamic)
         {
-            tunnel = PickBestTunnel(tunnelMode == TunnelMode.V2Legacy ? 2 : 3);
+            tunnel = selectedTunnel ?? PickBestTunnel(tunnelMode == TunnelMode.V2Legacy ? 2 : 3);
             if (tunnel == null)
                 return "No tunnel server is available. Try again in a moment, or use dynamic tunnels.";
         }
