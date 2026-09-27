@@ -552,11 +552,11 @@ public abstract class MultiplayerLobbySession : LobbySession
             case LaunchBlockerKind.SharedStartingLocation:
                 AddNotice("Multiple players cannot share the same starting location on this map.".L10N("Client:Main:SharedStartingLocationNotification"));
                 break;
-            case LaunchBlockerKind.InsufficientPlayers:
+            case LaunchBlockerKind.InsufficientPlayers when GameModeMap != null:
                 AddNotice(string.Format("Unable to launch game: {0} cannot be played with fewer than {1} players".L10N("Client:Main:InsufficientPlayersNotificationV2"),
                     GameModeMap.ToString(), GameModeMap.MinPlayers));
                 break;
-            case LaunchBlockerKind.TooManyPlayers:
+            case LaunchBlockerKind.TooManyPlayers when GameModeMap != null:
                 AddNotice(string.Format("Unable to launch game: {0} cannot be played with more than {1} players.".L10N("Client:Main:TooManyPlayersNotificationV2"),
                     GameModeMap.ToString(), GameModeMap.MaxPlayers));
                 break;
