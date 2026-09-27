@@ -8,7 +8,7 @@
     <views:LobbyPanel Grid.Row="0" />
 
     <!-- Chat -->
-    <ListBox Grid.Row="1" Margin="0,8,0,0" ItemsSource="{Binding Messages}">
+    <ListBox Grid.Row="1" Margin="0,8,0,0" ItemsSource="{Binding Messages}" views:ChatScroll.FollowNewItems="True">
       <ListBox.ItemTemplate>
         <DataTemplate DataType="vm:ChatLineViewModel">
           <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" TextWrapping="Wrap" />
