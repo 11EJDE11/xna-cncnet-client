@@ -822,6 +822,7 @@ public static class ThemedLobbyView
         });
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
         ChatScroll.SetFollowNewItems(list, true);
+        ThemedWindow.OpenLinkOnDoubleClick(list);
         return list;
     }
 

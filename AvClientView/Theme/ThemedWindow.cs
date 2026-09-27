@@ -13,6 +13,7 @@ using AvClientView.ViewModels;
 using AvClientView.Views;
 
 using ClientCore;
+using ClientCore.Extensions;
 
 using ClientLogic.Layout;
 
@@ -119,8 +120,26 @@ public static class ThemedWindow
         });
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
         ChatScroll.SetFollowNewItems(list, true);
+        OpenLinkOnDoubleClick(list);
         return list;
     }
+
+    /// <summary>
+    /// ChatListBox_DoubleLeftClick: double-clicking a chat line with one link opens it (trusted domains at once, others
+    /// after a warning).
+    /// </summary>
+    public static void OpenLinkOnDoubleClick(ListBox list) => list.DoubleTapped += (_, _) =>
+    {
+        if (list.SelectedItem is not ChatLineViewModel line)
+            return;
+
+        string[] links = line.Text?.GetLinks();
+        if (links == null || links.Length != 1)
+            return;
+
+        ClientLogic.UI.LinkOpener.OpenLink(links[0],
+            (ClientLogic.UI.IDialogService)App.Services.GetService(typeof(ClientLogic.UI.IDialogService)));
+    };
 
     /// <summary>A chat input bound to a view model's ChatInput, sending with Enter.</summary>
     public static TextBox ChatInput(LayoutControl layout, object dataContext, System.Windows.Input.ICommand send, string suggestion = "Type here to chat...")

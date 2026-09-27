@@ -25,7 +25,7 @@ public static class PlayerMessageContextMenu
         foreach (string link in message.Message.GetLinks().Distinct())
         {
             string display = link.Length > 40 ? link[..30] + "..." + link[^5..] : link;
-            items.Add(new("Open Link".L10N("Client:Main:OpenLink") + " " + display, () => ThemeAssets.OpenUrl(link)));
+            items.Add(new("Open Link".L10N("Client:Main:OpenLink") + " " + display, () => LinkOpener.OpenLink(link, App.Services.GetRequiredService<IDialogService>())));
             items.Add(new("Copy Link".L10N("Client:Main:CopyLink") + " " + display, async () =>
             {
                 try
