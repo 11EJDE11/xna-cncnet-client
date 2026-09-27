@@ -72,6 +72,7 @@ public sealed class CnCNetLobbyService
         connectionManager.ConnectionLost += ConnectionManager_ConnectionLost;
         connectionManager.BannedFromChannel += ConnectionManager_BannedFromChannel;
         connectionManager.PrivateCTCPReceived += ConnectionManager_PrivateCTCPReceived;
+        UserINISettings.Instance.SettingsSaved += (_, _) => FollowedGamesChanged();
 
         room.Left += (_, _) => Room_Left();
 
@@ -985,6 +986,38 @@ public sealed class CnCNetLobbyService
 
         State.IsInGameRoom = false;
         RoomLeft?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// The settings were saved (Instance_SettingsSaved): the broadcast channels of games followed or unfollowed in the
+    /// options are joined or left.
+    /// </summary>
+    private void FollowedGamesChanged()
+    {
+        if (!connectionManager.IsConnected)
+            return;
+
+        foreach (CnCNetGame game in gameCollection.GameList)
+        {
+            if (!game.Supported)
+                continue;
+
+            if (game.InternalName.ToUpper() == localGameID)
+                continue;
+
+            if (followedGames.Contains(game.InternalName) &&
+                !UserINISettings.Instance.IsGameFollowed(game.InternalName.ToUpper()))
+            {
+                connectionManager.FindChannel(game.GameBroadcastChannel).Leave();
+                followedGames.Remove(game.InternalName);
+            }
+            else if (!followedGames.Contains(game.InternalName) &&
+                UserINISettings.Instance.IsGameFollowed(game.InternalName.ToUpper()))
+            {
+                connectionManager.FindChannel(game.GameBroadcastChannel).Join();
+                followedGames.Add(game.InternalName);
+            }
+        }
     }
 
     /// <summary>The default room name (the XNA game creation window's).</summary>
