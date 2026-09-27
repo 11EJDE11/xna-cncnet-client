@@ -33,6 +33,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         LoadGame = services.GetRequiredService<LoadGameViewModel>();
         menu.LoadGameRequested += (_, _) => LoadGame.Open();
         Extras = services.GetRequiredService<ExtrasViewModel>();
+        Statistics = services.GetRequiredService<StatisticsViewModel>();
         menu.ExtrasRequested += (_, _) => Extras.Open();
         menu.StatisticsRequested += (_, _) => OpenStatistics();
         Extras.StatisticsRequested += (_, _) => OpenStatistics();
@@ -83,12 +84,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public ExtrasViewModel Extras { get; }
 
+    public StatisticsViewModel Statistics { get; }
+
     public PrivateMessagesViewModel PrivateMessages { get; }
 
     /// <summary>The options were saved and the user chose to restart the client.</summary>
     public event EventHandler RestartRequested;
 
-    private void OpenStatistics() => Menu.Status = "Statistics isn't in the Avalonia preview yet.";
+    private void OpenStatistics() => Statistics.Open();
 
     private void OpenOptions()
     {

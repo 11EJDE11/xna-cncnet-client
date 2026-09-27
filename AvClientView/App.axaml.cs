@@ -63,6 +63,7 @@ public sealed class App : Application
                 .AddSingleton<PrivateMessagesViewModel>()
                 .AddSingleton<GameInvitationsViewModel>()
                 .AddSingleton<ExtrasViewModel>()
+                .AddSingleton<StatisticsViewModel>()
                 .BuildServiceProvider();
 
             // As the XNA client does at start-up: the selected renderer sets the game process's qres and single-core
