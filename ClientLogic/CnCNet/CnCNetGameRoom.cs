@@ -146,11 +146,39 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
     /// <summary>The launch button is blocked by a tunnel problem.</summary>
     public bool IsInTunnelError => TunnelSession.IsInTunnelError;
 
+    /// <summary>The tunnel the room uses (null in dynamic V3 mode until one is negotiated).</summary>
+    public CnCNetTunnel CurrentTunnel => tunnelHandler.CurrentTunnel;
+
+    /// <summary>The room's tunnel mode.</summary>
+    public TunnelMode TunnelMode => TunnelSession.Mode;
+
+    /// <summary>The /CHANGETUNNEL command: the front end opens the tunnel selection with this description.</summary>
+    public event EventHandler<string> TunnelSelectionRequested;
+
+    /// <summary>
+    /// Host: switches to a tunnel mode and, for the static modes, a tunnel server (the XNA lobby's
+    /// TunnelSelectionWindow_TunnelSelected).
+    /// </summary>
+    public void SelectTunnel(TunnelMode mode, CnCNetTunnel tunnel)
+    {
+        TunnelSession.ChangeMode(mode, true, autoSelectTunnel: mode == TunnelMode.V3Dynamic);
+
+        if (mode != TunnelMode.V3Dynamic && tunnel != null)
+            TunnelSession.SelectTunnelServer(tunnel);
+
+        OnGameOptionChanged();
+        LobbyState.ClearReadyStatuses();
+        RaiseChanged();
+    }
+
     protected override List<ChatBoxCommand> CreateChatCommands()
     {
         List<ChatBoxCommand> commands = base.CreateChatCommands();
         commands.Add(new ChatBoxCommand("TUNNELINFO",
             "View tunnel server information".L10N("Client:Main:TunnelInfoCommand"), false, PrintTunnelServerInformation));
+        commands.Add(new ChatBoxCommand("CHANGETUNNEL",
+            "Change the used CnCNet tunnel server (game host only)".L10N("Client:Main:ChangeTunnelCommand"),
+            true, _ => TunnelSelectionRequested?.Invoke(this, "Select tunnel server:".L10N("Client:Main:SelectTunnelServerCommand"))));
         commands.Add(new ChatBoxCommand("RENEGOTIATE",
             "Force all players to renegotiate tunnel connections (V3 Dynamic, host only)".L10N("Client:Main:RenegotiateCommand"),
             true, RenegotiateAllCommand));

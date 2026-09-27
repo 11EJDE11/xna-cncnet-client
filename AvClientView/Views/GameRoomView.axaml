@@ -5,5 +5,9 @@
              x:DataType="vm:MultiplayerRoomViewModel"
              Background="Black">
   <!-- The theme's MultiplayerGameLobby layout (from LANGameLobby.ini or CnCNetGameLobby.ini), built in code-behind -->
-  <ContentControl x:Name="LobbyHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
+  <Panel>
+    <ContentControl x:Name="LobbyHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    <!-- The CnCNet room's windows (game lobby settings, tunnel selection) -->
+    <Panel x:Name="WindowHost" />
+  </Panel>
 </UserControl>

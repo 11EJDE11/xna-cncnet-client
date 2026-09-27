@@ -39,6 +39,13 @@ public partial class GameRoomView : UserControl
         viewModel = newViewModel;
         builtAsHost = null;
 
+        WindowHost.Children.Clear();
+        if (viewModel is CnCNetGameRoomViewModel cncnet)
+        {
+            WindowHost.Children.Add(new GameLobbySettingsView(cncnet.Settings));
+            WindowHost.Children.Add(new TunnelSelectionView(cncnet.Tunnels));
+        }
+
         if (viewModel != null)
         {
             viewModel.Opened += ViewModel_Opened;
@@ -104,6 +111,12 @@ public partial class GameRoomView : UserControl
                 break;
             case "btnPickRandomMap":
                 viewModel.PickRandomMap();
+                break;
+            case "btnChangeTunnel":
+                (viewModel as CnCNetGameRoomViewModel)?.Tunnels.Open();
+                break;
+            case "btnGameLobbySettings":
+                (viewModel as CnCNetGameRoomViewModel)?.Settings.Open();
                 break;
             default:
                 ThemeAssets.OpenUrl(layout?.Url);

@@ -96,11 +96,12 @@ public static class ThemedLobbyView
             reader.ReadInitializableControl(ini, sortButton, parser);
         }
 
-        // Players don't see the map list (MultiplayerGameLobby.HideMapList); the room buttons the preview doesn't have
-        // yet are hidden
-        var hidden = new List<string> { "btnChangeTunnel", "btnGameLobbySettings", "btnNegotiationStatus" };
+        // Players don't see the map list (MultiplayerGameLobby.HideMapList), nor the host's tunnel and room settings
+        // buttons (disabled XNA controls are hidden); the negotiation status panel isn't in the preview yet
+        var hidden = new List<string> { "btnNegotiationStatus" };
         if (kind.IsMultiplayer && !isHost)
-            hidden.AddRange(["ddGameMode", "lblGameModeSelect", "lbMapList", "tbMapSearch", "btnPickRandomMap", "btnMapSortAlphabetically", "btnLockGame"]);
+            hidden.AddRange(["ddGameMode", "lblGameModeSelect", "lbMapList", "tbMapSearch", "btnPickRandomMap", "btnMapSortAlphabetically", "btnLockGame",
+                "btnChangeTunnel", "btnGameLobbySettings"]);
 
         foreach (string name in hidden)
         {
