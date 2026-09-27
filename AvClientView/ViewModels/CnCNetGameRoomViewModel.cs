@@ -19,6 +19,8 @@ public sealed class CnCNetGameRoomViewModel : MultiplayerRoomViewModel
     public override string RoomInfo => string.Format("{0} ({1} players max){2}", room.RoomSettings.RoomName, room.PlayerLimit,
         room.TunnelSession.Mode == TunnelMode.V3Dynamic ? ", dynamic tunnels" : string.Empty);
 
+    protected override int PlayerLimit => room.PlayerLimit;
+
     protected override string PlayerLaunchText => (room.FindLocalPlayer()?.Ready ?? false) ? "Not Ready" : "I'm Ready";
 
     protected override string GetPlayerStatus(PlayerInfo pInfo)

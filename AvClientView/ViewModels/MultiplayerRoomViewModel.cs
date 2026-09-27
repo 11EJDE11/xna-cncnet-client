@@ -84,7 +84,42 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
         OnPropertyChanged(nameof(LockText));
         OnPropertyChanged(nameof(AutoReady));
         OnPropertyChanged(nameof(RoomInfo));
+        OnPropertyChanged(nameof(SlotStatusTextures));
     }
+
+    /// <summary>The status indicators, as MultiplayerGameLobby.RenderPlayerSlots sets them.</summary>
+    public override System.Collections.Generic.IReadOnlyList<string> SlotStatusTextures
+    {
+        get
+        {
+            var textures = new string[LobbySession.MAX_PLAYER_COUNT];
+            int slot = 0;
+
+            for (int i = 0; i < room.Players.Count && slot < textures.Length; i++, slot++)
+            {
+                PlayerInfo pInfo = room.Players[i];
+                textures[slot] = pInfo.IsInGame ? "statusInProgress.png"
+                    : i == 0 ? (room.Locked ? "statusOk.png" : "statusClear.png")
+                    : pInfo.Ready ? "statusOk.png" : "statusClear.png";
+            }
+
+            foreach (PlayerInfo aiInfo in room.AIPlayers)
+            {
+                if (slot >= textures.Length)
+                    break;
+
+                textures[slot++] = aiInfo.SideId == room.SlotIndices.SpectatorSide ? "statusError.png" : "statusAI.png";
+            }
+
+            for (; slot < textures.Length; slot++)
+                textures[slot] = slot < PlayerLimit ? "statusEmpty.png" : "statusUnavailable.png";
+
+            return textures;
+        }
+    }
+
+    /// <summary>The room's player limit (CnCNet rooms can have fewer slots).</summary>
+    protected virtual int PlayerLimit => LobbySession.MAX_PLAYER_COUNT;
 
     protected override bool CanEditRow(PlayerInfo pInfo, bool isFreeRow) =>
         room.IsHost || (pInfo != null && !pInfo.IsAI && pInfo.Name == ProgramConstants.PLAYERNAME);

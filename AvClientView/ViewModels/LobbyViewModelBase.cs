@@ -233,6 +233,11 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     {
     }
 
+    /// <summary>
+    /// The texture of each player slot's status indicator (8 entries), or null if the lobby has none (skirmish).
+    /// </summary>
+    public virtual IReadOnlyList<string> SlotStatusTextures => null;
+
     /// <summary>Whether the local player can change a player row.</summary>
     protected virtual bool CanEditRow(PlayerInfo pInfo, bool isFreeRow) => true;
 

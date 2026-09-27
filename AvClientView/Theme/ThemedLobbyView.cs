@@ -95,6 +95,9 @@ public static class ThemedLobbyView
         Canvas root = LayoutView.Build(window, name => onButton(name, window.Find(name)));
         AddInteractiveControls(root, window, viewModel);
 
+        if (kind.IsMultiplayer)
+            AddStatusIndicators(root, window, ini, viewModel);
+
         // The map labels the XNA lobby fills in
         foreach ((string label, string property) in new[]
         {
@@ -172,6 +175,45 @@ public static class ThemedLobbyView
             panel.AddChild(caption);
             reader.ReadInitializableControl(ini, caption, parser);
         }
+    }
+
+    /// <summary>The player slot status indicators (MultiplayerGameLobby: PlayerStatusIndicatorX/Y beside each row).</summary>
+    private static void AddStatusIndicators(Canvas root, LayoutControl window, IniFile ini, LobbyViewModelBase viewModel)
+    {
+        Canvas panel = LayoutView.FindNamed<Canvas>(root, "PlayerOptionsPanel");
+        if (panel == null)
+            return;
+
+        int x = ini.GetIntValue(window.Name, "PlayerStatusIndicatorX", 0);
+        int y = ini.GetIntValue(window.Name, "PlayerStatusIndicatorY", 0);
+        var images = new List<Image>();
+
+        for (int i = 0; i < MAX_PLAYER_COUNT; i++)
+        {
+            LayoutControl team = window.Find("ddPlayerTeam" + i);
+            if (team == null)
+                continue;
+
+            var image = new Image { Stretch = Stretch.None, ZIndex = 1000 };
+            Canvas.SetLeft(image, x);
+            Canvas.SetTop(image, team.Y + y);
+            panel.Children.Add(image);
+            images.Add(image);
+        }
+
+        void Update()
+        {
+            IReadOnlyList<string> textures = viewModel.SlotStatusTextures;
+            for (int i = 0; i < images.Count; i++)
+                images[i].Source = textures != null && i < textures.Count ? ThemeAssets.LoadBitmap(textures[i]) : null;
+        }
+
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LobbyViewModelBase.SlotStatusTextures))
+                Update();
+        };
+        Update();
     }
 
     private static Canvas ParentCanvas(Canvas root, LayoutControl control) =>
