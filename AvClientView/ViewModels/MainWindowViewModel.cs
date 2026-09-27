@@ -1,6 +1,11 @@
 using System;
 
+using Avalonia.Threading;
+
+using ClientCore;
 using ClientCore.Extensions;
+
+using ClientLogic.Launch;
 
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -23,6 +28,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Title = menu.Title;
         currentPage = menu;
         primaryPage = menu;
+
+        // The main menu music (XNA MainMenu): played on start, faded while a game runs or, with StopMusicOnMenu,
+        // while another screen is shown, and following the settings
+        GameProcessService gameProcess = services.GetRequiredService<GameProcessService>();
+        gameProcess.GameProcessStarted += () => Dispatcher.UIThread.Post(Music.FadeOut);
+        gameProcess.GameProcessExited += () => Dispatcher.UIThread.Post(() =>
+        {
+            if (!UserINISettings.Instance.StopMusicOnMenu || CurrentPage == Menu)
+                Music.Play();
+        });
+        UserINISettings.Instance.SettingsSaved += (_, _) => Dispatcher.UIThread.Post(() => Music.SettingsSaved(CurrentPage == Menu));
+        Dispatcher.UIThread.Post(Music.Play);
 
         menu.SkirmishRequested += (_, _) => OpenSkirmish();
         menu.LanRequested += (_, _) => OpenLan();
@@ -118,11 +135,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private object currentPage;
 
-    partial void OnCurrentPageChanged(object value)
+    partial void OnCurrentPageChanged(object oldValue, object newValue)
     {
-        if (value != PrivateMessages)
+        if (newValue != PrivateMessages)
             PrivateMessages.Close();
+
+        // The main menu's SwitchOn / SwitchOff
+        if (UserINISettings.Instance.StopMusicOnMenu && oldValue != newValue)
+        {
+            if (newValue == Menu)
+                Music.Play();
+            else if (oldValue == Menu)
+                Music.FadeOut();
+        }
     }
+
+    public AvClientView.Theme.ThemeMusic Music { get; } = new();
 
     public event EventHandler ExitRequested
     {
@@ -192,6 +220,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>The client is closing: leave the multiplayer rooms and lobbies that were opened.</summary>
     public void Shutdown()
     {
+        Music.Dispose();
         lanLobby?.Shutdown();
         cncnetLobby?.Shutdown();
     }
