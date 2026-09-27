@@ -8,6 +8,7 @@ using System.Reflection;
 using Avalonia.Threading;
 
 using ClientCore;
+using ClientCore.Enums;
 using ClientCore.Extensions;
 
 using ClientLogic.CnCNet;
@@ -29,6 +30,7 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     private readonly IDialogService dialogs;
     private readonly GameCollection gameCollection;
     private readonly MapLoader mapLoader;
+    private readonly CnCNetUserData userData;
     private readonly DispatcherTimer timer;
     private readonly Stopwatch stopwatch = new();
     private List<HostedCnCNetGame> shownGames = [];
@@ -36,8 +38,9 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     private bool initialized;
 
     public CnCNetLobbyViewModel(CnCNetLobbyService lobby, CnCNetGameRoomViewModel roomViewModel, IDialogService dialogs,
-        GameCollection gameCollection, MapLoader mapLoader)
+        GameCollection gameCollection, MapLoader mapLoader, CnCNetUserData userData)
     {
+        this.userData = userData;
         this.mapLoader = mapLoader;
         this.lobby = lobby;
         this.gameCollection = gameCollection;
@@ -239,12 +242,70 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     {
         HostedCnCNetGame selected = SelectedGameIndex >= 0 && SelectedGameIndex < shownGames.Count ? shownGames[SelectedGameIndex] : null;
 
-        shownGames = lobby.Games.ToList();
+        shownGames = lobby.Games.Where(HostedGameMatches).ToList();
         Games.Clear();
         foreach (HostedCnCNetGame game in shownGames)
             Games.Add(new HostedGameItemViewModel(game, lobby.Room.Options));
 
         SelectedGameIndex = selected == null ? -1 : shownGames.FindIndex(g => g.HostName == selected.HostName);
+    }
+
+    /// <summary>The game search text (tbGameSearch); empty for none.</summary>
+    [ObservableProperty]
+    private string gameSearchText = string.Empty;
+
+    partial void OnGameSearchTextChanged(string value) => RefreshGames();
+
+    /// <summary>The game list's sort order (SortState: none, A-Z, Z-A).</summary>
+    public SortDirection GameSortState => Enum.IsDefined(typeof(SortDirection), UserINISettings.Instance.SortState.Value)
+        ? (SortDirection)UserINISettings.Instance.SortState.Value : SortDirection.None;
+
+    /// <summary>The sort button (BtnGameSortAlpha_LeftClick): the next order, saved in the settings.</summary>
+    public void CycleGameSort()
+    {
+        UserINISettings.Instance.SortState.Value = ((int)GameSortState + 1) % 3;
+        OnPropertyChanged(nameof(GameSortState));
+        RefreshGames();
+        UserINISettings.Instance.SaveSettings();
+    }
+
+    /// <summary>Whether any game filter is set (the filter button's "active" texture).</summary>
+    public bool GameFiltersApplied => UserINISettings.Instance.IsGameFiltersApplied();
+
+    /// <summary>The filters panel was closed: the button and the list follow the saved filters.</summary>
+    public void GameFiltersChanged()
+    {
+        OnPropertyChanged(nameof(GameFiltersApplied));
+        RefreshGames();
+    }
+
+    /// <summary>The broadcast options that can be filtered (ShowInFilters), for the filters panel.</summary>
+    public IReadOnlyList<ClientLogic.Options.GameOption> FilterableOptions =>
+        lobby.Room.Options.CheckBoxes.Where(o => o.BroadcastToLobby && o.Definition.ShowInFilters)
+            .Concat(lobby.Room.Options.DropDowns.Where(o => o.BroadcastToLobby && o.Definition.ShowInFilters)).ToList();
+
+    /// <summary>CnCNetLobby.HostedGameMatches: the saved filters and the search text.</summary>
+    private bool HostedGameMatches(GenericHostedGame hg)
+    {
+        UserINISettings settings = UserINISettings.Instance;
+        var filter = new ClientLogic.GameList.GameListFilterSettings(
+            ShowFriendGamesOnly: settings.ShowFriendGamesOnly,
+            HideLockedGames: settings.HideLockedGames.Value,
+            HideIncompatibleGames: settings.HideIncompatibleGames.Value,
+            HidePasswordedGames: settings.HidePasswordedGames.Value,
+            MaxPlayerCount: settings.MaxPlayerCount.Value,
+            SearchText: string.IsNullOrEmpty(GameSearchText) ? null : GameSearchText,
+            OptionFilters: lobby.Room.Options.CheckBoxes.Where(o => o.BroadcastToLobby)
+                .Concat(lobby.Room.Options.DropDowns.Where(o => o.BroadcastToLobby))
+                .Select(o => settings.GetGameOptionFilterValue(o.Name)).ToList());
+
+        return ClientLogic.GameList.GameListFilter.Matches(hg, filter, userData.IsFriend,
+            gameMode => string.IsNullOrEmpty(gameMode)
+                ? "Unknown".L10N("Client:Main:Unknown")
+                : gameMode.L10N($"INI:GameModes:{gameMode}:UIName", ClientCore.I18N.TranslationNotificationLevel.Verbose),
+            map => string.IsNullOrEmpty(map)
+                ? "Unknown".L10N("Client:Main:Unknown") : mapLoader.TranslatedMapNames.TryGetValue(map, out string translated)
+                ? translated : null);
     }
 
     /// <summary>A hosted game's map name and preview, as the XNA game information panel finds them.</summary>

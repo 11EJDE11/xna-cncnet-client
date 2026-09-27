@@ -13,6 +13,8 @@ using Avalonia.VisualTree;
 using AvClientView.Theme;
 using AvClientView.ViewModels;
 
+using ClientCore.Extensions;
+
 using ClientLogic.Layout;
 
 using DTAClient.Domain.Multiplayer.CnCNet;
@@ -49,7 +51,18 @@ public partial class CnCNetLobbyView : UserControl
                     ["tbChatInput"] = layout => ThemedWindow.ChatInput(layout, viewModel, viewModel.SendChatCommand),
                     ["ddColor"] = layout => DropDown(layout, viewModel, nameof(CnCNetLobbyViewModel.ChatColors), nameof(CnCNetLobbyViewModel.SelectedChatColorIndex)),
                     ["ddCurrentChannel"] = layout => DropDown(layout, viewModel, nameof(CnCNetLobbyViewModel.ChatChannels), nameof(CnCNetLobbyViewModel.SelectedChannelIndex)),
-                    ["tbGameSearch"] = layout => ThemedStyle.TextBox(layout.Width, layout.Height, "Filter by name, map, game mode, player..."),
+                    ["tbGameSearch"] = layout =>
+                    {
+                        TextBox search = ThemedStyle.TextBox(layout.Width, layout.Height,
+                            "Filter by name, map, game mode, player...".L10N("Client:Main:FilterByBlahBlah"));
+                        search.MaxLength = 64;
+                        search.DataContext = viewModel;
+                        search.Bind(TextBox.TextProperty, new Binding(nameof(CnCNetLobbyViewModel.GameSearchText)) { Mode = BindingMode.TwoWay });
+                        return search;
+                    },
+                    ["btnGameSortAlpha"] = layout => SortButton(layout, viewModel),
+                    ["btnGameFilterOptions"] = layout => FilterButton(layout, viewModel),
+                    ["panelGameFilters"] = layout => filtersPanel = new GameFiltersPanelView(layout.Width, layout.Height, viewModel),
                 });
 
             LoginHost.Content = BuildLoginWindow(viewModel);
@@ -109,6 +122,11 @@ public partial class CnCNetLobbyView : UserControl
 
         LayoutControl tbGameSearch = ThemedWindow.Add(window, "tbGameSearch", "XNASuggestionTextBox", lbGameList.X, 12, lbGameList.Width - 62, 21);
         tbGameSearch.Visible = false;
+
+        // The sort and filter buttons right of the search box, and the filters panel over the game list
+        ThemedWindow.Add(window, "btnGameSortAlpha", "XNAClientStateButton", tbGameSearch.X + tbGameSearch.Width + 10, tbGameSearch.Y, 21, 21);
+        ThemedWindow.Add(window, "btnGameFilterOptions", "XNAClientToggleButton", tbGameSearch.X + tbGameSearch.Width + 10 + 21 + 10, tbGameSearch.Y, 21, 21);
+        ThemedWindow.Add(window, "panelGameFilters", "GameFiltersPanel", lbGameList.X, lbGameList.Y, lbGameList.Width, lbGameList.Height);
 
         return window;
     }
@@ -296,9 +314,86 @@ public partial class CnCNetLobbyView : UserControl
             });
     }
 
+    private static GameFiltersPanelView filtersPanel;
+
+    /// <summary>XNAClientStateButton with sortAlphaNone/Asc/Desc.png: cycles the game list's sort order.</summary>
+    private static Control SortButton(LayoutControl layout, CnCNetLobbyViewModel viewModel)
+    {
+        var image = new Image { Width = layout.Width, Height = layout.Height, Stretch = Stretch.Fill };
+        void Refresh() => image.Source = ThemeAssets.LoadBitmap(viewModel.GameSortState switch
+        {
+            ClientCore.Enums.SortDirection.Asc => "sortAlphaAsc.png",
+            ClientCore.Enums.SortDirection.Desc => "sortAlphaDesc.png",
+            _ => "sortAlphaNone.png",
+        });
+
+        var button = new Border { Child = image, Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand) };
+        ToolTip.SetTip(button, "Sort Games Alphabetically".L10N("Client:Main:SortAlphabet"));
+        button.PointerPressed += (_, e) =>
+        {
+            if (!e.GetCurrentPoint(button).Properties.IsLeftButtonPressed)
+                return;
+
+            ThemeSounds.ButtonHover.Play();
+            viewModel.CycleGameSort();
+            Refresh();
+            e.Handled = true;
+        };
+        Refresh();
+        return button;
+    }
+
+    /// <summary>XNAClientToggleButton with filterActive/Inactive.png: opens or closes the filters panel.</summary>
+    private static Control FilterButton(LayoutControl layout, CnCNetLobbyViewModel viewModel)
+    {
+        var image = new Image { Width = layout.Width, Height = layout.Height, Stretch = Stretch.Fill };
+        void Refresh() => image.Source = ThemeAssets.LoadBitmap(viewModel.GameFiltersApplied ? "filterActive.png" : "filterInactive.png");
+
+        var button = new Border { Child = image, Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand) };
+        ToolTip.SetTip(button, "Game Filters".L10N("Client:Main:GameFilters"));
+        button.PointerPressed += (_, e) =>
+        {
+            if (!e.GetCurrentPoint(button).Properties.IsLeftButtonPressed || filtersPanel == null)
+                return;
+
+            ThemeSounds.ButtonHover.Play();
+            if (filtersPanel.IsVisible)
+                filtersPanel.Cancel();
+            else
+                filtersPanel.Show();
+
+            e.Handled = true;
+        };
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CnCNetLobbyViewModel.GameFiltersApplied))
+                Refresh();
+        };
+        Refresh();
+        return button;
+    }
+
     private static Control GameList(LayoutControl layout, CnCNetLobbyViewModel viewModel)
     {
         ListBox list = GameListView.Create(layout, viewModel, nameof(CnCNetLobbyViewModel.Games), viewModel.Games, viewModel.FindMap);
+
+        // LbGameList_RightClick: select the game and open the player menu for its host
+        var messages = (PrivateMessagesViewModel)App.Services.GetService(typeof(PrivateMessagesViewModel));
+        list.AddHandler(PointerPressedEvent, (_, e) =>
+        {
+            if (!e.GetCurrentPoint(list).Properties.IsRightButtonPressed)
+                return;
+
+            if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not ListBoxItem item ||
+                item.DataContext is not HostedGameItemViewModel game)
+            {
+                return;
+            }
+
+            list.SelectedItem = game;
+            ThemedContextMenu.Open(list.Parent as Panel ?? (Control)list, e.GetPosition(list.Parent as Visual ?? list), messages.PlayerMenu(game.Game.HostName));
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         list.Bind(SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(CnCNetLobbyViewModel.SelectedGameIndex)) { Mode = BindingMode.TwoWay });
         list.DoubleTapped += (_, _) => viewModel.JoinGameCommand.Execute(null);
         return list;
