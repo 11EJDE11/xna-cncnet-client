@@ -215,7 +215,7 @@ public abstract partial class LobbySession : ObservableObject
 
     protected abstract bool IsMultiplayer { get; }
 
-    protected virtual bool RemoveStartingLocations => false;
+    public bool RemoveStartingLocations { get; protected set; }
 
     /// <summary>The IP address the launch uses for a human player; null for the local player.</summary>
     protected virtual string GetIPAddressForPlayer(PlayerInfo player) => "0.0.0.0";
