@@ -75,6 +75,20 @@ public static class ThemedLobbyView
 
         AddPlayerRows(ini, reader, parser, window);
 
+        // The map sort button, as GameLobbyBase.InitBtnMapSort adds it left of the game mode drop-down
+        if (window.Find("ddGameMode") is LayoutControl gameMode)
+        {
+            var sortButton = new LayoutControl("btnMapSortAlphabetically", "XNAClientStateButton", LayoutControlKind.Other)
+            {
+                X = gameMode.X - gameMode.Height - 4,
+                Y = gameMode.Y,
+                Width = gameMode.Height,
+                Height = gameMode.Height,
+            };
+            gameMode.Parent.AddChild(sortButton);
+            reader.ReadInitializableControl(ini, sortButton, parser);
+        }
+
         // Players don't see the map list (MultiplayerGameLobby.HideMapList); the room buttons the preview doesn't have
         // yet are hidden
         var hidden = new List<string> { "btnChangeTunnel", "btnGameLobbySettings", "btnNegotiationStatus" };
@@ -251,6 +265,7 @@ public static class ThemedLobbyView
             {
                 "MapPreviewBox" => BuildMapPreview(layout, viewModel),
                 "lbMapList" => BuildMapList(layout, viewModel),
+                "btnMapSortAlphabetically" => BuildMapSortButton(layout, viewModel),
                 "ddGameMode" => BuildGameModes(layout, viewModel),
                 "tbMapSearch" => BuildMapSearch(layout, viewModel),
                 "lbChatMessages" when viewModel is MultiplayerRoomViewModel room => BuildChat(layout, room),
@@ -373,16 +388,85 @@ public static class ThemedLobbyView
         return null;
     }
 
+    private static Control BuildMapSortButton(LayoutControl layout, LobbyViewModelBase viewModel)
+    {
+        string[] textures = ["sortAlphaNone.png", "sortAlphaAsc.png", "sortAlphaDesc.png"];
+        var image = new Image { Width = layout.Width, Height = layout.Height, Stretch = Stretch.Fill, Cursor = new Cursor(StandardCursorType.Hand) };
+        ToolTip.SetTip(image, "Sort Maps Alphabetically");
+
+        void Update() => image.Source = ThemeAssets.LoadBitmap(textures[Math.Clamp(viewModel.MapSortState, 0, 2)]);
+        Update();
+
+        image.PointerReleased += (_, _) =>
+        {
+            viewModel.CycleMapSort();
+            Update();
+        };
+        return image;
+    }
+
+    /// <summary>
+    /// The map list with the XNA columns: a rank icon (rankNone.png: the preview records no statistics) and the map
+    /// name, under their headers.
+    /// </summary>
     private static Control BuildMapList(LayoutControl layout, LobbyViewModelBase viewModel)
     {
-        ListBox list = ThemedStyle.List(layout.Width, layout.Height);
+        const int headerHeight = 19;
+        var bitmapRankHeader = ThemeAssets.LoadBitmap("rank.png");
+        var rankNone = ThemeAssets.LoadBitmap("rankNone.png");
+        int rankWidth = bitmapRankHeader?.PixelSize.Width ?? 22;
+        (FontFamily headerFont, double headerSize) = ThemeFonts.Get(1);
+
+        var container = new Canvas { Width = layout.Width, Height = layout.Height, Background = ThemedStyle.PanelBackground };
+
+        var rankHeader = new Border
+        {
+            Width = rankWidth,
+            Height = headerHeight,
+            BorderBrush = new SolidColorBrush(ThemeAssets.PanelBorderColor),
+            BorderThickness = new Thickness(1),
+            Child = bitmapRankHeader == null ? null : new Image { Source = bitmapRankHeader, Stretch = Stretch.None },
+        };
+        var nameHeader = new Border
+        {
+            Width = layout.Width - rankWidth,
+            Height = headerHeight,
+            BorderBrush = new SolidColorBrush(ThemeAssets.PanelBorderColor),
+            BorderThickness = new Thickness(1),
+            Child = new TextBlock
+            {
+                Text = "MAP NAME",
+                FontFamily = headerFont,
+                FontSize = headerSize,
+                Foreground = new SolidColorBrush(ThemeAssets.LabelColor),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(3, 0),
+            },
+        };
+        Canvas.SetLeft(nameHeader, rankWidth);
+        container.Children.Add(rankHeader);
+        container.Children.Add(nameHeader);
+
+        ListBox list = ThemedStyle.List(layout.Width, layout.Height - headerHeight);
+        list.Background = Brushes.Transparent;
+        list.BorderThickness = new Thickness(1, 0, 1, 1);
+        Canvas.SetTop(list, headerHeight);
+        container.Children.Add(list);
         list.DataContext = viewModel;
         list.Bind(ItemsControl.ItemsSourceProperty, new Binding(nameof(LobbyViewModelBase.Maps)));
         list.Bind(SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(LobbyViewModelBase.SelectedMapIndex)) { Mode = BindingMode.TwoWay });
         list.Bind(InputElement.IsHitTestVisibleProperty, new Binding(nameof(LobbyViewModelBase.CanChangeMap)));
-        list.ItemTemplate = new FuncDataTemplate<string>((text, _) => new TextBlock { Text = text, Margin = new Thickness(4, 1) });
+        list.ItemTemplate = new FuncDataTemplate<string>((text, _) => new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Children =
+            {
+                new Image { Source = rankNone, Width = rankWidth, Stretch = Stretch.None },
+                new TextBlock { Text = text, Margin = new Thickness(3, 1), VerticalAlignment = VerticalAlignment.Center },
+            },
+        });
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
-        return list;
+        return container;
     }
 
     private static Control BuildGameModes(LayoutControl layout, LobbyViewModelBase viewModel)

@@ -198,9 +198,29 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         }
     }
 
+    /// <summary>The map list's sort order (UserINISettings.MapSortState: 0 none, 1 A-Z, 2 Z-A).</summary>
+    public int MapSortState => UserINISettings.Instance.MapSortState.Value;
+
+    /// <summary>The XNA sort button: none, A-Z, Z-A, saved in the settings.</summary>
+    public void CycleMapSort()
+    {
+        UserINISettings.Instance.MapSortState.Value = (MapSortState + 1) % 3;
+        UserINISettings.Instance.SaveSettings();
+        OnPropertyChanged(nameof(MapSortState));
+        OnMapSearchTextChanged(MapSearchText);
+    }
+
     private void ListMaps(string gameMode)
     {
-        currentMaps = MapSearch.Filter(session.GameModeMapsOf(gameMode), MapSearchText);
+        List<GameModeMap> maps = session.GameModeMapsOf(gameMode);
+        maps = MapSortState switch
+        {
+            1 => maps.OrderBy(gmm => gmm.Map.Name).ToList(),
+            2 => maps.OrderByDescending(gmm => gmm.Map.Name).ToList(),
+            _ => maps,
+        };
+
+        currentMaps = MapSearch.Filter(maps, MapSearchText);
         Maps.Clear();
         foreach (GameModeMap gmm in currentMaps)
             Maps.Add(gmm.Map.Name);
