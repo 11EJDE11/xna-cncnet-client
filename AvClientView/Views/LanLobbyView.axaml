@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:AvClientView.ViewModels"
+             x:Class="AvClientView.Views.LanLobbyView"
+             x:DataType="vm:LanLobbyViewModel">
+  <Grid ColumnDefinitions="360,*,200" RowDefinitions="Auto,*,Auto" Margin="12">
+
+    <!-- Chat colour -->
+    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="12,0,12,6">
+      <TextBlock Text="YOUR COLOR:" VerticalAlignment="Center" FontWeight="Bold" />
+      <ComboBox Width="150" ItemsSource="{Binding ChatColors}" SelectedIndex="{Binding SelectedChatColorIndex}" />
+    </StackPanel>
+
+    <!-- Games -->
+    <ListBox Grid.Row="1" Grid.Column="0" ItemsSource="{Binding Games}" SelectedIndex="{Binding SelectedGameIndex}"
+             DoubleTapped="Games_DoubleTapped">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="vm:LanGameItemViewModel">
+          <StackPanel ToolTip.Tip="{Binding Players}">
+            <TextBlock Text="{Binding RoomName}" FontWeight="Bold" />
+            <TextBlock Text="{Binding Details}" Opacity="0.8" FontSize="12" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <!-- Chat -->
+    <ListBox Grid.Row="1" Grid.Column="1" Margin="12,0" ItemsSource="{Binding Messages}">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="vm:ChatLineViewModel">
+          <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" TextWrapping="Wrap" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <!-- Players -->
+    <ListBox Grid.Row="1" Grid.Column="2" ItemsSource="{Binding Players}" />
+
+    <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+      <Button Content="Create Game" Command="{Binding CreateGameCommand}" />
+      <Button Content="Join Game" Command="{Binding JoinGameCommand}" />
+    </StackPanel>
+    <TextBox Grid.Row="2" Grid.Column="1" Margin="12,8,12,0" Text="{Binding ChatInput}" Watermark="Type here to chat..."
+             MaxLength="200">
+      <TextBox.KeyBindings>
+        <KeyBinding Gesture="Enter" Command="{Binding SendChatCommand}" />
+      </TextBox.KeyBindings>
+    </TextBox>
+    <Button Grid.Row="2" Grid.Column="2" Content="Main Menu" Command="{Binding BackCommand}" HorizontalAlignment="Right" Margin="0,8,0,0" />
+  </Grid>
+</UserControl>

@@ -37,6 +37,7 @@ public sealed partial class MainMenuViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(OpenSkirmishCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenLanCommand))]
     private bool mapsLoaded;
 
     public event EventHandler ExitRequested;
@@ -62,6 +63,11 @@ public sealed partial class MainMenuViewModel : ObservableObject
 
     [RelayCommand(CanExecute = nameof(MapsLoaded))]
     private void OpenSkirmish() => SkirmishRequested?.Invoke(this, EventArgs.Empty);
+
+    public event EventHandler LanRequested;
+
+    [RelayCommand(CanExecute = nameof(MapsLoaded))]
+    private void OpenLan() => LanRequested?.Invoke(this, EventArgs.Empty);
 
     [RelayCommand]
     private void Exit() => ExitRequested?.Invoke(this, EventArgs.Empty);

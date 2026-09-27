@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:AvClientView.ViewModels"
+             xmlns:views="using:AvClientView.Views"
+             x:Class="AvClientView.Views.LanGameRoomView"
+             x:DataType="vm:LanGameRoomViewModel">
+  <Grid RowDefinitions="*,150,Auto,Auto" Margin="12">
+    <views:LobbyPanel Grid.Row="0" />
+
+    <!-- Chat -->
+    <ListBox Grid.Row="1" Margin="0,8,0,0" ItemsSource="{Binding Messages}">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="vm:ChatLineViewModel">
+          <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" TextWrapping="Wrap" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <TextBox Grid.Row="2" Margin="0,4,0,0" Text="{Binding ChatInput}" Watermark="Type here to chat...">
+      <TextBox.KeyBindings>
+        <KeyBinding Gesture="Enter" Command="{Binding SendChatCommand}" />
+      </TextBox.KeyBindings>
+    </TextBox>
+
+    <DockPanel Grid.Row="3" Margin="0,8,0,0">
+      <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8">
+        <Button Content="{Binding LaunchText}" Command="{Binding LaunchCommand}" />
+        <Button Content="{Binding LockText}" Command="{Binding ToggleLockCommand}" IsVisible="{Binding IsHost}" />
+        <CheckBox Content="Auto-Ready" IsChecked="{Binding AutoReady}" IsVisible="{Binding IsPlayer}" />
+      </StackPanel>
+      <Button DockPanel.Dock="Right" Content="Leave Game" Command="{Binding LeaveCommand}" HorizontalAlignment="Right" />
+    </DockPanel>
+  </Grid>
+</UserControl>

@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AvClientView.ViewModels;
 
-/// <summary>The main window: shows the main menu or the skirmish lobby.</summary>
+/// <summary>The main window: shows the main menu, the skirmish lobby or the LAN screens.</summary>
 public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly IServiceProvider services;
@@ -19,6 +19,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         currentPage = menu;
 
         menu.SkirmishRequested += (_, _) => OpenSkirmish();
+        menu.LanRequested += (_, _) => OpenLan();
     }
 
     public MainMenuViewModel Menu { get; }
@@ -39,5 +40,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var skirmish = services.GetRequiredService<SkirmishViewModel>();
         skirmish.BackRequested += (_, _) => CurrentPage = Menu;
         CurrentPage = skirmish;
+    }
+
+    private LanLobbyViewModel lanLobby;
+
+    private void OpenLan()
+    {
+        if (lanLobby == null)
+        {
+            lanLobby = services.GetRequiredService<LanLobbyViewModel>();
+            lanLobby.BackRequested += (_, _) => CurrentPage = Menu;
+            lanLobby.RoomEntered += (_, _) => CurrentPage = lanLobby.Room;
+            lanLobby.RoomLeft += (_, _) => CurrentPage = lanLobby;
+        }
+
+        lanLobby.Open();
+        CurrentPage = lanLobby;
     }
 }

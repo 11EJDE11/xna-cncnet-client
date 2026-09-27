@@ -14,6 +14,12 @@
     <DataTemplate DataType="vm:SkirmishViewModel">
       <views:SkirmishView />
     </DataTemplate>
+    <DataTemplate DataType="vm:LanLobbyViewModel">
+      <views:LanLobbyView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:LanGameRoomViewModel">
+      <views:LanGameRoomView />
+    </DataTemplate>
   </Window.DataTemplates>
   <ContentControl Content="{Binding CurrentPage}" />
 </Window>

@@ -9,6 +9,7 @@ using AvClientView.ViewModels;
 using AvClientView.Views;
 
 using ClientLogic;
+using ClientLogic.Lan;
 using ClientLogic.Skirmish;
 
 using DTAClient.Domain;
@@ -39,6 +40,10 @@ public sealed class App : Application
                 .AddSingleton<SkirmishSession>()
                 .AddTransient<SkirmishViewModel>()
                 .AddSingleton<DirectDrawWrapperManager>()
+                .AddSingleton<LanLobby>()
+                .AddSingleton<LanGameRoom>()
+                .AddSingleton<LanGameRoomViewModel>()
+                .AddSingleton<LanLobbyViewModel>()
                 .BuildServiceProvider();
 
             // As the XNA client does at start-up: the selected renderer sets the game process's qres and single-core
@@ -47,7 +52,11 @@ public sealed class App : Application
 
             mainWindow.DataContext = Services.GetRequiredService<MainWindowViewModel>();
             desktop.MainWindow = mainWindow;
-            desktop.ShutdownRequested += (_, _) => Services.GetRequiredService<CnCNetUserData>().Save();
+            desktop.ShutdownRequested += (_, _) =>
+            {
+                Services.GetRequiredService<LanLobbyViewModel>().Shutdown();
+                Services.GetRequiredService<CnCNetUserData>().Save();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();
