@@ -39,7 +39,6 @@
   <ItemGroup>
     <PackageReference Include="Facepunch.Steamworks" GeneratePathProperty="true" />
     <PackageReference Include="SixLabors.ImageSharp" />
-    <PackageReference Include="DiscordRichPresence" />
     <PackageReference Include="lzo.net" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="OpenMcdf" />

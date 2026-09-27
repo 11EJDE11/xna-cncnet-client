@@ -13,6 +13,7 @@
     <PackageReference Include="lzo.net" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="OpenMcdf" />
+    <PackageReference Include="DiscordRichPresence" />
     <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="System.Text.Json" />
   </ItemGroup>
