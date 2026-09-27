@@ -162,6 +162,21 @@ public sealed class ScreenResolutions(IDisplayModeSource source)
         return (list, recommendedIndexes);
     }
 
+    /// <summary>The largest recommended resolution, else the largest full-screen one (the windowed client's default).</summary>
+    public ScreenResolution GetBestRecommendedResolution() => GetRecommendedResolutions().Max ?? SafeFullScreenResolution;
+
+    /// <summary>
+    /// Creates the ClientResolutionX/Y settings as the XNA client's Startup does, defaulting to the best recommended
+    /// resolution for a windowed client and the largest full-screen resolution for a fullscreen one.
+    /// </summary>
+    public void CreateClientResolutionSettings()
+    {
+        UserINISettings settings = UserINISettings.Instance;
+        ScreenResolution resolution = settings.BorderlessWindowedClient ? SafeFullScreenResolution : GetBestRecommendedResolution();
+        settings.ClientResolutionX = new ClientCore.Settings.IntSetting(settings.SettingsIni, UserINISettings.VIDEO, "ClientResolutionX", resolution.Width);
+        settings.ClientResolutionY = new ClientCore.Settings.IntSetting(settings.SettingsIni, UserINISettings.VIDEO, "ClientResolutionY", resolution.Height);
+    }
+
     public void RequireDesktopResolutionFitsMinimumResolution(ScreenResolution minimumClientResolution)
     {
         if (!DesktopResolution.Fits(minimumClientResolution))

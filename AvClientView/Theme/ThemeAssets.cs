@@ -25,13 +25,12 @@ public static class ThemeAssets
     public static IReadOnlyList<string> SearchPaths { get; private set; } = [];
 
     /// <summary>The client's render resolution (ClientResolutionX/Y), as the XNA client lays its screens out for it.</summary>
-    /// <remarks>
-    /// The XNA client creates these settings at start-up with a default from the screen; here they're read from the
-    /// settings INI (default 1280x768).
-    /// </remarks>
-    public static int RenderWidth => Math.Max(800, UserINISettings.Instance.SettingsIni.GetIntValue(UserINISettings.VIDEO, "ClientResolutionX", 1280));
+    /// <remarks>Program creates the settings at start-up as the XNA client does, with its defaults from the screen.</remarks>
+    public static int RenderWidth => UserINISettings.Instance.ClientResolutionX?.Value
+        ?? UserINISettings.Instance.SettingsIni.GetIntValue(UserINISettings.VIDEO, "ClientResolutionX", 1280);
 
-    public static int RenderHeight => Math.Max(600, UserINISettings.Instance.SettingsIni.GetIntValue(UserINISettings.VIDEO, "ClientResolutionY", 768));
+    public static int RenderHeight => UserINISettings.Instance.ClientResolutionY?.Value
+        ?? UserINISettings.Instance.SettingsIni.GetIntValue(UserINISettings.VIDEO, "ClientResolutionY", 768);
 
     /// <summary>Sets the search paths; call after the settings and theme are known.</summary>
     public static void Initialize()

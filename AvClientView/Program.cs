@@ -71,6 +71,9 @@ internal static class Program
         // The INI preprocessor, as the XNA client's Startup starts it; launching the game waits for it
         PreprocessorBackgroundTask.Instance.Run();
 
+        // The client resolution settings, with the XNA client's defaults from the screen
+        new ClientLogic.Settings.ScreenResolutions(new AvClientView.Services.WindowsDisplayModeSource()).CreateClientResolutionSettings();
+
         // The theme's textures and fonts are found as the XNA client finds them
         AvClientView.Theme.ThemeAssets.Initialize();
 
