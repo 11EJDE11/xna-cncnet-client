@@ -37,6 +37,15 @@ public abstract class MultiplayerLobbySession : LobbySession, IMapSharingLobby, 
         ProtocolVersion = ClientConfiguration.Instance.DefaultProtocolVersion;
         MaxAhead = ClientConfiguration.Instance.DefaultMaxAhead;
 
+        // Multiplayer saves (SAVEGAME.NET) are renamed and the spawn.ini kept for loading them later
+        if (SavedGameManager.AreSavedGamesAvailable())
+        {
+            savedGameWatcher = new System.IO.FileSystemWatcher(SafePath.CombineDirectoryPath(ProgramConstants.GamePath, "Saved Games"), "*.NET");
+            savedGameWatcher.Created += SavedGameWatcher_Event;
+            savedGameWatcher.Changed += SavedGameWatcher_Event;
+            savedGameWatcher.EnableRaisingEvents = false;
+        }
+
         MapSharing = new MapSharingService(uiDispatcher, this, this, this, ClientConfiguration.Instance.LocalGame);
         MapSharing.DownloadFailed += () =>
         {
@@ -752,9 +761,35 @@ public abstract class MultiplayerLobbySession : LobbySession, IMapSharingLobby, 
         RaiseChanged();
     }
 
+    private readonly System.IO.FileSystemWatcher savedGameWatcher;
+    private bool gameSaved;
+
+    private void SavedGameWatcher_Event(object sender, System.IO.FileSystemEventArgs e) => UiDispatcher.Post(() =>
+    {
+        Logger.Log("FSW Event: " + e.FullPath);
+
+        if (System.IO.Path.GetFileName(e.FullPath) == "SAVEGAME.NET")
+        {
+            if (!gameSaved)
+            {
+                bool success = SavedGameManager.InitSavedGames();
+
+                if (!success)
+                    return;
+            }
+
+            gameSaved = true;
+
+            SavedGameManager.RenameSavedGame();
+        }
+    });
+
     /// <summary>Starts the game (the XNA multiplayer lobby's StartGame).</summary>
     protected void StartMultiplayerGame()
     {
+        if (savedGameWatcher != null)
+            savedGameWatcher.EnableRaisingEvents = true;
+
         if (UserINISettings.Instance.StopGameLobbyMessageAudio)
             Sounds.SetEnabled(LobbySound.Message, false);
 
@@ -768,6 +803,11 @@ public abstract class MultiplayerLobbySession : LobbySession, IMapSharingLobby, 
     protected virtual void HandleGameProcessExited()
     {
         base.OnGameProcessExited();
+
+        gameSaved = false;
+
+        if (savedGameWatcher != null)
+            savedGameWatcher.EnableRaisingEvents = false;
 
         PlayerInfo pInfo = FindLocalPlayer();
         if (pInfo != null)
