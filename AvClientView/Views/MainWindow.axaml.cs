@@ -69,6 +69,7 @@ public partial class MainWindow : Window
                 topBar = new TopBarView(viewModel.TopBar) { ZIndex = 10000 };
                 Root.Children.Add(topBar);
 
+                Root.Children.Add(new PrivateMessagesOverlay(viewModel.PrivateMessages) { ZIndex = 9500 });
                 Root.Children.Add(new PrivateMessageNotificationView(viewModel.PrivateMessages) { ZIndex = 12000 });
                 Root.Children.Add(new GameInvitationsView(App.Services.GetRequiredService<GameInvitationsViewModel>()) { ZIndex = 12000 });
 

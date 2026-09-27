@@ -54,7 +54,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         menu.ExtrasRequested += (_, _) => Extras.Open();
         menu.StatisticsRequested += (_, _) => OpenStatistics();
         Extras.StatisticsRequested += (_, _) => OpenStatistics();
-        topBar.OptionsRequested += (_, _) => OpenOptions();
+        topBar.OptionsRequested += (_, _) =>
+        {
+            PrivateMessages.Close();
+            OpenOptions();
+        };
         options.RestartRequested += (_, _) => RestartRequested?.Invoke(this, EventArgs.Empty);
 
         // While the options window is open, the top bar's switch and options buttons can't be used (XNA)
@@ -71,7 +75,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         topBar.MainRequested += (_, _) => CurrentPage = primaryPage;
         topBar.CnCNetLobbyRequested += (_, _) => OpenCnCNet();
         topBar.PrivateMessagesRequested += (_, _) => PrivateMessages.Open();
-        PrivateMessages.OpenRequested += (_, _) => CurrentPage = PrivateMessages;
         PrivateMessages.JoinRequested += (_, name) =>
         {
             OpenCnCNet();
@@ -137,8 +140,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     partial void OnCurrentPageChanged(object oldValue, object newValue)
     {
-        if (newValue != PrivateMessages)
-            PrivateMessages.Close();
+        // The top bar's switches close the private messages window (XNA's tertiary switch)
+        PrivateMessages.Close();
 
         // The main menu's SwitchOn / SwitchOff
         if (UserINISettings.Instance.StopMusicOnMenu && oldValue != newValue)
