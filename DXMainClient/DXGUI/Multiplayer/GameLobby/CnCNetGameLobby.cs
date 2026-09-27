@@ -68,8 +68,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
             ctcpCommandHandlers = new CommandHandlerBase[]
             {
-                new StringCommandHandler("OR", HandleOptionsRequest),
-                new StringCommandHandler("R", HandleReadyRequest),
+                // Int handlers, as before: a string handler for "R" would also take RETURN and RENEGALL
+                new IntCommandHandler("OR", (sender, options) => HandleOptionsRequest(sender, new PlayerOptionsRequestMessage(PackedPlayerOptions.Unpack(options)).Encode())),
+                new IntCommandHandler("R", (sender, readyState) => HandleReadyRequest(sender, new ReadyRequestMessage(readyState).Encode())),
                 new StringCommandHandler("PO", ApplyPlayerOptions),
                 new StringCommandHandler(PlayerExtraOptions.CNCNET_MESSAGE_KEY, ApplyPlayerExtraOptions),
                 new StringCommandHandler("GO", ApplyGameOptions),
