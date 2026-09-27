@@ -86,6 +86,10 @@ internal static class Program
         DTAClient.Domain.CustomMissionHelper.Initialize();
         DTAClient.Domain.CustomMissionHelper.DeleteSupplementalMissionFiles();
 
+        // The match statistics, as the XNA statistics window reads them before any lobby: the lobbies' ranks use
+        // them, and a finished game is added to them and the whole database saved
+        ClientCore.Statistics.StatisticsManager.Instance.ReadStatistics(ProgramConstants.GamePath);
+
         // The theme's textures and fonts are found as the XNA client finds them
         AvClientView.Theme.ThemeAssets.Initialize();
 

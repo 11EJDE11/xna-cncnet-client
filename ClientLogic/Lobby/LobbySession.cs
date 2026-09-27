@@ -5,10 +5,12 @@ using System.Linq;
 
 using ClientCore;
 using ClientCore.Extensions;
+using ClientCore.Statistics;
 
 using ClientLogic.Launch;
 using ClientLogic.Options;
 using ClientLogic.Protocol;
+using ClientLogic.Statistics;
 using ClientLogic.UI;
 
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -140,6 +142,8 @@ public abstract partial class LobbySession : ObservableObject
 
     /// <summary>Raised when the players, map or options change, so views can refresh.</summary>
     public event EventHandler Changed;
+
+    private MatchStatistics matchStatistics;
 
     protected void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
 
@@ -303,6 +307,21 @@ public abstract partial class LobbySession : ObservableObject
     /// <summary>Whether this is a LAN or CnCNet lobby (not skirmish).</summary>
     public bool IsMultiplayerLobby => IsMultiplayer;
 
+    /// <summary>The game ID the match is recorded under (0 for skirmish, as the XNA lobby).</summary>
+    protected virtual int StatisticsGameId => 0;
+
+    /// <summary>No game option denies scoring (a match can then earn a rank).</summary>
+    public bool AllOptionsAllowScoring =>
+        Options.CheckBoxes.All(o => o.AllowScoring) && Options.DropDowns.All(o => o.AllowScoring);
+
+    /// <summary>The rank (stars on the launch button) the current setup can earn: a <see cref="LobbyStatistics"/> RANK_ value.</summary>
+    public int Rank => LobbyStatistics.GetRank(IsMultiplayer, GameModeMap, AllOptionsAllowScoring, Players, AIPlayers,
+        ProgramConstants.PLAYERNAME, SlotIndices.SpectatorSide);
+
+    /// <summary>The map list's rank icon for a map (an index into <see cref="LobbyStatistics.RankTextureNames"/>).</summary>
+    public int MapListRankIndex(GameModeMap gameModeMap) =>
+        LobbyStatistics.GetMapListRankIndex(StatisticsManager.Instance, gameModeMap, IsMultiplayer);
+
     public bool RemoveStartingLocations { get; protected set; }
 
     /// <summary>The IP address the launch uses for a human player; null for the local player.</summary>
@@ -386,7 +405,7 @@ public abstract partial class LobbySession : ObservableObject
     protected abstract string LobbyTypeName { get; }
 
     /// <summary>
-    /// Writes spawn.ini and the map file and starts the game (the XNA lobby's StartGame, without statistics).
+    /// Writes spawn.ini and the map file, starts the match statistics and starts the game (the XNA lobby's StartGame).
     /// </summary>
     protected void StartGame()
     {
@@ -415,6 +434,9 @@ public abstract partial class LobbySession : ObservableObject
         CopySupplementalMapFiles(launch);
         launch.MapIni.WriteIniFile(spawnMapIniFile.FullName);
 
+        matchStatistics = LobbyStatistics.CreateMatchStatistics(StatisticsGameId, GameModeMap, AllOptionsAllowScoring,
+            Players, AIPlayers, launch.HouseInfos, MPColors, SlotIndices.SpectatorSide, ProgramConstants.PLAYERNAME);
+
         launchCapture?.Complete(ProgramConstants.PLAYERNAME);
 
         GameProcess.GameProcessExited += GameProcess_Exited;
@@ -427,8 +449,23 @@ public abstract partial class LobbySession : ObservableObject
         OnGameProcessExited();
     }
 
-    /// <summary>Called on the UI thread's behalf when the game exits; the dispatcher is the front end's concern.</summary>
-    protected virtual void OnGameProcessExited() => RandomSeed = Random.Next();
+    /// <summary>
+    /// Called when the game exits, on the game process's thread; subclasses move the work to the UI thread before
+    /// calling this, since it records the match in the statistics.
+    /// </summary>
+    protected virtual void OnGameProcessExited()
+    {
+        Logger.Log("GameProcessExited: Parsing statistics.");
+
+        matchStatistics?.ParseStatistics(ProgramConstants.GamePath, ClientConfiguration.Instance.LocalGame, false);
+
+        Logger.Log("GameProcessExited: Adding match to statistics.");
+
+        StatisticsManager.Instance.AddMatchAndSaveDatabase(true, matchStatistics);
+        matchStatistics = null;
+
+        RandomSeed = Random.Next();
+    }
 
     private void DeleteSupplementalMapFiles()
     {

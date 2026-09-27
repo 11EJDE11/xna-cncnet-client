@@ -12,6 +12,7 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 
 using AvClientView.ViewModels;
@@ -22,6 +23,7 @@ using ClientCore.Extensions;
 
 using ClientLogic.Layout;
 using ClientLogic.Lobby;
+using ClientLogic.Statistics;
 
 using DTAClient.Domain.Multiplayer;
 
@@ -134,6 +136,16 @@ public static class ThemedLobbyView
 
         if (kind.IsMultiplayer)
             AddStatusIndicators(root, window, ini, viewModel);
+
+        // GameLaunchButton.InitStarDisplay: the rank the setup can earn, right of the text
+        if (LayoutView.FindNamed<ThemedButton>(root, "btnLaunchGame") is ThemedButton launchButton)
+        {
+            Bitmap[] rankTextures = LobbyStatistics.RankTextureNames.Select(ThemeAssets.LoadBitmap).ToArray();
+            void UpdateRank(object sender, EventArgs e) => launchButton.SetStar(rankTextures[viewModel.Rank]);
+            root.AttachedToVisualTree += (_, _) => { viewModel.Refreshed += UpdateRank; UpdateRank(null, EventArgs.Empty); };
+            root.DetachedFromVisualTree += (_, _) => viewModel.Refreshed -= UpdateRank;
+            UpdateRank(null, EventArgs.Empty);
+        }
 
         // The map labels the XNA lobby fills in
         foreach ((string label, string property) in new[]
@@ -659,14 +671,14 @@ public static class ThemedLobbyView
     }
 
     /// <summary>
-    /// The map list with the XNA columns: a rank icon (rankNone.png: the preview records no statistics) and the map
-    /// name, under their headers.
+    /// The map list with the XNA columns: the rank icon of the best result on the map and the map name, under their
+    /// headers.
     /// </summary>
     private static Control BuildMapList(LayoutControl layout, LobbyViewModelBase viewModel)
     {
         const int headerHeight = 19;
         var bitmapRankHeader = ThemeAssets.LoadBitmap("rank.png");
-        var rankNone = ThemeAssets.LoadBitmap("rankNone.png");
+        Bitmap[] rankTextures = LobbyStatistics.RankTextureNames.Select(ThemeAssets.LoadBitmap).ToArray();
         int rankWidth = bitmapRankHeader?.PixelSize.Width ?? 22;
         (FontFamily headerFont, double headerSize) = ThemeFonts.Get(1);
 
@@ -709,13 +721,13 @@ public static class ThemedLobbyView
         list.Bind(ItemsControl.ItemsSourceProperty, new Binding(nameof(LobbyViewModelBase.Maps)));
         list.Bind(SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(LobbyViewModelBase.SelectedMapIndex)) { Mode = BindingMode.TwoWay });
         list.Bind(InputElement.IsHitTestVisibleProperty, new Binding(nameof(LobbyViewModelBase.CanChangeMap)));
-        list.ItemTemplate = new FuncDataTemplate<string>((text, _) => new StackPanel
+        list.ItemTemplate = new FuncDataTemplate<MapListItem>((item, _) => new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Children =
             {
-                new Image { Source = rankNone, Width = rankWidth, Stretch = Stretch.None },
-                new TextBlock { Text = text, Margin = new Thickness(3, 1), VerticalAlignment = VerticalAlignment.Center },
+                new Image { Source = item == null ? null : rankTextures[item.RankIndex], Width = rankWidth, Stretch = Stretch.None },
+                new TextBlock { Text = item?.Text, Margin = new Thickness(3, 1), VerticalAlignment = VerticalAlignment.Center },
             },
         });
         list.Resources["ListBoxItemPadding"] = new Thickness(0);

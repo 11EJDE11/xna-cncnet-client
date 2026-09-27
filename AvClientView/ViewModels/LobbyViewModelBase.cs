@@ -61,6 +61,10 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         this.session = session;
         this.mapLoader = mapLoader;
 
+        // A finished game can change the maps' ranks (the XNA skirmish lobby lists its maps again)
+        ClientCore.Statistics.StatisticsManager.Instance.GameAdded += (_, _) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => OnMapSearchTextChanged(MapSearchText));
+
         // The XNA map filter drop-down: "Favorites" first, then the game modes
         GameModes = [FavoriteMapsLabel, .. mapLoader.GameModes.Where(gm => gm.Maps.Count > 0).Select(gm => gm.UIName).Distinct()];
 
@@ -87,7 +91,10 @@ public abstract partial class LobbyViewModelBase : ObservableObject
 
     public IReadOnlyList<string> GameModes { get; }
 
-    public ObservableCollection<string> Maps { get; } = [];
+    public ObservableCollection<MapListItem> Maps { get; } = [];
+
+    /// <summary>The rank the current setup can earn (the launch button's stars; 0 for none).</summary>
+    public int Rank => session.Rank;
 
     public ObservableCollection<PlayerRowViewModel> Rows { get; } = [];
 
@@ -266,7 +273,7 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         currentMaps = MapSearch.Filter(maps, MapSearchText);
         Maps.Clear();
         foreach (GameModeMap gmm in currentMaps)
-            Maps.Add(MapListText(gmm));
+            Maps.Add(new MapListItem(MapListText(gmm), session.MapListRankIndex(gmm)));
     }
 
     /// <summary>Shows the session's state.</summary>
@@ -310,6 +317,7 @@ public abstract partial class LobbyViewModelBase : ObservableObject
 
             OnPropertyChanged(nameof(CanChangeMap));
             OnPropertyChanged(nameof(CanChangeOptions));
+            OnPropertyChanged(nameof(Rank));
             OnRefreshed();
             Refreshed?.Invoke(this, EventArgs.Empty);
         }
@@ -617,6 +625,12 @@ public sealed partial class DropDownOptionViewModel : ObservableObject
 }
 
 /// <summary>A start location marker on the map preview.</summary>
+/// <summary>A map list row: the map's text and its rank icon (an index into LobbyStatistics.RankTextureNames).</summary>
+public sealed record MapListItem(string Text, int RankIndex)
+{
+    public override string ToString() => Text;
+}
+
 public sealed record StartMarkerViewModel(int Number, double X, double Y, string Players)
 {
     /// <summary>The players on this start, with their team tags and colours.</summary>

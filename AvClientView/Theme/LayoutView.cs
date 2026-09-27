@@ -191,6 +191,8 @@ public sealed class ThemedButton : Border
     private readonly IBrush hoverBrush;
     private readonly ThemeSound hoverSound;
     private readonly ThemeSound clickSound;
+    private readonly int fontIndex;
+    private Image star;
     private bool pressed;
 
     public ThemedButton(LayoutControl button)
@@ -205,6 +207,7 @@ public sealed class ThemedButton : Border
         idleBrush = new SolidColorBrush(button.TextColor is { } idleColor ? ThemeAssets.ToColor(idleColor) : ThemeAssets.ButtonTextColor);
         hoverBrush = new SolidColorBrush(button.TextColorHover is { } hoverColor ? ThemeAssets.ToColor(hoverColor) : ThemeAssets.ButtonHoverColor);
 
+        fontIndex = button.FontIndex;
         (FontFamily family, double size) = ThemeFonts.Get(button.FontIndex);
 
         Width = button.Width > 0 ? button.Width : idle?.PixelSize.Width ?? double.NaN;
@@ -241,7 +244,40 @@ public sealed class ThemedButton : Border
     public string Text
     {
         get => caption.Text;
-        set => caption.Text = value;
+        set
+        {
+            caption.Text = value;
+            UpdateStarPosition();
+        }
+    }
+
+    /// <summary>
+    /// The GameLaunchButton's star display: a rank texture right of the centred text (null hides it).
+    /// </summary>
+    public void SetStar(Bitmap texture)
+    {
+        if (star == null)
+        {
+            star = new Image { Stretch = Stretch.None, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false };
+            ((Grid)Child).Children.Add(star);
+        }
+
+        star.Source = texture;
+        star.IsVisible = texture != null;
+        UpdateStarPosition();
+    }
+
+    private void UpdateStarPosition()
+    {
+        if (star?.Source is not Bitmap texture)
+            return;
+
+        // StarDisplay: X = Width / 2 + text width / 2 + 3, centred vertically (integer maths, as XNA)
+        int width = (int)Width;
+        int height = (int)Height;
+        int x = width / 2 + ThemeFonts.Measure(Text ?? string.Empty, fontIndex).Width / 2 + 3;
+        int y = (height - texture.PixelSize.Height) / 2;
+        star.Margin = new Thickness(x, y, 0, 0);
     }
 
     protected override void OnPointerEntered(PointerEventArgs e)

@@ -61,6 +61,8 @@ public abstract class MultiplayerLobbySession : LobbySession
 
     public int UniqueGameID { get; protected set; }
 
+    protected override int StatisticsGameId => UniqueGameID;
+
     /// <summary>The last map change was to no map (or an unknown one).</summary>
     public bool LastMapChangeWasInvalid { get; protected set; }
 

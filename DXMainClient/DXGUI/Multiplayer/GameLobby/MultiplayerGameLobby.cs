@@ -1226,17 +1226,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             inputs["ProtocolVersion"] = ProtocolVersion;
         }
 
-        protected override int GetDefaultMapRankIndex(GameModeMap gameModeMap)
-        {
-            if (gameModeMap.MaxPlayers > 3)
-                return StatisticsManager.Instance.GetCoopRankForDefaultMap(gameModeMap.Map.UntranslatedName, gameModeMap.MaxPlayers);
-
-            if (StatisticsManager.Instance.HasWonMapInPvP(gameModeMap.Map.UntranslatedName, gameModeMap.GameMode.UntranslatedUIName, gameModeMap.MaxPlayers))
-                return 2;
-
-            return -1;
-        }
-
         public void SwitchOn() => Enable();
 
         public void SwitchOff() => Disable();

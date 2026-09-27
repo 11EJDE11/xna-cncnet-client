@@ -4,6 +4,7 @@ using ClientLogic.Launch;
 using ClientLogic.Lobby;
 using ClientLogic.Options;
 using ClientLogic.Protocol;
+using ClientLogic.Statistics;
 using ClientLogic.UI;
 using ClientGUI;
 using DTAClient.Domain;
@@ -775,16 +776,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 var gameModeMap = filteredMaps[i];
 
                 XNAListBoxItem rankItem = new XNAListBoxItem();
-                if (gameModeMap.IsCoop)
-                {
-                    // Note: StatisticsManager.Statistics must be initialized to call `HasBeatCoOpMap()`. This means StatisticsWindow must be initialized before any lobbies extending GameLobbyBase.
-                    if (StatisticsManager.Instance.HasBeatCoOpMap(gameModeMap.Map.UntranslatedName, gameModeMap.GameMode.UntranslatedUIName))
-                        rankItem.Texture = RankTextures[Math.Abs(2 - gameModeMap.CoopDifficultyLevel) + 1];
-                    else
-                        rankItem.Texture = RankTextures[0];
-                }
-                else
-                    rankItem.Texture = RankTextures[GetDefaultMapRankIndex(gameModeMap) + 1];
+                // Note: StatisticsManager.Statistics must be initialized to call `HasBeatCoOpMap()`. This means StatisticsWindow must be initialized before any lobbies extending GameLobbyBase.
+                rankItem.Texture = RankTextures[LobbyStatistics.GetMapListRankIndex(StatisticsManager.Instance, gameModeMap, isMultiplayer)];
 
                 XNAListBoxItem mapNameItem = new XNAListBoxItem();
                 var mapNameText = gameModeMap.Map.Name;
@@ -831,8 +824,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (gameModeMapChanged)
                 LbGameModeMapList_SelectedIndexChanged();
         }
-
-        protected abstract int GetDefaultMapRankIndex(GameModeMap gameModeMap);
 
         private void LbGameModeMapList_RightClick(object sender, EventArgs e)
         {
@@ -1458,47 +1449,12 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         private void InitializeMatchStatistics(PlayerHouseInfo[] houseInfos)
         {
-            matchStatistics = new MatchStatistics(ProgramConstants.GAME_VERSION, UniqueGameID,
-                Map.UntranslatedName, GameMode.UntranslatedUIName, Players.Count, GameModeMap.IsCoop);
-
-            bool isValidForStar = true;
-            foreach (GameLobbyCheckBox checkBox in CheckBoxes)
-            {
-                if (!checkBox.AllowScoring)
-                {
-                    isValidForStar = false;
-                    break;
-                }
-            }
-            foreach (GameLobbyDropDown dropDown in DropDowns)
-            {
-                if (!dropDown.AllowScoring)
-                {
-                    isValidForStar = false;
-                    break;
-                }
-            }
-
-            matchStatistics.IsValidForStar = isValidForStar;
-
-            for (int pId = 0; pId < Players.Count; pId++)
-            {
-                PlayerInfo pInfo = Players[pId];
-                matchStatistics.AddPlayer(pInfo.Name, pInfo.Name == ProgramConstants.PLAYERNAME,
-                    false, pInfo.SideId == SideCount + RandomSelectorCount, houseInfos[pId].SideIndex + 1, pInfo.TeamId,
-                    MPColors.FindIndex(c => c.GameColorIndex == houseInfos[pId].ColorIndex), 10);
-            }
-
-            for (int aiId = 0; aiId < AIPlayers.Count; aiId++)
-            {
-                var pHouseInfo = houseInfos[Players.Count + aiId];
-                PlayerInfo aiInfo = AIPlayers[aiId];
-                matchStatistics.AddPlayer("Computer", false, true, false,
-                    pHouseInfo.SideIndex + 1, aiInfo.TeamId,
-                    MPColors.FindIndex(c => c.GameColorIndex == pHouseInfo.ColorIndex),
-                    aiInfo.AILevel);
-            }
+            matchStatistics = LobbyStatistics.CreateMatchStatistics(UniqueGameID, GameModeMap, AllOptionsAllowScoring(),
+                Players, AIPlayers, houseInfos, MPColors, SideCount + RandomSelectorCount, ProgramConstants.PLAYERNAME);
         }
+
+        private bool AllOptionsAllowScoring() =>
+            CheckBoxes.All(checkBox => checkBox.AllowScoring) && DropDowns.All(dropDown => dropDown.AllowScoring);
 
         /// <summary>
         /// Copies the supplemental map files of a launch to the game directory and updates the
@@ -2096,167 +2052,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             if (GameMode == null || Map == null)
                 return Rank.None;
 
-            foreach (GameLobbyCheckBox checkBox in CheckBoxes)
-            {
-                if (!checkBox.AllowScoring)
-                    return Rank.None;
-            }
-
-            foreach (GameLobbyDropDown dropDown in DropDowns)
-            {
-                if (!dropDown.AllowScoring)
-                    return Rank.None;
-            }
-
-            PlayerInfo localPlayer = Players.Find(p => p.Name == ProgramConstants.PLAYERNAME);
-
-            if (localPlayer == null)
-                return Rank.None;
-
-            if (IsPlayerSpectator(localPlayer))
-                return Rank.None;
-
-            // These variables are used by both the skirmish and multiplayer code paths
-            int[] teamMemberCounts = new int[5];
-            int lowestEnemyAILevel = 2;
-            int highestAllyAILevel = 0;
-
-            foreach (PlayerInfo aiPlayer in AIPlayers)
-            {
-                teamMemberCounts[aiPlayer.TeamId]++;
-
-                if (aiPlayer.TeamId > 0 && aiPlayer.TeamId == localPlayer.TeamId)
-                {
-                    if (aiPlayer.AILevel > highestAllyAILevel)
-                        highestAllyAILevel = aiPlayer.AILevel;
-                }
-                else
-                {
-                    if (aiPlayer.AILevel < lowestEnemyAILevel)
-                        lowestEnemyAILevel = aiPlayer.AILevel;
-                }
-            }
-
-            if (isMultiplayer)
-            {
-                if (Players.Count == 1)
-                    return Rank.None;
-
-                // PvP stars for 2-player and 3-player maps
-                if (GameModeMap.MaxPlayers <= 3)
-                {
-                    List<PlayerInfo> filteredPlayers = Players.Where(p => !IsPlayerSpectator(p)).ToList();
-
-                    if (AIPlayers.Count > 0)
-                        return Rank.None;
-
-                    if (filteredPlayers.Count != GameModeMap.MaxPlayers)
-                        return Rank.None;
-
-                    int localTeamIndex = localPlayer.TeamId;
-                    if (localTeamIndex > 0 && filteredPlayers.Count(p => p.TeamId == localTeamIndex) > 1)
-                        return Rank.None;
-
-                    return Rank.Hard;
-                }
-
-                // Coop stars for maps with 4 or more players
-                // See the code in StatisticsManager.GetRankForCoopMatch for the conditions
-
-                if (Players.Find(p => IsPlayerSpectator(p)) != null)
-                    return Rank.None;
-
-                if (AIPlayers.Count == 0)
-                    return Rank.None;
-
-                if (Players.Find(p => p.TeamId != localPlayer.TeamId) != null)
-                    return Rank.None;
-
-                if (Players.Find(p => p.TeamId == 0) != null)
-                    return Rank.None;
-
-                if (AIPlayers.Find(p => p.TeamId == 0) != null)
-                    return Rank.None;
-
-                teamMemberCounts[localPlayer.TeamId] += Players.Count;
-
-                if (lowestEnemyAILevel < highestAllyAILevel)
-                {
-                    // Check that the player's AI allies aren't stronger
-                    return Rank.None;
-                }
-
-                // Check that all teams have at least as many players
-                // as the human players' team
-                int allyCount = teamMemberCounts[localPlayer.TeamId];
-
-                for (int i = 1; i < 5; i++)
-                {
-                    if (i == localPlayer.TeamId)
-                        continue;
-
-                    if (teamMemberCounts[i] > 0)
-                    {
-                        if (teamMemberCounts[i] < allyCount)
-                            return Rank.None;
-                    }
-                }
-
-                return lowestEnemyAILevel + 1;
-            }
-
-            // *********
-            // Skirmish!
-            // *********
-
-            if (AIPlayers.Count != GameModeMap.MaxPlayers - 1)
-                return Rank.None;
-
-            teamMemberCounts[localPlayer.TeamId]++;
-
-            if (lowestEnemyAILevel < highestAllyAILevel)
-            {
-                // Check that the player's AI allies aren't stronger
-                return Rank.None;
-            }
-
-            if (localPlayer.TeamId > 0)
-            {
-                // Check that all teams have at least as many players
-                // as the local player's team
-                int allyCount = teamMemberCounts[localPlayer.TeamId];
-
-                for (int i = 1; i < 5; i++)
-                {
-                    if (i == localPlayer.TeamId)
-                        continue;
-
-                    if (teamMemberCounts[i] > 0)
-                    {
-                        if (teamMemberCounts[i] < allyCount)
-                            return Rank.None;
-                    }
-                }
-
-                // Check that there is a team other than the players' team that is at least as large
-                bool pass = false;
-                for (int i = 1; i < 5; i++)
-                {
-                    if (i == localPlayer.TeamId)
-                        continue;
-
-                    if (teamMemberCounts[i] >= allyCount)
-                    {
-                        pass = true;
-                        break;
-                    }
-                }
-
-                if (!pass)
-                    return Rank.None;
-            }
-
-            return lowestEnemyAILevel + 1;
+            return LobbyStatistics.GetRank(isMultiplayer, GameModeMap, AllOptionsAllowScoring(), Players, AIPlayers,
+                ProgramConstants.PLAYERNAME, GetSpectatorSideIndex());
         }
 
         protected string AddGameOptionPreset(string name)

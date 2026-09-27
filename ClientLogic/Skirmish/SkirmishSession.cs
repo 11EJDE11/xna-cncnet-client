@@ -27,10 +27,20 @@ public sealed class SkirmishSession : LobbySession
     public const string WINDOW_NAME = "SkirmishLobby";
     private const string SETTINGS_PATH = "Client/SkirmishSettings.ini";
 
-    public SkirmishSession(MapLoader mapLoader, GameProcessService gameProcess, IDialogService dialogs, Random random)
+    private readonly IUiDispatcher uiDispatcher;
+
+    public SkirmishSession(MapLoader mapLoader, GameProcessService gameProcess, IDialogService dialogs, IUiDispatcher uiDispatcher, Random random)
         : base(WINDOW_NAME, mapLoader, gameProcess, dialogs, random)
     {
+        this.uiDispatcher = uiDispatcher;
     }
+
+    /// <summary>The game exited: the match is recorded on the UI thread and the lobby refreshes (its ranks).</summary>
+    protected override void OnGameProcessExited() => uiDispatcher.Post(() =>
+    {
+        base.OnGameProcessExited();
+        RaiseChanged();
+    });
 
     protected override bool IsMultiplayer => false;
 

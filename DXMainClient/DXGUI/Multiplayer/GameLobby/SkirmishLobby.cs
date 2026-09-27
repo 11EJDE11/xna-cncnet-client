@@ -211,11 +211,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             return true;
         }
 
-        protected override int GetDefaultMapRankIndex(GameModeMap gameModeMap)
-        {
-            return StatisticsManager.Instance.GetSkirmishRankForDefaultMap(gameModeMap.Map.UntranslatedName, gameModeMap.MaxPlayers);
-        }
-
         protected override void GameProcessExited()
         {
             base.GameProcessExited();
