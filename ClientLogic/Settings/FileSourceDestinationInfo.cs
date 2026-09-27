@@ -7,7 +7,7 @@ using System.IO;
 
 namespace ClientGUI.Settings
 {
-    sealed class FileSourceDestinationInfo
+    public sealed class FileSourceDestinationInfo
     {
         private readonly string destinationPath;
         private readonly string sourcePath;
