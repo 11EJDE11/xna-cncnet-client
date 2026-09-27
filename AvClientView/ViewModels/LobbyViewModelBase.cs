@@ -110,6 +110,40 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     /// <summary>The local player can change the game options.</summary>
     public virtual bool CanChangeOptions => true;
 
+    /// <summary>The extra player options (force random sides, auto allying, ...).</summary>
+    public PlayerExtraOptionsState ExtraOptions => session.ExtraOptions;
+
+    /// <summary>The local player can change the extra player options (the host, or the skirmish player).</summary>
+    public virtual bool CanChangeExtraOptions => true;
+
+    /// <summary>The selected game mode and map, for the extra options' team-start mappings.</summary>
+    public GameModeMap CurrentGameModeMap => session.GameModeMap;
+
+    /// <summary>The extra options panel's team-start mappings, once the theme's lobby has the panel.</summary>
+    public TeamStartMappingsEditor ExtraOptionsEditor { get; private set; }
+
+    /// <summary>
+    /// The theme has the extra player options panel: extra option changes now apply (see LobbySession), and the
+    /// panel's mappings follow the host and the map as PlayerExtraOptionsPanel does.
+    /// </summary>
+    public void EnableExtraOptionsPanel()
+    {
+        if (ExtraOptionsEditor != null)
+            return;
+
+        session.EnableExtraOptionsPanel();
+        ExtraOptionsEditor = new TeamStartMappingsEditor(session.ExtraOptions);
+        ExtraOptionsEditor.SetIsHost(CanChangeExtraOptions);
+        ExtraOptionsEditor.UpdateForGameModeMap(session.GameModeMap);
+        session.Changed += (_, _) =>
+        {
+            if (ExtraOptionsEditor.IsHost != CanChangeExtraOptions)
+                ExtraOptionsEditor.SetIsHost(CanChangeExtraOptions);
+
+            ExtraOptionsEditor.UpdateForGameModeMap(session.GameModeMap);
+        };
+    }
+
     [ObservableProperty]
     private IReadOnlyList<string> startItems = ["???"];
 
@@ -286,16 +320,38 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     /// <summary>A short status shown next to a human player's name (e.g. ready).</summary>
     protected virtual string GetPlayerStatus(PlayerInfo pInfo) => string.Empty;
 
+    /// <summary>Which of a row's drop-downs can be changed, as GameLobbyBase.ComputeSlotControls decides.</summary>
+    private SlotControls ComputeSlotControls(bool isAi, bool isEditable)
+    {
+        GameModeMap gmm = session.GameModeMap;
+        return PlayerSlotRules.ComputeControls(isAi, allowOptionsChange: isEditable, isLocalPlayer: false,
+            session.ExtraOptions.ToPlayerExtraOptions(), hasMap: gmm != null,
+            mapForcesRandomStarts: gmm?.ForceRandomStartLocations ?? false,
+            mapForbidsTeams: gmm != null && (gmm.IsCoop || gmm.ForceNoTeams));
+    }
+
     private void RefreshRows()
     {
         Rows.Clear();
         int row = 0;
 
         foreach (PlayerInfo pInfo in session.Players)
-            Rows.Add(new PlayerRowViewModel(this, row++, pInfo, isHuman: true, isFreeRow: false, CanEditRow(pInfo, false), GetPlayerStatus(pInfo)));
+        {
+            bool editable = CanEditRow(pInfo, false);
+            Rows.Add(new PlayerRowViewModel(this, row++, pInfo, isHuman: true, isFreeRow: false, editable, GetPlayerStatus(pInfo))
+            {
+                Controls = ComputeSlotControls(isAi: false, editable),
+            });
+        }
 
         foreach (PlayerInfo aiInfo in session.AIPlayers)
-            Rows.Add(new PlayerRowViewModel(this, row++, aiInfo, isHuman: false, isFreeRow: false, CanEditRow(aiInfo, false), string.Empty));
+        {
+            bool editable = CanEditRow(aiInfo, false);
+            Rows.Add(new PlayerRowViewModel(this, row++, aiInfo, isHuman: false, isFreeRow: false, editable, string.Empty)
+            {
+                Controls = ComputeSlotControls(isAi: true, editable),
+            });
+        }
 
         if (row < LobbySession.MAX_PLAYER_COUNT && (session.GameModeMap == null || !session.GameModeMap.HumanPlayersOnly))
             Rows.Add(new PlayerRowViewModel(this, row, null, isHuman: false, isFreeRow: true, CanEditRow(null, true), string.Empty));
@@ -378,6 +434,17 @@ public sealed partial class PlayerRowViewModel : ObservableObject
 
     /// <summary>The side, colour, start and team can be changed.</summary>
     public bool CanChangeOptions => IsEditable && !IsFreeRow;
+
+    /// <summary>The XNA lobby's per-drop-down rules (forced extra options, the map's forced starts / no teams); null for the free row.</summary>
+    public SlotControls Controls { get; init; }
+
+    public bool CanChangeSide => CanChangeOptions && (Controls?.Side ?? true);
+
+    public bool CanChangeColor => CanChangeOptions && (Controls?.Color ?? true);
+
+    public bool CanChangeStart => CanChangeOptions && (Controls?.Start ?? true);
+
+    public bool CanChangeTeam => CanChangeOptions && (Controls?.Team ?? true);
 
     public string PlayerName { get; }
 

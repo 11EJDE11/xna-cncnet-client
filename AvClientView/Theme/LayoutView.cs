@@ -185,8 +185,8 @@ public sealed class ThemedButton : Border
 {
     private readonly Image image;
     private readonly TextBlock caption;
-    private readonly Bitmap idle;
-    private readonly Bitmap hover;
+    private Bitmap idle;
+    private Bitmap hover;
     private readonly IBrush idleBrush;
     private readonly IBrush hoverBrush;
     private readonly ThemeSound hoverSound;
@@ -229,6 +229,14 @@ public sealed class ThemedButton : Border
     }
 
     public event EventHandler Click;
+
+    /// <summary>Changes the button's textures (e.g. the extra options button while options are set).</summary>
+    public void SetTextures(string idleTexture, string hoverTexture)
+    {
+        idle = ThemeAssets.LoadBitmap(idleTexture) ?? idle;
+        hover = ThemeAssets.LoadBitmap(hoverTexture) ?? idle;
+        image.Source = IsPointerOver ? hover : idle;
+    }
 
     public string Text
     {

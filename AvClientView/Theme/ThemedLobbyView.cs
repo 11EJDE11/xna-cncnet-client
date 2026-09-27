@@ -16,9 +16,12 @@ using AvClientView.ViewModels;
 using AvClientView.Views;
 
 using ClientCore;
+using ClientCore.Extensions;
 
 using ClientLogic.Layout;
 using ClientLogic.Lobby;
+
+using DTAClient.Domain.Multiplayer;
 
 using Rampastring.Tools;
 
@@ -101,14 +104,31 @@ public static class ThemedLobbyView
                 control.Visible = false;
         }
 
-        // The extra options panel starts hidden in XNA; the preview doesn't have it yet
-        if (window.Find("PlayerExtraOptionsPanel") is LayoutControl extraOptions)
-            extraOptions.Visible = false;
-        if (window.Find("btnPlayerExtraOptionsOpen") is LayoutControl extraOptionsButton)
-            extraOptionsButton.Visible = false;
+        // The extra player options: only when the theme has the button (GameLobbyBase), with the panel's controls
+        // created as PlayerExtraOptionsPanel.Initialize does
+        bool hasExtraOptions = window.Find("btnPlayerExtraOptionsOpen") != null && window.Find("PlayerExtraOptionsPanel") != null;
+        if (hasExtraOptions)
+        {
+            AddPlayerExtraOptionsControls(ini, reader, parser, window.Find("PlayerExtraOptionsPanel"));
+            viewModel.EnableExtraOptionsPanel();
+        }
+        else if (window.Find("PlayerExtraOptionsPanel") is LayoutControl unusedPanel)
+        {
+            unusedPanel.Visible = false;
+        }
 
-        Canvas root = LayoutView.Build(window, name => onButton(name, window.Find(name)));
+        Canvas root = null;
+        root = LayoutView.Build(window, name =>
+        {
+            if (hasExtraOptions && HandleExtraOptionsButton(root, name))
+                return;
+
+            onButton(name, window.Find(name));
+        });
         AddInteractiveControls(root, window, viewModel);
+
+        if (hasExtraOptions)
+            BindPlayerExtraOptions(root, window, viewModel);
 
         if (kind.IsMultiplayer)
             AddStatusIndicators(root, window, ini, viewModel);
@@ -298,6 +318,235 @@ public static class ThemedLobbyView
         UpdateRows();
     }
 
+    #region Extra player options
+
+    private const int CHECKBOX_TEXTURE_SIZE = 18;
+
+    /// <summary>
+    /// The controls PlayerExtraOptionsPanel.Initialize creates (close button, header, the four "force" check boxes,
+    /// auto allying with its help button, presets and the eight team-start drop-downs), then the theme's sections
+    /// for each of them (GameLobbyBase reads the panel's children).
+    /// </summary>
+    private static void AddPlayerExtraOptionsControls(IniFile ini, XnaLayoutReader reader, LayoutExpressionParser parser, LayoutControl panel)
+    {
+        const int defaultX = 24;
+
+        panel.SolidBackground = new ClientLogic.UI.ChatColor(0, 0, 0, 255);
+        panel.DrawBorders = true;
+
+        (int Width, int Height) CheckBoxSize(string text)
+        {
+            (int w, int h) = ThemeFonts.Measure(text, 0);
+            return (w + 5 + CHECKBOX_TEXTURE_SIZE, Math.Max(h, CHECKBOX_TEXTURE_SIZE));
+        }
+
+        LayoutControl Add(string name, string type, int x, int y, int width, int height, string text = null)
+        {
+            var control = new LayoutControl(name, type, XnaLayoutReader.KindOf(type)) { X = x, Y = y, Width = width, Height = height, Text = text ?? string.Empty };
+            panel.AddChild(control);
+            return control;
+        }
+
+        LayoutControl CheckBox(string name, int y, string text)
+        {
+            (int w, int h) = CheckBoxSize(text);
+            return Add(name, "XNAClientCheckBox", defaultX, y, w, h, text);
+        }
+
+        LayoutControl btnClose = Add("btnClose", "XNAClientButton", 0, 0, 0, 0);
+        btnClose.IdleTexture = "optionsButtonClose.png";
+        btnClose.HoverTexture = "optionsButtonClose_c.png";
+
+        LayoutControl lblHeader = Add("lblHeader", "XNALabel", defaultX, 4, 0, 18, "Extra Player Options".L10N("Client:Main:ExtraPlayerOptions"));
+        LayoutControl sides = CheckBox("chkBoxForceRandomSides", lblHeader.Y + lblHeader.Height + 4, "Force Random Sides".L10N("Client:Main:ForceRandomSides"));
+        LayoutControl colors = CheckBox("chkBoxForceRandomColors", sides.Y + sides.Height + 4, "Force Random Colors".L10N("Client:Main:ForceRandomColors"));
+        LayoutControl noTeams = CheckBox("chkBoxForceNoTeams", colors.Y + colors.Height + 4, "Force No Teams".L10N("Client:Main:ForceNoTeams"));
+        LayoutControl starts = CheckBox("chkBoxForceRandomStarts", noTeams.Y + noTeams.Height + 4, "Force Random Starts".L10N("Client:Main:ForceRandomStarts"));
+        LayoutControl useMappings = CheckBox("chkBoxUseTeamStartMappings", starts.Y + starts.Height + 20, "Enable Auto Allying:".L10N("Client:Main:EnableAutoAllying"));
+
+        LayoutControl btnHelp = Add("btnHelp", "XNAClientButton", useMappings.X + useMappings.Width + 4, useMappings.Y - 1, 0, 0);
+        btnHelp.IdleTexture = "questionMark.png";
+        btnHelp.HoverTexture = "questionMark_c.png";
+
+        string presetText = "Presets:".L10N("Client:Main:Presets");
+        (int presetW, int presetH) = ThemeFonts.Measure(presetText, 0);
+        LayoutControl lblPreset = Add("lblPreset", "XNALabel", useMappings.X, useMappings.Y + useMappings.Height + 8, presetW, presetH, presetText);
+        LayoutControl ddPreset = Add("ddTeamStartMappingPreset", "XNAClientDropDown", lblPreset.X + 50, lblPreset.Y - 2, 160, 22);
+
+        var mappingsPanel = new LayoutControl("teamStartMappingsPanel", "TeamStartMappingsPanel", LayoutControlKind.Panel)
+        {
+            X = lblPreset.X,
+            Y = ddPreset.Y + ddPreset.Height + 8,
+            Width = panel.Width,
+            Height = panel.Height - (ddPreset.Y + ddPreset.Height) + 4,
+        };
+        panel.AddChild(mappingsPanel);
+
+        // GetTeamMappingPanelRectangle: two per column, 50x22, 4 px apart
+        const int mappingWidth = 50;
+        const int mappingHeight = 22;
+        for (int i = 0; i < TeamStartMappingsEditor.MAX_START_COUNT; i++)
+        {
+            int x = i < 2 ? 4 : i / 2 * (mappingWidth + 4) + 3;
+            int y = i % 2 == 0 ? 0 : mappingHeight + 4;
+
+            var mapping = new LayoutControl("teamStartMappingPanel" + (i + 1), "TeamStartMappingPanel", LayoutControlKind.Panel)
+            {
+                X = x,
+                Y = y,
+                Width = mappingWidth,
+                Height = mappingHeight,
+            };
+            mappingsPanel.AddChild(mapping);
+
+            mapping.AddChild(new LayoutControl("lblStart" + (i + 1), "XNALabel", LayoutControlKind.Label) { X = 0, Y = 0, Width = 10, Height = 22, Text = (i + 1).ToString() });
+            mapping.AddChild(new LayoutControl("ddTeamStart" + (i + 1), "XNAClientDropDown", LayoutControlKind.Other) { X = 10, Y = -3, Width = 35, Height = 22 });
+        }
+
+        foreach (LayoutControl child in panel.Children.ToList())
+            reader.ReadInitializableControl(ini, child, parser);
+
+        foreach (LayoutControl control in All(panel))
+            reader.Initialize(control);
+    }
+
+    /// <summary>The open, close and help buttons of the extra options; true if <paramref name="name"/> was one.</summary>
+    private static bool HandleExtraOptionsButton(Canvas root, string name)
+    {
+        switch (name)
+        {
+            case "btnPlayerExtraOptionsOpen":
+                SetExtraOptionsVisible(root, !(LayoutView.FindNamed<Canvas>(root, "PlayerExtraOptionsPanel")?.IsVisible ?? false));
+                return true;
+            case "btnClose":
+                SetExtraOptionsVisible(root, false);
+                return true;
+            case "btnHelp":
+                if (App.Services?.GetService(typeof(ClientLogic.UI.IDialogService)) is ClientLogic.UI.IDialogService dialogs)
+                    ShowAutoAllyingHelp(dialogs);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static void ShowAutoAllyingHelp(ClientLogic.UI.IDialogService dialogs)
+    {
+        dialogs.ShowMessage("Auto Allying".L10N("Client:Main:AutoAllyingTitle"),
+            ("Auto allying allows the host to assign starting locations to teams, not players.\n" +
+            "When players are assigned to spawn locations, they will be auto assigned to teams based on these mappings.\n" +
+            "This is best used with random teams and random starts. However, only random teams is required.\n" +
+            "Manually specified starts will take precedence.").L10N("Client:Main:AutoAllyingText1") + "\n\n" +
+            $"{TeamStartMapping.NO_PLAYER} : " + "Block this location from being randomly assigned to a player if there are spare locations.".L10N("Client:Main:AutoAllyingTextNoPlayerV2") + "\n" +
+            $"{TeamStartMapping.NO_TEAM} : " + "Allow a player here, but don't assign a team.".L10N("Client:Main:AutoAllyingTextNoTeamV2"));
+    }
+
+    private static void SetExtraOptionsVisible(Canvas root, bool visible)
+    {
+        if (LayoutView.FindNamed<Canvas>(root, "PlayerExtraOptionsPanel") is Canvas panel)
+        {
+            panel.IsVisible = visible;
+            panel.ZIndex = 5000;
+        }
+    }
+
+    /// <summary>Binds the panel's controls to the lobby's extra options, as PlayerExtraOptionsPanel.Bind and SetIsHost do.</summary>
+    private static void BindPlayerExtraOptions(Canvas root, LayoutControl window, LobbyViewModelBase viewModel)
+    {
+        PlayerExtraOptionsState state = viewModel.ExtraOptions;
+        TeamStartMappingsEditor editor = viewModel.ExtraOptionsEditor;
+        LayoutControl panel = window.Find("PlayerExtraOptionsPanel");
+
+        void CheckBox(string name, string checkedPath, Func<bool> canChange)
+        {
+            if (panel.Find(name) is not LayoutControl layout || !layout.Visible)
+                return;
+
+            var checkBox = new ThemedCheckBox(layout.Text, layout.FontIndex) { DataContext = state };
+            checkBox.Bind(ThemedCheckBox.IsCheckedProperty, new Binding(checkedPath) { Mode = BindingMode.TwoWay });
+
+            void Refresh() => checkBox.IsEnabled = viewModel.CanChangeExtraOptions && canChange();
+            state.PropertyChanged += (_, _) => Refresh();
+            viewModel.PropertyChanged += (_, _) => Refresh();
+            Refresh();
+            Place(root, layout, checkBox);
+        }
+
+        CheckBox("chkBoxForceRandomSides", nameof(PlayerExtraOptionsState.ForceRandomSides), () => true);
+        CheckBox("chkBoxForceRandomColors", nameof(PlayerExtraOptionsState.ForceRandomColors), () => true);
+        CheckBox("chkBoxForceNoTeams", nameof(PlayerExtraOptionsState.ForceNoTeams), () => state.CanChangeForceNoTeams);
+        CheckBox("chkBoxForceRandomStarts", nameof(PlayerExtraOptionsState.ForceRandomStarts), () => true);
+        CheckBox("chkBoxUseTeamStartMappings", nameof(PlayerExtraOptionsState.UseTeamStartMappings), () => state.CanChangeUseTeamStartMappings);
+
+        if (panel.Find("ddTeamStartMappingPreset") is LayoutControl presetLayout && presetLayout.Visible)
+        {
+            var presets = new ThemedDropDown(presetLayout.Width, 22, presetLayout.FontIndex);
+            bool refreshing = false;
+            void Refresh()
+            {
+                refreshing = true;
+                presets.ItemsSource = editor.PresetNames;
+                presets.SelectedIndex = editor.PresetIndex;
+                presets.CanChange = editor.CanChangePreset;
+                refreshing = false;
+            }
+
+            presets.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == ThemedDropDown.SelectedIndexProperty && !refreshing)
+                    editor.SelectPreset(presets.SelectedIndex);
+            };
+            editor.Changed += (_, _) => Refresh();
+            Refresh();
+            Place(root, presetLayout, presets);
+        }
+
+        for (int i = 0; i < TeamStartMappingsEditor.MAX_START_COUNT; i++)
+        {
+            int slot = i;
+            if (panel.Find("ddTeamStart" + (i + 1)) is not LayoutControl layout || !layout.Visible)
+                continue;
+
+            var dropDown = new ThemedDropDown(layout.Width, 22, layout.FontIndex) { ItemsSource = TeamStartMappingsEditor.Teams };
+            bool refreshing = false;
+            void Refresh()
+            {
+                refreshing = true;
+                dropDown.SelectedIndex = editor.GetTeamIndex(slot);
+                dropDown.CanChange = editor.CanChangeSlot(slot);
+                refreshing = false;
+            }
+
+            dropDown.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == ThemedDropDown.SelectedIndexProperty && !refreshing)
+                    editor.SelectTeam(slot, dropDown.SelectedIndex);
+            };
+            editor.Changed += (_, _) => Refresh();
+            Refresh();
+            Place(root, layout, dropDown);
+        }
+
+        // RefreshBtnPlayerExtraOptionsOpenTexture: the "active" textures while any extra option is set
+        if (LayoutView.FindNamed<ThemedButton>(root, "btnPlayerExtraOptionsOpen") is ThemedButton openButton)
+        {
+            void RefreshButton()
+            {
+                bool isDefault = state.ToPlayerExtraOptions().IsDefault();
+                openButton.SetTextures(isDefault ? "optionsButton.png" : "optionsButtonActive.png",
+                    isDefault ? "optionsButton_c.png" : "optionsButtonActive_c.png");
+            }
+
+            state.Changed += (_, _) => RefreshButton();
+            RefreshButton();
+        }
+
+        // XNA's PlayerExtraOptionsPanel starts hidden
+        SetExtraOptionsVisible(root, false);
+    }
+
+    #endregion
+
     private static Control BuildPlayerColumn(LayoutControl layout, List<(int Row, Control Control)> rowControls, LobbyViewModelBase viewModel)
     {
         string field = new string(layout.Name["ddPlayer".Length..].TakeWhile(char.IsLetter).ToArray());
@@ -307,10 +556,10 @@ public static class ThemedLobbyView
         (string items, string index, string enabled) = field switch
         {
             "Name" => ("DisplayNameItems", "DisplayNameIndex", "CanChangeName"),
-            "Side" => ("SideItems", "SideIndex", "CanChangeOptions"),
-            "Color" => ("ColorItems", "ColorIndex", "CanChangeOptions"),
-            "Start" => ("StartItems", "StartIndex", "CanChangeOptions"),
-            _ => ("TeamItems", "TeamIndex", "CanChangeOptions"),
+            "Side" => ("SideItems", "SideIndex", "CanChangeSide"),
+            "Color" => ("ColorItems", "ColorIndex", "CanChangeColor"),
+            "Start" => ("StartItems", "StartIndex", "CanChangeStart"),
+            _ => ("TeamItems", "TeamIndex", "CanChangeTeam"),
         };
 
         comboBox.Bind(ThemedDropDown.ItemsSourceProperty, new Binding(items));
