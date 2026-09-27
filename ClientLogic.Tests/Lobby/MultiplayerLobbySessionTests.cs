@@ -6,6 +6,7 @@ using ClientCore;
 
 using ClientLogic.Launch;
 using ClientLogic.Lobby;
+using ClientLogic.MapSharing;
 using ClientLogic.Protocol;
 using ClientLogic.UI;
 
@@ -89,6 +90,53 @@ public class MultiplayerLobbySessionTests
         public override void RequestReady() => Session.RequestReady(AutoReady ? 2 : 1);
         protected override void HostLaunchGame() => Launched = true;
         public override void Leave() { }
+        protected override string MapSharingHostName => "Host";
+        public override void SendMapSharingMessage(string message) => Recorder.Sent.Add("map sharing " + message);
+    }
+
+    private static GameOptionsUpdate MissingMap(TestRoom room, GameOptionsMapAction action) => new()
+    {
+        MapAction = action,
+        MapSHA1 = "0123456789abcdef",
+        MapName = "Someone's map",
+        CheckBoxValues = room.Options.CheckBoxes.Select(o => o.IsChecked).ToList(),
+        DropDownIndices = room.Options.DropDowns.Select(o => o.Value).ToList(),
+    };
+
+    [Fact]
+    public void A_missing_host_map_offers_the_download_and_a_new_map_hides_the_offer()
+    {
+        var room = new TestRoom(isHost: false);
+
+        room.ApplyGameOptionsUpdate(MissingMap(room, GameOptionsMapAction.ClearAndRequestDownload));
+
+        Assert.Null(room.GameModeMap);
+        Assert.Equal(MapSharingPanelState.Request, room.MapSharingState);
+        Assert.Equal("0123456789abcdef", room.MapSharing.LastMapSHA1);
+
+        room.ChangeMap(TestGame.LoadGameModeMap("Maps/Test/four", "Battle"));
+        Assert.Equal(MapSharingPanelState.Hidden, room.MapSharingState);
+    }
+
+    [Fact]
+    public void A_missing_map_with_map_sharing_off_tells_the_host()
+    {
+        var room = new TestRoom(isHost: false);
+
+        room.ApplyGameOptionsUpdate(MissingMap(room, GameOptionsMapAction.ClearAndReportMapSharingDisabled));
+
+        Assert.Equal(MapSharingPanelState.Hidden, room.MapSharingState);
+        Assert.Contains("map sharing " + MapSharingService.MAP_SHARING_DISABLED_MESSAGE, room.Recorder.Sent);
+    }
+
+    [Fact]
+    public void A_missing_official_map_is_reported_with_its_sha1()
+    {
+        var room = new TestRoom(isHost: false);
+
+        room.ApplyGameOptionsUpdate(MissingMap(room, GameOptionsMapAction.ClearAndReportOfficialMapMissing));
+
+        Assert.Contains("map sharing " + MapSharingService.MAP_SHARING_FAIL_MESSAGE + " 0123456789abcdef", room.Recorder.Sent);
     }
 
     public MultiplayerLobbySessionTests() => TestGame.EnsureInitialized();

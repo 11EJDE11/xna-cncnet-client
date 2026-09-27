@@ -9,6 +9,7 @@ using ClientCore.Extensions;
 
 using ClientLogic.Launch;
 using ClientLogic.Lobby;
+using ClientLogic.MapSharing;
 using ClientLogic.Protocol;
 using ClientLogic.Tunnels;
 using ClientLogic.UI;
@@ -110,6 +111,10 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
             CtcpHandler.Notification("LCKGME", sender => HostNotice(sender, LaunchBlockerKind.RoomNotLocked)),
             CtcpHandler.IntNotification("NVRFY", (sender, index) => HostNotice(sender, LaunchBlockerKind.NotVerified, index)),
             CtcpHandler.IntNotification("INGM", (sender, index) => HostNotice(sender, LaunchBlockerKind.StillInGame, index)),
+            CtcpHandler.String(MapSharingService.MAP_SHARING_UPLOAD_REQUEST, (sender, sha1) => MapSharing.HandleMapUploadRequest(sender, sha1)),
+            CtcpHandler.String(MapSharingService.MAP_SHARING_FAIL_MESSAGE, (sender, sha1) => MapSharing.HandleMapTransferFailMessage(sender, sha1)),
+            CtcpHandler.String(MapSharingService.MAP_SHARING_DOWNLOAD_REQUEST, (sender, sha1) => MapSharing.HandleMapDownloadRequest(sender, sha1)),
+            CtcpHandler.NoParam(MapSharingService.MAP_SHARING_DISABLED_MESSAGE, sender => MapSharing.HandleMapSharingBlockedMessage(sender)),
             CtcpHandler.NoParam("STRTD", GameStartedNotification),
             CtcpHandler.NoParam("RETURN", ReturnNotification),
             CtcpHandler.Int("TNLPNG", TunnelSession.HandleTunnelPing),
@@ -179,6 +184,9 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
         commands.Add(new ChatBoxCommand("CHANGETUNNEL",
             "Change the used CnCNet tunnel server (game host only)".L10N("Client:Main:ChangeTunnelCommand"),
             true, _ => TunnelSelectionRequested?.Invoke(this, "Select tunnel server:".L10N("Client:Main:SelectTunnelServerCommand"))));
+        commands.Add(new ChatBoxCommand("DOWNLOADMAP",
+            "Download a map from CNCNet's map server using a map ID and an optional filename.\nExample:\"/downloadmap MAPID [2] My Battle Map\"".L10N("Client:Main:DownloadMapCommandDescription"),
+            false, parameters => MapSharing.DownloadMapById(parameters)));
         commands.Add(new ChatBoxCommand("RENEGOTIATE",
             "Force all players to renegotiate tunnel connections (V3 Dynamic, host only)".L10N("Client:Main:RenegotiateCommand"),
             true, RenegotiateAllCommand));
@@ -207,6 +215,8 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
         roomSettings.PlayerLimit = playerLimit;
         roomSettings.SkillLevel = ClientConfiguration.Instance.NormalizeSkillLevel(skillLevel);
         roomSettings.IsCustomPassword = isCustomPassword;
+
+        MapSharing.Start();
 
         negotiator.RegenerateV3PlayerInfos();
 
@@ -413,6 +423,7 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
 
         negotiator.ClearAll();
         TunnelSession.Clear();
+        MapSharing.Stop();
 
         if (channel != null)
         {
@@ -857,7 +868,7 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
         GameOptionsUpdate update = GameOptionsApplier.Plan(gameOptions,
             new LobbyGameSettings(FrameSendRate, MaxAhead, ProtocolVersion, GameModeMap),
             (gameMode, mapSHA1) => GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1),
-            isMapSharingEnabled: false);
+            UserINISettings.Instance.EnableMapSharing);
 
         ApplyGameOptionsUpdate(update);
 
@@ -1099,6 +1110,11 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
     bool ITunnelSessionLobby.IsHost => IsHost;
 
     string ITunnelSessionLobby.HostName => hostName;
+
+    public override void SendMapSharingMessage(string message) =>
+        channel.SendCTCPMessage(message, QueuedMessageType.SYSTEM_MESSAGE, 9);
+
+    protected override string MapSharingHostName => hostName;
 
     void ILobbyTransport.SendSystemMessage(string message) =>
         channel.SendCTCPMessage(message, QueuedMessageType.SYSTEM_MESSAGE, 10);

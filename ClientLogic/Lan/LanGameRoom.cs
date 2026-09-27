@@ -10,6 +10,7 @@ using ClientCore.Extensions;
 
 using ClientLogic.Launch;
 using ClientLogic.Lobby;
+using ClientLogic.MapSharing;
 using ClientLogic.Protocol;
 using ClientLogic.UI;
 
@@ -88,6 +89,9 @@ public sealed class LanGameRoom : MultiplayerLobbySession
             (PLAYER_READY_REQUEST, true, GameHost_HandleReadyRequest),
             (FILE_HASH_COMMAND, true, HandleFileHashCommand),
             (DICE_ROLL_COMMAND, true, Host_HandleDiceRoll),
+            (MapSharingService.MAP_SHARING_UPLOAD_REQUEST, true, (sender, sha1) => MapSharing.HandleMapUploadRequest(sender, sha1)),
+            (MapSharingService.MAP_SHARING_FAIL_MESSAGE, true, (sender, sha1) => MapSharing.HandleMapTransferFailMessage(sender, sha1)),
+            (MapSharingService.MAP_SHARING_DISABLED_MESSAGE, false, (sender, _) => MapSharing.HandleMapSharingBlockedMessage(sender)),
             (PING, false, (_, _) => { }),
         ];
 
@@ -103,10 +107,25 @@ public sealed class LanGameRoom : MultiplayerLobbySession
             new ClientStringCommandHandler(GAME_OPTIONS_COMMAND, HandleGameOptionsMessage),
             new ClientStringCommandHandler(DICE_ROLL_COMMAND, Client_HandleDiceRoll),
             new ClientNoParamCommandHandler(PING, HandlePing),
+            new ClientStringCommandHandler(MapSharingService.MAP_SHARING_DOWNLOAD_REQUEST, sha1 => MapSharing.HandleMapDownloadRequest(LAN_HOST_SENDER, sha1)),
+            new ClientStringCommandHandler(MapSharingService.MAP_SHARING_FAIL_MESSAGE, sha1 => MapSharing.HandleMapTransferFailMessage(LAN_HOST_SENDER, sha1)),
         ];
     }
 
     protected override string LobbyTypeName => "LANGameLobby";
+
+    /// <summary>The sender name of the host's map sharing messages on a player's side.</summary>
+    private const string LAN_HOST_SENDER = "host";
+
+    protected override string MapSharingHostName => IsHost ? ProgramConstants.PLAYERNAME : LAN_HOST_SENDER;
+
+    public override void SendMapSharingMessage(string message)
+    {
+        if (IsHost)
+            BroadcastMessage(message, otherPlayersOnly: true);
+        else
+            connection.SendToHost(message);
+    }
 
     /// <summary>The local player's chat colour (an index into <see cref="LanChatColors.All"/>).</summary>
     public int ChatColorIndex { get; set; }
@@ -139,6 +158,7 @@ public sealed class LanGameRoom : MultiplayerLobbySession
         timeSinceLastReceivedCommand = TimeSpan.Zero;
 
         active = true;
+        MapSharing.Start();
         SetUp(isHost);
 
         if (isHost)
@@ -500,7 +520,7 @@ public sealed class LanGameRoom : MultiplayerLobbySession
         GameOptionsUpdate update = GameOptionsApplier.Plan(gameOptions,
             new LobbyGameSettings(FrameSendRate, MaxAhead, ProtocolVersion, GameModeMap),
             (gameMode, mapSHA1) => GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == gameMode && gmm.Map.SHA1 == mapSHA1),
-            isMapSharingEnabled: false);
+            UserINISettings.Instance.EnableMapSharing);
 
         ApplyGameOptionsUpdate(update);
     }
@@ -602,6 +622,8 @@ public sealed class LanGameRoom : MultiplayerLobbySession
     /// <summary>Leaves the room without telling the front end (the client is closing).</summary>
     public void Clear()
     {
+        MapSharing.Stop();
+
         if (IsHost)
         {
             GameBroadcast?.Invoke(this, "GAMECLOSED");

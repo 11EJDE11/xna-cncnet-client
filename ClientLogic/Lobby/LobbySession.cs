@@ -56,6 +56,67 @@ public abstract partial class LobbySession : ObservableObject
         Slots = new PlayerSlotsState(Players, AIPlayers);
         LobbyState = new GameLobbyState(Options, Slots, ExtraOptions);
         RandomSeed = random.Next();
+
+        // Maps added, changed or removed while the client runs (the map file watcher, map sharing)
+        mapLoader.MapChanged += (_, e) => PostToUi(() => OnMapChanged(e));
+    }
+
+    /// <summary>Runs an action on the UI thread (sessions without a dispatcher run it at once).</summary>
+    protected virtual void PostToUi(Action action) => action();
+
+    /// <summary>A map was added, changed or removed: the map list must be listed again.</summary>
+    public event EventHandler MapsChanged;
+
+    protected void RaiseMapsChanged() => MapsChanged?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>The XNA lobby's MapLoader_MapChanged.</summary>
+    private void OnMapChanged(MapChangedEventArgs e)
+    {
+        switch (e.ChangeType)
+        {
+            case MapChangeType.Added:
+                HandleMapAdded(e.Map);
+                break;
+            case MapChangeType.Updated:
+                HandleMapUpdated(e.Map, e.PreviousMapSHA1);
+                break;
+            case MapChangeType.Removed:
+                HandleMapRemoved(e.Map);
+                break;
+        }
+    }
+
+    protected virtual void HandleMapAdded(Map addedMap) => RaiseMapsChanged();
+
+    private void HandleMapUpdated(Map updatedMap, string previousSHA1)
+    {
+        // If the currently selected map was updated, select the updated one
+        Map map = GameModeMap?.Map;
+        if (map != null && (map.SHA1 == previousSHA1 || map.SHA1 == updatedMap.SHA1))
+        {
+            GameModeMap updatedGameModeMap = GameModeMaps.FirstOrDefault(gmm => gmm.Map.SHA1 == updatedMap.SHA1);
+
+            if (updatedGameModeMap != null)
+                ChangeMap(updatedGameModeMap);
+        }
+
+        RaiseMapsChanged();
+    }
+
+    private void HandleMapRemoved(Map removedMap)
+    {
+        // If the currently selected map was removed, select a different one
+        if (GameModeMap?.Map != null && GameModeMap.Map.SHA1 == removedMap.SHA1)
+        {
+            string currentGameModeName = GameModeMap.GameMode?.Name;
+            GameModeMap sameGameMode = GameModeMaps.FirstOrDefault(gmm => gmm.GameMode.Name == currentGameModeName);
+            GameModeMap replacement = sameGameMode ?? GameModeMaps.FirstOrDefault();
+
+            if (replacement != null)
+                ChangeMap(replacement);
+        }
+
+        RaiseMapsChanged();
     }
 
     protected MapLoader MapLoader { get; }

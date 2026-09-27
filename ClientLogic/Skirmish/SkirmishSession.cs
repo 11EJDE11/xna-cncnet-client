@@ -35,6 +35,8 @@ public sealed class SkirmishSession : LobbySession
         this.uiDispatcher = uiDispatcher;
     }
 
+    protected override void PostToUi(Action action) => uiDispatcher.Post(action);
+
     /// <summary>The game exited: the match is recorded on the UI thread and the lobby refreshes (its ranks).</summary>
     protected override void OnGameProcessExited() => uiDispatcher.Post(() =>
     {

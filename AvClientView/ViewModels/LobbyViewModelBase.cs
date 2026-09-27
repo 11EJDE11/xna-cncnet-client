@@ -61,6 +61,9 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         this.session = session;
         this.mapLoader = mapLoader;
 
+        // Maps added, changed or removed while the client runs (e.g. a downloaded map) are listed
+        session.MapsChanged += (_, _) => OnMapSearchTextChanged(MapSearchText);
+
         // A finished game can change the maps' ranks (the XNA skirmish lobby lists its maps again)
         ClientCore.Statistics.StatisticsManager.Instance.GameAdded += (_, _) =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() => OnMapSearchTextChanged(MapSearchText));
@@ -95,6 +98,12 @@ public abstract partial class LobbyViewModelBase : ObservableObject
 
     /// <summary>The rank the current setup can earn (the launch button's stars; 0 for none).</summary>
     public int Rank => session.Rank;
+
+    /// <summary>The map sharing confirmation panel over the map preview (multiplayer rooms only).</summary>
+    public MapSharingPanelState MapSharingState => (session as MultiplayerLobbySession)?.MapSharingState ?? MapSharingPanelState.Hidden;
+
+    /// <summary>The map sharing panel's Download button.</summary>
+    public void ConfirmMapDownload() => (session as MultiplayerLobbySession)?.ConfirmMapDownload();
 
     public ObservableCollection<PlayerRowViewModel> Rows { get; } = [];
 
@@ -318,6 +327,7 @@ public abstract partial class LobbyViewModelBase : ObservableObject
             OnPropertyChanged(nameof(CanChangeMap));
             OnPropertyChanged(nameof(CanChangeOptions));
             OnPropertyChanged(nameof(Rank));
+            OnPropertyChanged(nameof(MapSharingState));
             OnRefreshed();
             Refreshed?.Invoke(this, EventArgs.Empty);
         }

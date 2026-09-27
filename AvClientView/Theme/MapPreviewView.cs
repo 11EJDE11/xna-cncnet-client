@@ -19,6 +19,7 @@ using ClientCore;
 using ClientCore.Extensions;
 
 using ClientLogic.Layout;
+using ClientLogic.Lobby;
 
 namespace AvClientView.Theme;
 
@@ -124,10 +125,13 @@ public sealed class MapPreviewView : Canvas
         };
         Children.Add(briefingBox);
 
+        BuildMapSharingPanel();
+
         void Refreshed(object sender, EventArgs e)
         {
             RefreshIndicators();
             RefreshExtraTextures();
+            RefreshMapSharingPanel();
         }
 
         UpdateInterpolation();
@@ -198,6 +202,89 @@ public sealed class MapPreviewView : Canvas
     }
 
     /// <summary>The favourite button at the top right, left of the extra icons button when the map has toggleable icons.</summary>
+    #region Map sharing
+
+    private static readonly string MapSharingRequestText = "The game host has selected a map that\ndoesn't exist on your local installation.".L10N("Client:Main:MapSharingRequestText");
+    private static readonly string MapSharingDownloadText = "Downloading map...".L10N("Client:Main:MapSharingDownloadText");
+    private static readonly string MapSharingFailedText = "Downloading map failed. The game host\nneeds to change the map or you will be\nunable to participate in the match.".L10N("Client:Main:MapSharingFailedText");
+
+    private Border mapSharingPanel;
+    private TextBlock mapSharingText;
+    private ThemedButton mapSharingButton;
+
+    /// <summary>
+    /// MapSharingConfirmationPanel: msgboxform.png tiled, the description at (6, 6), a 92 px Download button centred
+    /// under it; sized for the request text and centred on the preview.
+    /// </summary>
+    private void BuildMapSharingPanel()
+    {
+        const int emptySpace = 6;
+
+        (FontFamily family, double size) = ThemeFonts.Get(0);
+        (int textWidth, int textHeight) = ThemeFonts.Measure(MapSharingRequestText, 0);
+        mapSharingText = new TextBlock { FontFamily = family, FontSize = size, Foreground = new SolidColorBrush(ThemeAssets.LabelColor), Text = MapSharingRequestText };
+
+        var buttonLayout = new ClientLogic.Layout.LayoutControl("btnDownload", "XNAClientButton", ClientLogic.Layout.LayoutControlKind.Button)
+        {
+            Width = 92,
+            Height = 23,
+            Text = "Download".L10N("Client:Main:ButtonDownload"),
+        };
+        ThemedWindow.CreateReader().Initialize(buttonLayout);
+        mapSharingButton = new ThemedButton(buttonLayout);
+        mapSharingButton.Click += (_, _) => viewModel.ConfirmMapDownload();
+
+        int width = emptySpace + textWidth + emptySpace;
+        int buttonY = emptySpace + textHeight + emptySpace * 2;
+        int height = buttonY + buttonLayout.Height + emptySpace;
+
+        var content = new Canvas { Width = width, Height = height };
+        Canvas.SetLeft(mapSharingText, emptySpace);
+        Canvas.SetTop(mapSharingText, emptySpace);
+        Canvas.SetLeft(mapSharingButton, (width - buttonLayout.Width) / 2);
+        Canvas.SetTop(mapSharingButton, buttonY);
+        content.Children.Add(mapSharingText);
+        content.Children.Add(mapSharingButton);
+
+        IBrush background = ThemeAssets.LoadBitmap("msgboxform.png") is Bitmap texture
+            ? new ImageBrush(texture)
+            {
+                TileMode = TileMode.Tile,
+                DestinationRect = new RelativeRect(0, 0, texture.PixelSize.Width, texture.PixelSize.Height, RelativeUnit.Absolute),
+            }
+            : new SolidColorBrush(Colors.Black);
+
+        mapSharingPanel = new Border
+        {
+            Width = width,
+            Height = height,
+            Background = background,
+            BorderBrush = new SolidColorBrush(ThemeAssets.PanelBorderColor),
+            BorderThickness = new Thickness(1),
+            Child = content,
+            IsVisible = false,
+            ZIndex = 200,
+        };
+        SetLeft(mapSharingPanel, (Width - width) / 2);
+        SetTop(mapSharingPanel, (Height - height) / 2);
+        Children.Add(mapSharingPanel);
+    }
+
+    private void RefreshMapSharingPanel()
+    {
+        MapSharingPanelState state = viewModel.MapSharingState;
+        mapSharingPanel.IsVisible = state != MapSharingPanelState.Hidden;
+        mapSharingText.Text = state switch
+        {
+            MapSharingPanelState.Downloading => MapSharingDownloadText,
+            MapSharingPanelState.Failed => MapSharingFailedText,
+            _ => MapSharingRequestText,
+        };
+        mapSharingButton.IsEnabled = state == MapSharingPanelState.Request;
+    }
+
+    #endregion
+
     private void RefreshButtons()
     {
         bool hasMap = viewModel.Preview != null;

@@ -7,6 +7,7 @@ using ClientCore.Extensions;
 using ClientCore.Statistics;
 
 using ClientLogic.Launch;
+using ClientLogic.MapSharing;
 using ClientLogic.Protocol;
 using ClientLogic.UI;
 
@@ -23,7 +24,7 @@ namespace ClientLogic.Lobby;
 /// requests, dice, launch checks and the launch. It follows the XNA client's MultiplayerGameLobby. Messages go out
 /// through <see cref="LobbyState"/>'s session; the transport feeds incoming messages to the Apply/Handle methods.
 /// </summary>
-public abstract class MultiplayerLobbySession : LobbySession
+public abstract class MultiplayerLobbySession : LobbySession, IMapSharingLobby, IMapSharingTransport, INoticeSink
 {
     protected MultiplayerLobbySession(string windowName, MapLoader mapLoader, GameProcessService gameProcess,
         IDialogService dialogs, ISoundService sounds, IUiDispatcher uiDispatcher, Random random, string layoutIniName = null)
@@ -35,7 +36,81 @@ public abstract class MultiplayerLobbySession : LobbySession
         FrameSendRate = ClientConfiguration.Instance.DefaultFrameSendRate;
         ProtocolVersion = ClientConfiguration.Instance.DefaultProtocolVersion;
         MaxAhead = ClientConfiguration.Instance.DefaultMaxAhead;
+
+        MapSharing = new MapSharingService(uiDispatcher, this, this, this, ClientConfiguration.Instance.LocalGame);
+        MapSharing.DownloadFailed += () =>
+        {
+            MapSharingState = MapSharingPanelState.Failed;
+            RaiseChanged();
+        };
     }
+
+    /// <summary>Custom maps shared through the CnCNet map database (the rooms start and stop it).</summary>
+    public MapSharingService MapSharing { get; }
+
+    /// <summary>The map sharing confirmation panel over the map preview (MapSharingConfirmationPanel).</summary>
+    public MapSharingPanelState MapSharingState { get; private set; }
+
+    /// <summary>The name the host's map sharing messages come from.</summary>
+    protected abstract string MapSharingHostName { get; }
+
+    string IMapSharingLobby.HostName => MapSharingHostName;
+
+    Map IMapSharingLobby.Map => GameModeMap?.Map;
+
+    Map IMapSharingLobby.FindMap(string sha1)
+    {
+        foreach (GameMode gm in MapLoader.GameModes)
+        {
+            Map map = gm.Maps.Find(m => m.SHA1 == sha1);
+
+            if (map != null)
+                return map;
+        }
+
+        return null;
+    }
+
+    /// <summary>Sends a map sharing message to the other players (CnCNet: a CTCP; LAN: to the host or all).</summary>
+    public abstract void SendMapSharingMessage(string message);
+
+    void INoticeSink.AddNotice(string message, NoticeSeverity severity) => AddNotice(message, severity switch
+    {
+        NoticeSeverity.Success => new ChatColor(144, 238, 144),
+        NoticeSeverity.Warning => new ChatColor(255, 255, 0),
+        NoticeSeverity.Degraded => new ChatColor(255, 165, 0),
+        NoticeSeverity.Error => ChatColor.Red,
+        _ => ChatColor.White,
+    });
+
+    /// <summary>The panel's Download button: downloads the host's map.</summary>
+    public void ConfirmMapDownload()
+    {
+        MapSharingState = MapSharingPanelState.Downloading;
+        RaiseChanged();
+        MapSharing.DownloadHostMap();
+    }
+
+    protected override void HandleMapAdded(Map addedMap)
+    {
+        // If this is a map we downloaded, select it
+        if (!MapSharing.IsExpectedDownload(addedMap.SHA1))
+        {
+            base.HandleMapAdded(addedMap);
+            return;
+        }
+
+        AddNotice($"Map {addedMap.Name} loaded successfully.");
+        RaiseMapsChanged();
+
+        GameModeMap gameModeMap = GameModeMaps.FirstOrDefault(gmm => gmm.Map.SHA1 == addedMap.SHA1);
+        if (gameModeMap != null)
+            ChangeMap(gameModeMap);
+
+        MapSharing.OnDownloadedMapInstalled(addedMap.SHA1);
+    }
+
+    protected override void PostToUi(Action action) => UiDispatcher.Post(action);
 
     protected ISoundService Sounds { get; }
 
@@ -130,6 +205,7 @@ public abstract class MultiplayerLobbySession : LobbySession
 
     public override void ChangeMap(GameModeMap gameModeMap)
     {
+        MapSharingState = MapSharingPanelState.Hidden;
         base.ChangeMap(gameModeMap);
 
         bool resetAutoReady = gameModeMap?.GameMode == null || gameModeMap?.Map == null;
@@ -456,11 +532,34 @@ public abstract class MultiplayerLobbySession : LobbySession
     }
 
     /// <summary>
+    /// Called after the map was cleared because the host's map isn't installed
+    /// (<see cref="GameOptionsUpdate.MapAction"/> says why).
+    /// </summary>
+    private void HandleMissingHostMap(GameOptionsUpdate update)
+    {
+        switch (update.MapAction)
+        {
+            case GameOptionsMapAction.ClearAndRequestDownload:
+                AddNotice("The game host has selected a map that doesn't exist on your installation.".L10N("Client:Main:MapNotExist"));
+                MapSharingState = MapSharingPanelState.Request;
+                break;
+            case GameOptionsMapAction.ClearAndReportMapSharingDisabled:
+                MapSharing.ReportMapSharingDisabled();
+                break;
+            case GameOptionsMapAction.ClearAndReportOfficialMapMissing:
+                MapSharing.ReportOfficialMapMissing(update.MapSHA1);
+                break;
+        }
+    }
+
+    /// <summary>
     /// Player: applies the game options the host sent (planned by <see cref="GameOptionsApplier.Plan"/>), in the
     /// XNA lobby's order: settings, map, then options with notices, starting locations and seed.
     /// </summary>
     public void ApplyGameOptionsUpdate(GameOptionsUpdate update)
     {
+        MapSharing.SetHostMap(update.MapSHA1, update.MapName);
+
         FrameSendRate = update.FrameSendRate;
         MaxAhead = update.MaxAhead;
         ProtocolVersion = update.ProtocolVersion;
@@ -477,8 +576,7 @@ public abstract class MultiplayerLobbySession : LobbySession
                 break;
             default:
                 ChangeMap(null);
-                if (update.MapAction == GameOptionsMapAction.ClearAndRequestDownload)
-                    AddNotice("The game host has selected a map that doesn't exist on your installation.".L10N("Client:Main:MapNotExist"));
+                HandleMissingHostMap(update);
                 break;
         }
 
@@ -658,4 +756,17 @@ public abstract class MultiplayerLobbySession : LobbySession
 
     /// <summary>Leaves the room.</summary>
     public abstract void Leave();
+}
+
+/// <summary>What the map sharing confirmation panel shows.</summary>
+public enum MapSharingPanelState
+{
+    Hidden,
+
+    /// <summary>The host's map isn't installed: offer to download it.</summary>
+    Request,
+
+    Downloading,
+
+    Failed,
 }
