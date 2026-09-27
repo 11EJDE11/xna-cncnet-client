@@ -96,6 +96,26 @@ public static class ThemeAssets
 
     private static readonly Dictionary<object, Bitmap> gameIcons = [];
 
+    /// <summary>
+    /// One of the client's built-in icons (DTAClient.Icons.*, e.g. "cncneticon.png" or "unknownicon.png"); null if
+    /// it doesn't exist.
+    /// </summary>
+    public static Bitmap EmbeddedIcon(string name)
+    {
+        string key = "embedded:" + name;
+        if (bitmaps.TryGetValue(key, out Bitmap bitmap))
+            return bitmap;
+
+        using (Stream stream = typeof(DTAClient.Domain.Multiplayer.CnCNet.GameCollection).Assembly
+            .GetManifestResourceStream("DTAClient.Icons." + name))
+        {
+            bitmap = stream == null ? null : new Bitmap(stream);
+        }
+
+        bitmaps[key] = bitmap;
+        return bitmap;
+    }
+
     /// <summary>A CnCNet game's icon (its embedded image), as the XNA lists draw it; null if it has none.</summary>
     public static Bitmap GameIcon(DTAClient.Domain.Multiplayer.CnCNet.CnCNetGame game)
     {

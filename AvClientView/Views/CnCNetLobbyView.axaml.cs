@@ -44,7 +44,7 @@ public partial class CnCNetLobbyView : UserControl
                 {
                     ["lbGameList"] = layout => GameList(layout, viewModel),
                     ["lbPlayerList"] = layout => ThemedWindow.List(layout, viewModel, nameof(CnCNetLobbyViewModel.Users),
-                        new FuncDataTemplate<UserItemViewModel>((user, _) => new TextBlock { Text = user?.ToString(), Foreground = user?.Brush, Margin = new Thickness(4, 1) })),
+                        new FuncDataTemplate<UserItemViewModel>((user, _) => UserRow(user))),
                     ["lbChatMessages"] = layout => ThemedWindow.ChatList(layout, viewModel),
                     ["tbChatInput"] = layout => ThemedWindow.ChatInput(layout, viewModel, viewModel.SendChatCommand),
                     ["ddColor"] = layout => DropDown(layout, viewModel, nameof(CnCNetLobbyViewModel.ChatColors), nameof(CnCNetLobbyViewModel.SelectedChatColorIndex)),
@@ -286,6 +286,35 @@ public partial class CnCNetLobbyView : UserControl
         list.Bind(SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(CnCNetLobbyViewModel.SelectedGameIndex)) { Mode = BindingMode.TwoWay });
         list.DoubleTapped += (_, _) => viewModel.JoinGameCommand.Execute(null);
         return list;
+    }
+
+    /// <summary>
+    /// A player list row as the XNA PlayerListBox draws it: the game icon (the CnCNet icon for admins, the unknown
+    /// icon for unknown games), the friend or ignore icon, the voice icon, and the name.
+    /// </summary>
+    private static Control UserRow(UserItemViewModel user)
+    {
+        var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Margin = new Thickness(2, 1), Spacing = 2 };
+        if (user == null)
+            return row;
+
+        void AddIcon(Avalonia.Media.Imaging.Bitmap bitmap)
+        {
+            if (bitmap != null)
+                row.Children.Add(new Image { Source = bitmap, Stretch = Stretch.None, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+        }
+
+        AddIcon(user.IsAdmin ? ThemeAssets.EmbeddedIcon("cncneticon.png")
+            : user.Game != null ? ThemeAssets.GameIcon(user.Game) : ThemeAssets.EmbeddedIcon("unknownicon.png"));
+        if (user.IsFriend)
+            AddIcon(ThemeAssets.LoadBitmap("friendicon.png"));
+        else if (user.IsIgnored && !user.IsAdmin)
+            AddIcon(ThemeAssets.LoadBitmap("ignoreicon.png"));
+        if (user.HasVoice && ThemeAssets.FindFile("voiceicon.png") != null)
+            AddIcon(ThemeAssets.LoadBitmap("voiceicon.png"));
+
+        row.Children.Add(new TextBlock { Text = user.ToString(), Foreground = user.Brush, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+        return row;
     }
 
     /// <summary>

@@ -26,15 +26,18 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
 {
     private readonly CnCNetLobbyService lobby;
     private readonly IDialogService dialogs;
+    private readonly GameCollection gameCollection;
     private readonly DispatcherTimer timer;
     private readonly Stopwatch stopwatch = new();
     private List<HostedCnCNetGame> shownGames = [];
     private HostedCnCNetGame passwordGame;
     private bool initialized;
 
-    public CnCNetLobbyViewModel(CnCNetLobbyService lobby, CnCNetGameRoomViewModel roomViewModel, IDialogService dialogs)
+    public CnCNetLobbyViewModel(CnCNetLobbyService lobby, CnCNetGameRoomViewModel roomViewModel, IDialogService dialogs,
+        GameCollection gameCollection)
     {
         this.lobby = lobby;
+        this.gameCollection = gameCollection;
         this.dialogs = dialogs;
         Room = roomViewModel;
 
@@ -212,7 +215,12 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     {
         Users.Clear();
         foreach (ChannelUser user in lobby.CurrentUsers)
-            Users.Add(new UserItemViewModel(user.IRCUser.Name + (user.IRCUser.IsFriend ? " (friend)" : string.Empty), user.IsAdmin));
+        {
+            int gameId = user.IRCUser.GameID;
+            CnCNetGame game = gameId >= 0 && gameId < gameCollection.GameList.Count ? gameCollection.GameList[gameId] : null;
+            Users.Add(new UserItemViewModel(user.IRCUser.Name, user.IsAdmin, game,
+                user.IRCUser.IsFriend, user.IRCUser.IsIgnored, user.HasVoice));
+        }
     }
 
     private void RefreshGames()
@@ -331,13 +339,15 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
 }
 
 /// <summary>A user in the CnCNet channel's user list; admins show in the theme's admin colour.</summary>
-public sealed record UserItemViewModel(string Name, bool IsAdmin)
+/// <summary>A CnCNet lobby user; the game is null if the user's game is unknown.</summary>
+public sealed record UserItemViewModel(string Name, bool IsAdmin, CnCNetGame Game = null,
+    bool IsFriend = false, bool IsIgnored = false, bool HasVoice = false)
 {
     public Avalonia.Media.IBrush Brush => IsAdmin
         ? new Avalonia.Media.SolidColorBrush(AvClientView.Theme.ThemeAssets.ParseColor(ClientConfiguration.Instance.AdminNameColor, Avalonia.Media.Colors.Red))
         : new Avalonia.Media.SolidColorBrush(AvClientView.Theme.ThemeAssets.ButtonTextColor);
 
-    public override string ToString() => IsAdmin ? Name + " (Admin)" : Name;
+    public override string ToString() => IsAdmin ? Name + " " + "(Admin)".L10N("Client:Main:AdminSuffix") : Name;
 }
 
 /// <summary>A hosted game in the CnCNet game list.</summary>
