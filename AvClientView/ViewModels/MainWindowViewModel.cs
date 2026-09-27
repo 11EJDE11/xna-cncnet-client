@@ -186,6 +186,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 CurrentPage = Menu;
             };
             lanLobby.RoomEntered += (_, _) => CurrentPage = lanLobby.Room;
+            lanLobby.LoadingRoomEntered += (_, _) => CurrentPage = lanLobby.LoadingRoom;
             lanLobby.RoomLeft += (_, _) => CurrentPage = lanLobby;
         }
 

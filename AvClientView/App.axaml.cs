@@ -59,6 +59,7 @@ public sealed class App : Application
                 .AddSingleton<LanLobby>()
                 .AddSingleton(sp => WithDiscord(ActivatorUtilities.CreateInstance<LanGameRoom>(sp), sp))
                 .AddSingleton<LanGameRoomViewModel>()
+                .AddSingleton(sp => { var r = ActivatorUtilities.CreateInstance<LanGameLoadingRoom>(sp); r.DiscordHandler = sp.GetRequiredService<DiscordHandler>(); return r; })
                 .AddSingleton<LanLobbyViewModel>()
                 .AddSingleton(sp => WithDiscord(ActivatorUtilities.CreateInstance<CnCNetGameRoom>(sp), sp))
                 .AddSingleton<CnCNetLobbyService>()

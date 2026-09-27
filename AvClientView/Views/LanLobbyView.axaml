@@ -5,5 +5,9 @@
              x:DataType="vm:LanLobbyViewModel"
              Background="Black">
   <!-- The theme's LANLobby layout, built in code-behind -->
-  <ContentControl x:Name="LobbyHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
+  <Panel>
+    <ContentControl x:Name="LobbyHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    <!-- LANGameCreationWindow over a darkening panel -->
+    <Panel x:Name="CreationHost" Background="#80000000" IsVisible="{Binding ShowCreationWindow}" />
+  </Panel>
 </UserControl>

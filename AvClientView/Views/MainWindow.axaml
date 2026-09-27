@@ -20,6 +20,9 @@
     <DataTemplate DataType="vm:CnCNetLobbyViewModel">
       <views:CnCNetLobbyView />
     </DataTemplate>
+    <DataTemplate DataType="vm:GameLoadingRoomViewModel">
+      <views:GameLoadingRoomView />
+    </DataTemplate>
     <DataTemplate DataType="vm:MultiplayerRoomViewModel">
       <views:GameRoomView />
     </DataTemplate>

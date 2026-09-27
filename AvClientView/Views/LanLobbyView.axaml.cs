@@ -11,6 +11,8 @@ using Avalonia.Media;
 using AvClientView.Theme;
 using AvClientView.ViewModels;
 
+using ClientCore.Extensions;
+
 using ClientLogic.Layout;
 
 using Rampastring.Tools;
@@ -48,6 +50,62 @@ public partial class LanLobbyView : UserControl
             Logger.Log("LanLobbyView: building the themed lobby failed: " + ex);
             LobbyHost.Content = new TextBlock { Text = "The theme's LAN lobby could not be loaded: " + ex.Message };
         }
+
+        try
+        {
+            CreationHost.Children.Clear();
+            CreationHost.Children.Add(CreationWindow(viewModel));
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("LanLobbyView: building the game creation window failed: " + ex);
+        }
+    }
+
+    /// <summary>The LANGameCreationWindow (447×77, gamecreationoptionsbg.png): New Game, Load Game, Cancel.</summary>
+    private static Control CreationWindow(LanLobbyViewModel viewModel)
+    {
+        var window = new LayoutControl("LANGameCreationWindow", "XNAWindow", LayoutControlKind.Panel)
+        {
+            Width = 447,
+            Height = 77,
+            BackgroundTexture = "gamecreationoptionsbg.png",
+        };
+
+        string description = "SELECT SESSION TYPE".L10N("Client:Main:SelectMissionType");
+        (int descriptionWidth, int descriptionHeight) = ThemeFonts.Measure(description, 1);
+        ThemedWindow.Add(window, "lblDescription", "XNALabel", (window.Width - descriptionWidth) / 2, 12, descriptionWidth, descriptionHeight, description).FontIndex = 1;
+        LayoutControl btnNewGame = ThemedWindow.Add(window, "btnNewGame", "XNAClientButton", 12, 42, 133, 23, "New Game".L10N("Client:Main:NewGame"));
+        btnNewGame.FontIndex = 1;
+        LayoutControl btnLoadGame = ThemedWindow.Add(window, "btnLoadGame", "XNAClientButton", btnNewGame.X + btnNewGame.Width + 12, 42, 133, 23, "Load Game".L10N("Client:Main:LoadGame"));
+        btnLoadGame.FontIndex = 1;
+        ThemedWindow.Add(window, "btnCancel", "XNAClientButton", btnLoadGame.X + btnLoadGame.Width + 12, 42, 133, 23, "Cancel".L10N("Client:Main:ButtonCancel")).FontIndex = 1;
+
+        Canvas canvas = ThemedWindow.Build(window, (name, _) =>
+        {
+            switch (name)
+            {
+                case "btnNewGame":
+                    viewModel.NewGame();
+                    break;
+                case "btnLoadGame":
+                    viewModel.LoadGame();
+                    break;
+                case "btnCancel":
+                    viewModel.CancelCreation();
+                    break;
+            }
+        }, new Dictionary<string, Func<LayoutControl, Control>>());
+
+        if (LayoutView.FindNamed<ThemedButton>(canvas, "btnLoadGame") is ThemedButton load)
+        {
+            load.DataContext = viewModel;
+            load.Bind(IsEnabledProperty, new Binding(nameof(LanLobbyViewModel.CanLoadGame)));
+        }
+
+        canvas.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center;
+        canvas.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+        return canvas;
     }
 
     /// <summary>The controls LANLobby.Initialize creates, at its positions.</summary>
