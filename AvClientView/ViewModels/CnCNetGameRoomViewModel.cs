@@ -42,6 +42,31 @@ public sealed class CnCNetGameRoomViewModel : MultiplayerRoomViewModel
 
     protected override void ToggleRoomLock() => room.ToggleLock();
 
+    /// <summary>The tunnel negotiation status panel is shown (dynamic tunnels only).</summary>
+    public bool ShowNegotiationStatus => room.ShowNegotiationStatus && room.TunnelMode == TunnelMode.V3Dynamic;
+
+    /// <summary>The players, in the room's order.</summary>
+    public System.Collections.Generic.List<string> NegotiationPlayers => room.Players.ConvertAll(p => p.Name);
+
+    public ClientLogic.Tunnels.NegotiationPairRow NegotiationPair(string player1, string player2)
+    {
+        var status = ClientLogic.Tunnels.NegotiationStatusRows.DisplayStatus(room.NegotiationData.GetNegotiationStatus(player1, player2), true);
+        var ping = room.NegotiationData.GetPing(player1, player2);
+        (string text, PingQualityTier tier) = ClientLogic.Tunnels.NegotiationStatusRows.GetLabel(status, ping);
+        return new(player1, player2, status, ping, text, tier, null);
+    }
+
+    public System.Collections.Generic.List<ClientLogic.Tunnels.NegotiationPairRow> NegotiationRows =>
+        ClientLogic.Tunnels.NegotiationStatusRows.ListPairs(NegotiationPlayers, room.NegotiationData, inferInProgress: true);
+
+    public void CloseNegotiationStatus()
+    {
+        if (room.ShowNegotiationStatus)
+            room.ToggleNegotiationStatus();
+    }
+
+    public void RenegotiateAll() => room.TriggerRenegotiateAll();
+
     /// <summary>The mouse moved over the room: the host isn't inactive.</summary>
     public void ResetInactivity() => room.ResetInactivity();
 }

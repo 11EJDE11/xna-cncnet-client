@@ -157,6 +157,28 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
     /// <summary>The launch button is blocked by a tunnel problem.</summary>
     public bool IsInTunnelError => TunnelSession.IsInTunnelError;
 
+    /// <summary>The negotiation status of every pair of players (dynamic V3 tunnels).</summary>
+    public NegotiationDataManager NegotiationData => negotiator.NegotiationData;
+
+    /// <summary>The negotiation status panel is shown (/NEGSTATUS, the button, or a launch blocked by failures).</summary>
+    public bool ShowNegotiationStatus { get; set; }
+
+    /// <summary>/NEGSTATUS: toggles the panel, only with dynamic tunnels.</summary>
+    public void ToggleNegotiationStatus(string args = null)
+    {
+        if (TunnelSession.Mode != TunnelMode.V3Dynamic)
+        {
+            AddNotice("Negotiation status is only available when using dynamic tunnels.".L10N("Client:Main:NegStatusOnlyDynamic"));
+            return;
+        }
+
+        ShowNegotiationStatus = !ShowNegotiationStatus;
+        RaiseChanged();
+    }
+
+    /// <summary>The panel's Renegotiate All (host).</summary>
+    public void TriggerRenegotiateAll() => TunnelSession.TriggerRenegotiateAll();
+
     /// <summary>The tunnel the room uses (null in dynamic V3 mode until one is negotiated).</summary>
     public CnCNetTunnel CurrentTunnel => tunnelHandler.CurrentTunnel;
 
@@ -193,6 +215,12 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
         commands.Add(new ChatBoxCommand("DOWNLOADMAP",
             "Download a map from CNCNet's map server using a map ID and an optional filename.\nExample:\"/downloadmap MAPID [2] My Battle Map\"".L10N("Client:Main:DownloadMapCommandDescription"),
             false, parameters => MapSharing.DownloadMapById(parameters)));
+        commands.Add(new ChatBoxCommand("NEGSTATUS",
+            "Toggle the tunnel negotiation status display".L10N("Client:Main:NegStatusCommand"),
+            false, ToggleNegotiationStatus));
+        commands.Add(new ChatBoxCommand("NS",
+            "Shorthand for /NEGSTATUS".L10N("Client:Main:NSCommand"),
+            false, ToggleNegotiationStatus));
         commands.Add(new ChatBoxCommand("RENEGOTIATE",
             "Force all players to renegotiate tunnel connections (V3 Dynamic, host only)".L10N("Client:Main:RenegotiateCommand"),
             true, RenegotiateAllCommand));
@@ -460,6 +488,7 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
     public void Clear()
     {
         StopInactiveCheck();
+        ShowNegotiationStatus = false;
 
         if (!IsHost)
             AIPlayers.Clear();
@@ -1185,6 +1214,15 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
             {
                 AddNotice("Cannot start game: Some tunnel negotiations have failed.".L10N("Client:Main:CannotStartNegotiationsFailed"), ChatColor.Red);
                 ShowFailedNegotiations();
+
+                // Put the recovery tool in front of the host: the negotiation status panel
+                // lists the failed pairs and carries the Renegotiate All button.
+                if (!ShowNegotiationStatus)
+                {
+                    ShowNegotiationStatus = true;
+                    RaiseChanged();
+                }
+
                 return;
             }
 

@@ -47,6 +47,7 @@ public partial class GameRoomView : UserControl
         {
             WindowHost.Children.Add(new GameLobbySettingsView(cncnet.Settings));
             WindowHost.Children.Add(new TunnelSelectionView(cncnet.Tunnels));
+            WindowHost.Children.Add(new NegotiationStatusView(cncnet));
         }
 
         if (viewModel != null)
