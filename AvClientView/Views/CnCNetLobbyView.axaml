@@ -12,41 +12,13 @@
     <!-- Login: the theme's CnCNetLoginWindow, built in code-behind -->
     <ContentControl x:Name="LoginHost" IsVisible="{Binding ShowLogin}" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-    <!-- Create game -->
-    <Border IsVisible="{Binding ShowCreateGame}" Background="#F0000000" BorderBrush="#A8A8A8" BorderThickness="1" Padding="16"
-            HorizontalAlignment="Center" VerticalAlignment="Center" Width="400">
-      <StackPanel Spacing="8">
-        <TextBlock Text="Create Game" FontSize="18" FontWeight="Bold" />
-        <TextBlock Text="Game room name:" />
-        <TextBox Text="{Binding NewRoomName}" MaxLength="23" />
-        <TextBlock Text="Password (leave blank for none):" />
-        <TextBox Text="{Binding NewRoomPassword}" />
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <TextBlock Text="Maximum number of players:" VerticalAlignment="Center" Width="200" />
-          <ComboBox Width="80" ItemsSource="{Binding MaxPlayerItems}" SelectedIndex="{Binding NewRoomMaxPlayersIndex}" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <TextBlock Text="Skill level:" VerticalAlignment="Center" Width="200" />
-          <ComboBox Width="150" ItemsSource="{Binding SkillLevels}" SelectedIndex="{Binding NewRoomSkillLevel}" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-          <Button Content="Create Game" Command="{Binding CreateGameCommand}" IsDefault="True" />
-          <Button Content="Cancel" Command="{Binding CancelCreateGameCommand}" />
-        </StackPanel>
-      </StackPanel>
-    </Border>
+    <!-- Create game: the theme's GameCreationWindow, built in code-behind -->
+    <!-- The XNA DarkeningPanel behind the window: black at alpha 128 -->
+    <Panel IsVisible="{Binding ShowCreateGame}" Background="#80000000">
+      <ContentControl x:Name="CreateHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Panel>
 
-    <!-- Password -->
-    <Border IsVisible="{Binding ShowPasswordPrompt}" Background="#F0000000" BorderBrush="#A8A8A8" BorderThickness="1" Padding="16"
-            HorizontalAlignment="Center" VerticalAlignment="Center" Width="320">
-      <StackPanel Spacing="8">
-        <TextBlock Text="Password required" FontSize="18" FontWeight="Bold" />
-        <TextBox Text="{Binding JoinPassword}" PasswordChar="*" />
-        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-          <Button Content="Join" Command="{Binding SubmitPasswordCommand}" IsDefault="True" />
-          <Button Content="Cancel" Command="{Binding CancelPasswordCommand}" />
-        </StackPanel>
-      </StackPanel>
-    </Border>
+    <!-- Password: the theme's PasswordRequestWindow, built in code-behind -->
+    <ContentControl x:Name="PasswordHost" IsVisible="{Binding ShowPasswordPrompt}" HorizontalAlignment="Center" VerticalAlignment="Center" />
   </Panel>
 </UserControl>

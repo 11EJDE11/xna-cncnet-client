@@ -51,6 +51,8 @@ public partial class CnCNetLobbyView : UserControl
                 });
 
             LoginHost.Content = BuildLoginWindow(viewModel);
+            CreateHost.Content = BuildGameCreationWindow(viewModel);
+            PasswordHost.Content = BuildPasswordWindow(viewModel);
 
             if (LobbyHost.Content is Canvas root && LayoutView.FindNamed<TextBlock>(root, "lblOnlineCount") is TextBlock onlineCount)
             {
@@ -165,6 +167,112 @@ public partial class CnCNetLobbyView : UserControl
                 ["chkRememberMe"] = layout => CheckBox(layout, nameof(CnCNetLobbyViewModel.RememberMe)),
                 ["chkPersistentMode"] = layout => CheckBox(layout, nameof(CnCNetLobbyViewModel.PersistentMode)),
                 ["chkAutoConnect"] = layout => CheckBox(layout, nameof(CnCNetLobbyViewModel.AutoConnect), nameof(CnCNetLobbyViewModel.CanAutoConnect)),
+            });
+    }
+
+    /// <summary>
+    /// The game creation window, laid out as the XNA GameCreationWindow (without the advanced tunnel options and
+    /// saved-game loading, which the preview doesn't have).
+    /// </summary>
+    private static Control BuildGameCreationWindow(CnCNetLobbyViewModel viewModel)
+    {
+        const int sides = 6, margin = 6, tunnelListWidth = 466;
+
+        var window = new LayoutControl("GameCreationWindow", "XNAWindow", LayoutControlKind.Panel)
+        {
+            Width = tunnelListWidth + (sides * 2) + (margin * 2),
+            BackgroundTexture = "gamecreationoptionsbg.png",
+        };
+
+        int left = sides + margin;
+        LayoutControl tbGameName = ThemedWindow.Add(window, "tbGameName", "XNATextBox", window.Width - 150 - sides - margin, 6 + margin, 150, 21);
+        ThemedWindow.Add(window, "lblRoomName", "XNALabel", left, tbGameName.Y + 1, 0, 0, "Game room name:");
+        LayoutControl ddMaxPlayers = ThemedWindow.Add(window, "ddMaxPlayers", "XNAClientDropDown", tbGameName.X, tbGameName.Y + tbGameName.Height + 20, tbGameName.Width, 21);
+        ThemedWindow.Add(window, "lblMaxPlayers", "XNALabel", left, ddMaxPlayers.Y + 1, 0, 0, "Maximum number of players:");
+        LayoutControl ddSkillLevel = ThemedWindow.Add(window, "ddSkillLevel", "XNAClientDropDown", tbGameName.X, ddMaxPlayers.Y + ddMaxPlayers.Height + 20, tbGameName.Width, 21);
+        ThemedWindow.Add(window, "lblSkillLevel", "XNALabel", left, ddSkillLevel.Y + 1, 0, 0, "Select preferred skill level of players:");
+        LayoutControl tbPassword = ThemedWindow.Add(window, "tbPassword", "XNATextBox", tbGameName.X, ddSkillLevel.Y + ddSkillLevel.Height + 20, tbGameName.Width, 21);
+        LayoutControl lblPassword = ThemedWindow.Add(window, "lblPassword", "XNALabel", left, tbPassword.Y + 1, 0, 0, "Password (leave blank for none):");
+        (_, int labelHeight) = ThemeFonts.Measure(lblPassword.Text, 0);
+
+        int advancedOptionsY = tbPassword.Y + 1 + labelHeight + (margin * 3);
+        LayoutControl btnCreateGame = ThemedWindow.Add(window, "btnCreateGame", "XNAClientButton", left, advancedOptionsY + 23 + (margin * 3), 133, 23, "Create Game");
+        ThemedWindow.Add(window, "btnCancel", "XNAClientButton", window.Width - 133 - sides - margin, btnCreateGame.Y, 133, 23, "Cancel");
+        window.Height = btnCreateGame.Y + btnCreateGame.Height + margin + 6;
+
+        TextBox BoundTextBox(LayoutControl layout, string property)
+        {
+            TextBox textBox = ThemedStyle.TextBox(layout.Width, layout.Height, string.Empty);
+            textBox.DataContext = viewModel;
+            textBox.Bind(Avalonia.Controls.TextBox.TextProperty, new Binding(property) { Mode = BindingMode.TwoWay });
+            return textBox;
+        }
+
+        Control DropDown(LayoutControl layout, string items, string index)
+        {
+            var dropDown = new ThemedDropDown(layout.Width, layout.Height) { DataContext = viewModel };
+            dropDown.Bind(ThemedDropDown.ItemsSourceProperty, new Binding(items));
+            dropDown.Bind(ThemedDropDown.SelectedIndexProperty, new Binding(index) { Mode = BindingMode.TwoWay });
+            return dropDown;
+        }
+
+        return ThemedWindow.Build(window, (name, layout) =>
+            {
+                if (name == "btnCreateGame")
+                    viewModel.CreateGameCommand.Execute(null);
+                else if (name == "btnCancel")
+                    viewModel.CancelCreateGameCommand.Execute(null);
+            },
+            new Dictionary<string, Func<LayoutControl, Control>>
+            {
+                ["tbGameName"] = layout =>
+                {
+                    TextBox textBox = BoundTextBox(layout, nameof(CnCNetLobbyViewModel.NewRoomName));
+                    textBox.MaxLength = 23;
+                    return textBox;
+                },
+                ["tbPassword"] = layout => BoundTextBox(layout, nameof(CnCNetLobbyViewModel.NewRoomPassword)),
+                ["ddMaxPlayers"] = layout => DropDown(layout, nameof(CnCNetLobbyViewModel.MaxPlayerItems), nameof(CnCNetLobbyViewModel.NewRoomMaxPlayersIndex)),
+                ["ddSkillLevel"] = layout => DropDown(layout, nameof(CnCNetLobbyViewModel.SkillLevels), nameof(CnCNetLobbyViewModel.NewRoomSkillLevel)),
+            });
+    }
+
+    /// <summary>The password prompt, laid out as the XNA PasswordRequestWindow.</summary>
+    private static Control BuildPasswordWindow(CnCNetLobbyViewModel viewModel)
+    {
+        string description = "Please enter the password for the game and click OK.";
+        (int descriptionWidth, int descriptionHeight) = ThemeFonts.Measure(description, 0);
+
+        var window = new LayoutControl("PasswordRequestWindow", "XNAWindow", LayoutControlKind.Panel)
+        {
+            Width = descriptionWidth + 24,
+            Height = 110,
+            BackgroundTexture = "passwordquerybg.png",
+        };
+
+        LayoutControl lblDescription = ThemedWindow.Add(window, "lblDescription", "XNALabel", 12, 12, descriptionWidth, descriptionHeight, description);
+        ThemedWindow.Add(window, "tbPassword", "XNATextBox", lblDescription.X, lblDescription.Y + lblDescription.Height + 12, window.Width - 24, 21);
+        LayoutControl btnOK = ThemedWindow.Add(window, "btnOK", "XNAClientButton", lblDescription.X, window.Height - 35, 92, 23, "OK");
+        ThemedWindow.Add(window, "btnCancel", "XNAClientButton", window.Width - 104, btnOK.Y, 92, 23, "Cancel");
+
+        return ThemedWindow.Build(window, (name, layout) =>
+            {
+                if (name == "btnOK")
+                    viewModel.SubmitPasswordCommand.Execute(null);
+                else if (name == "btnCancel")
+                    viewModel.CancelPasswordCommand.Execute(null);
+            },
+            new Dictionary<string, Func<LayoutControl, Control>>
+            {
+                ["tbPassword"] = layout =>
+                {
+                    TextBox textBox = ThemedStyle.TextBox(layout.Width, layout.Height, string.Empty);
+                    textBox.PasswordChar = '*';
+                    textBox.DataContext = viewModel;
+                    textBox.Bind(Avalonia.Controls.TextBox.TextProperty, new Binding(nameof(CnCNetLobbyViewModel.JoinPassword)) { Mode = BindingMode.TwoWay });
+                    textBox.KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.Enter), Command = viewModel.SubmitPasswordCommand });
+                    return textBox;
+                },
             });
     }
 
