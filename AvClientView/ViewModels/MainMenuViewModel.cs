@@ -82,6 +82,10 @@ public sealed partial class MainMenuViewModel : ObservableObject
 
     public event EventHandler LoadGameRequested;
 
+    public event EventHandler ExtrasRequested;
+
+    public event EventHandler StatisticsRequested;
+
     public event EventHandler CnCNetRequested;
 
     [RelayCommand(CanExecute = nameof(MapsLoaded))]
@@ -124,6 +128,18 @@ public sealed partial class MainMenuViewModel : ObservableObject
                 break;
             case "btnOptions":
                 OptionsRequested?.Invoke(this, EventArgs.Empty);
+                break;
+            case "btnMapEditor":
+                ClientLogic.Launch.MapEditorLauncher.Launch();
+                break;
+            case "btnCredits":
+                ExtrasViewModel.Credits();
+                break;
+            case "btnExtras":
+                ExtrasRequested?.Invoke(this, EventArgs.Empty);
+                break;
+            case "btnStatistics":
+                StatisticsRequested?.Invoke(this, EventArgs.Empty);
                 break;
             case "btnExit":
                 Exit();

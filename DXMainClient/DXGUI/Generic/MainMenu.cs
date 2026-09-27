@@ -2,6 +2,7 @@ using ClientCore;
 using ClientCore.Enums;
 using ClientCore.I18N;
 using ClientGUI;
+using ClientLogic.Launch;
 using DTAClient.Domain;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using DTAClient.DXGUI.Multiplayer;
@@ -1194,20 +1195,7 @@ namespace DTAClient.DXGUI.Generic
             }
         }
 
-        private void LaunchMapEditor()
-        {
-            OSVersion osVersion = ClientConfiguration.Instance.GetOperatingSystemVersion();
-            using var mapEditorProcess = new Process();
-
-            if (osVersion != OSVersion.UNIX)
-                mapEditorProcess.StartInfo.FileName = SafePath.CombineFilePath(ProgramConstants.GamePath, ClientConfiguration.Instance.MapEditorExePath);
-            else
-                mapEditorProcess.StartInfo.FileName = SafePath.CombineFilePath(ProgramConstants.GamePath, ClientConfiguration.Instance.UnixMapEditorExePath);
-
-            mapEditorProcess.StartInfo.UseShellExecute = false;
-
-            mapEditorProcess.Start();
-        }
+        private void LaunchMapEditor() => MapEditorLauncher.Launch();
 
         public string GetSwitchName() => "Main Menu".L10N("Client:Main:MainMenu");
     }
