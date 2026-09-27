@@ -74,6 +74,18 @@ public static class ThemedLobbyView
 
         AddPlayerRows(ini, reader, parser, window);
 
+        // Players don't see the map list (MultiplayerGameLobby.HideMapList); the room buttons the preview doesn't have
+        // yet are hidden
+        var hidden = new List<string> { "btnChangeTunnel", "btnGameLobbySettings", "btnNegotiationStatus" };
+        if (kind.IsMultiplayer && !isHost)
+            hidden.AddRange(["ddGameMode", "lblGameModeSelect", "lbMapList", "tbMapSearch", "btnPickRandomMap", "btnMapSortAlphabetically", "btnLockGame"]);
+
+        foreach (string name in hidden)
+        {
+            if (window.Find(name) is LayoutControl control)
+                control.Visible = false;
+        }
+
         // The extra options panel starts hidden in XNA; the preview doesn't have it yet
         if (window.Find("PlayerExtraOptionsPanel") is LayoutControl extraOptions)
             extraOptions.Visible = false;

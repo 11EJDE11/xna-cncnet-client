@@ -15,5 +15,7 @@ public sealed class LanGameRoomViewModel : MultiplayerRoomViewModel
         this.room = room;
     }
 
+    public override string LayoutIniName => LanGameRoom.LAYOUT_INI_NAME;
+
     protected override void ToggleRoomLock() => room.ToggleLock();
 }

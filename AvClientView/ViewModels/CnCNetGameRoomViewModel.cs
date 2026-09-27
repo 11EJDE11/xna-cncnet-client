@@ -28,5 +28,7 @@ public sealed class CnCNetGameRoomViewModel : MultiplayerRoomViewModel
         return string.IsNullOrEmpty(ping) ? status : string.IsNullOrEmpty(status) ? ping : status + "  " + ping;
     }
 
+    public override string LayoutIniName => CnCNetGameRoom.LAYOUT_INI_NAME;
+
     protected override void ToggleRoomLock() => room.ToggleLock();
 }

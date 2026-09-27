@@ -39,6 +39,12 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
     /// <summary>The launch button's text for a player (the CnCNet room toggles ready; the LAN room doesn't).</summary>
     protected virtual string PlayerLaunchText => "I'm Ready";
 
+    /// <summary>The layout INI the XNA lobby of this room type reads (LANGameLobby or CnCNetGameLobby).</summary>
+    public abstract string LayoutIniName { get; }
+
+    /// <summary>The room is being opened (the view rebuilds its layout for the local player's role).</summary>
+    public event System.EventHandler Opened;
+
     /// <summary>A line about the room shown above the chat.</summary>
     public virtual string RoomInfo => string.Empty;
 
@@ -67,6 +73,7 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
         Messages.Clear();
         Messages.Add(new ChatLineViewModel("Type / to view a list of available chat commands.".L10N("Client:Main:ChatCommandTip"), Avalonia.Media.Brushes.Silver));
         Refresh();
+        Opened?.Invoke(this, System.EventArgs.Empty);
     }
 
     protected override void OnRefreshed()
