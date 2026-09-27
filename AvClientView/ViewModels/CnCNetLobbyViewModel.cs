@@ -53,13 +53,16 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         lobby.RoomLeft += (_, _) => RoomLeft?.Invoke(this, EventArgs.Empty);
 
         timer = new DispatcherTimer(TimeSpan.FromMilliseconds(100), DispatcherPriority.Background, (_, _) => Tick());
+
+        CnCNetPlayerCountTask.CnCNetGameCountUpdated += (_, e) => Dispatcher.UIThread.Post(() =>
+            OnlineCount = e.PlayerCount < 0 ? "N/A" : e.PlayerCount.ToString());
     }
 
     public CnCNetGameRoomViewModel Room { get; }
 
     public ObservableCollection<ChatLineViewModel> Messages { get; } = [];
 
-    public ObservableCollection<string> Users { get; } = [];
+    public ObservableCollection<UserItemViewModel> Users { get; } = [];
 
     public ObservableCollection<CnCNetGameItemViewModel> Games { get; } = [];
 
@@ -82,6 +85,10 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
 
     [ObservableProperty]
     private string playerName = UserINISettings.Instance.PlayerName;
+
+    /// <summary>The CnCNet player count, as the XNA lobby's "Online:" label shows it.</summary>
+    [ObservableProperty]
+    private string onlineCount = CnCNetPlayerCountTask.PlayerCount > 0 ? CnCNetPlayerCountTask.PlayerCount.ToString() : "-";
 
     [ObservableProperty]
     private bool rememberMe = UserINISettings.Instance.SkipConnectDialog;
@@ -187,7 +194,7 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     {
         Users.Clear();
         foreach (ChannelUser user in lobby.CurrentUsers)
-            Users.Add((user.IsAdmin ? "@" : string.Empty) + user.IRCUser.Name + (user.IRCUser.IsFriend ? " (friend)" : string.Empty));
+            Users.Add(new UserItemViewModel(user.IRCUser.Name + (user.IRCUser.IsFriend ? " (friend)" : string.Empty), user.IsAdmin));
     }
 
     private void RefreshGames()
@@ -303,6 +310,16 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         timer.Stop();
         lobby.Shutdown();
     }
+}
+
+/// <summary>A user in the CnCNet channel's user list; admins show in the theme's admin colour.</summary>
+public sealed record UserItemViewModel(string Name, bool IsAdmin)
+{
+    public Avalonia.Media.IBrush Brush => IsAdmin
+        ? new Avalonia.Media.SolidColorBrush(AvClientView.Theme.ThemeAssets.ParseColor(ClientConfiguration.Instance.AdminNameColor, Avalonia.Media.Colors.Red))
+        : new Avalonia.Media.SolidColorBrush(AvClientView.Theme.ThemeAssets.ButtonTextColor);
+
+    public override string ToString() => IsAdmin ? Name + " (Admin)" : Name;
 }
 
 /// <summary>A hosted game in the CnCNet game list.</summary>
