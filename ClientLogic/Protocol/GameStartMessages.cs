@@ -32,9 +32,10 @@ public sealed record StartV2Message(int GameId, IReadOnlyList<StartV2Entry> Play
         var players = new List<StartV2Entry>(count);
         for (int i = 0; i < count; i++)
         {
+            // The "port" is the V2 tunnel's client ID, which can be negative (a signed short)
             if (!reader.TryReadText(out string name)
                 || !reader.TryReadText(out string address)
-                || !reader.TryReadInt(0, ushort.MaxValue, out int port))
+                || !reader.TryReadInt(out int port))
             {
                 return false;
             }

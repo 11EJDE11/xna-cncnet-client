@@ -125,7 +125,7 @@ public class LobbyMessageTests
     [Fact]
     public void StartMessagesRoundTrip()
     {
-        var v2 = new StartV2Message(4242, [new StartV2Entry("Alice", "1.2.3.4", 50000), new StartV2Entry("B;ob", "1.2.3.4", 50001)]);
+        var v2 = new StartV2Message(4242, [new StartV2Entry("Alice", "1.2.3.4", 50000), new StartV2Entry("B;ob", "1.2.3.4", -17618)]);
         Assert.True(StartV2Message.TryDecode(v2.Encode(), out var decodedV2));
         Assert.Equal(v2.GameId, decodedV2.GameId);
         Assert.Equal(v2.Players, decodedV2.Players);
