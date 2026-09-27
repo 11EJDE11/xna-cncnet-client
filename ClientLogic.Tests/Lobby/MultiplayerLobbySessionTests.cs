@@ -42,6 +42,7 @@ public class MultiplayerLobbySessionTests
     {
         public List<string> Shown { get; } = [];
         public void ShowMessage(string title, string text) => Shown.Add(text);
+        public void ShowMessage(string title, string text, Action onOk) => ShowMessage(title, text);
         public void Confirm(string title, string text, Action onYes) { }
     }
 

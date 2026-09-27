@@ -25,9 +25,11 @@ public sealed class AvaloniaDialogService(Window owner) : IDialogService
 {
     public void ShowMessage(string title, string text) => Show(title, text, null);
 
+    public void ShowMessage(string title, string text, Action onOk) => Show(title, text, null, onOk);
+
     public void Confirm(string title, string text, Action onYes) => Show(title, text, onYes);
 
-    private void Show(string title, string text, Action onYes)
+    private void Show(string title, string text, Action onYes, Action onOk = null)
     {
         var dialog = new Window
         {
@@ -43,7 +45,11 @@ public sealed class AvaloniaDialogService(Window owner) : IDialogService
         if (onYes == null)
         {
             var ok = new Button { Content = "OK", IsDefault = true };
-            ok.Click += (_, _) => dialog.Close();
+            ok.Click += (_, _) =>
+            {
+                dialog.Close();
+                onOk?.Invoke();
+            };
             buttons.Children.Add(ok);
         }
         else

@@ -26,6 +26,9 @@ public partial class GameRoomView : UserControl
         InitializeComponent();
         DataContextChanged += (_, _) => Attach(DataContext as MultiplayerRoomViewModel);
         AttachedToVisualTree += (_, _) => BuildIfRoleChanged();
+
+        // The XNA CnCNet lobby resets the host inactivity check on mouse moves
+        PointerMoved += (_, _) => (viewModel as CnCNetGameRoomViewModel)?.ResetInactivity();
     }
 
     private void Attach(MultiplayerRoomViewModel newViewModel)

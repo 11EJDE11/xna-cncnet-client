@@ -63,6 +63,8 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
     private bool broadcasting;
     private TimeSpan timeUntilGameBroadcast;
 
+    private readonly GameHostInactiveChecker gameHostInactiveChecker;
+
     public CnCNetGameRoom(CnCNetManager connectionManager, TunnelHandler tunnelHandler, IUiDispatcher uiDispatcher,
         GameCollection gameCollection, CnCNetUserData cncnetUserData, MapLoader mapLoader, GameProcessService gameProcess,
         IDialogService dialogs, ISoundService sounds, Random random)
@@ -73,6 +75,10 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
         this.gameCollection = gameCollection;
         this.cncnetUserData = cncnetUserData;
         localGame = ClientConfiguration.Instance.LocalGame;
+
+        gameHostInactiveChecker = ClientConfiguration.Instance.InactiveHostKickEnabled ? new GameHostInactiveChecker(dialogs, uiDispatcher) : null;
+        if (gameHostInactiveChecker != null)
+            gameHostInactiveChecker.CloseEvent += (_, _) => Leave();
 
         Session = new CnCNetLobbySession(() => channel, () => chatColor);
         LobbyState.RoomSettings = roomSettings;
@@ -225,6 +231,7 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
         if (isHost)
         {
             RandomSeed = Random.Next();
+            StartInactiveCheck();
         }
         else
         {
@@ -298,6 +305,20 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
             resetTimer, discord => discord.UpdatePresence(map, mode, "Multiplayer", currentState, players, roomSettings.PlayerLimit, side,
                 roomName, isHost, isPassworded, locked, resetTimer));
     }
+
+    /// <summary>The host's inactivity check (InactiveHostKickEnabled; not for rooms with a custom password).</summary>
+    private void StartInactiveCheck()
+    {
+        if (roomSettings.IsCustomPassword)
+            return;
+
+        gameHostInactiveChecker?.Start();
+    }
+
+    private void StopInactiveCheck() => gameHostInactiveChecker?.Stop();
+
+    /// <summary>The user did something in the room (the XNA lobby resets the check on mouse moves).</summary>
+    public void ResetInactivity() => gameHostInactiveChecker?.Reset();
 
     /// <summary>Called regularly by the front end: announces the game while hosting.</summary>
     public void Update(TimeSpan elapsed)
@@ -438,6 +459,8 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
     /// <summary>Closes the room (the XNA lobby's Clear).</summary>
     public void Clear()
     {
+        StopInactiveCheck();
+
         if (!IsHost)
             AIPlayers.Clear();
 
@@ -1386,6 +1409,8 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
             HandleCheatDetectedMessage(ProgramConstants.PLAYERNAME);
         }
 
+        StopInactiveCheck();
+
         if (TunnelSession.Mode == TunnelMode.V3Dynamic || tunnelHandler.CurrentTunnel?.Version == 3)
         {
             if (FindLocalPlayer() == null)
@@ -1425,6 +1450,7 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
             NormalisePlayers();
             BroadcastPlayerOptions();
             BroadcastPlayerExtraOptions();
+            StartInactiveCheck();
 
             if (!RoomLock.IsFull(Players.Count, roomSettings.PlayerLimit))
                 UnlockGame(true);

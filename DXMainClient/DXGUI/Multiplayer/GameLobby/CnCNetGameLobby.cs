@@ -1,4 +1,5 @@
 using ClientCore;
+using ClientLogic.CnCNet;
 using ClientLogic.Lobby;
 using ClientLogic.MapSharing;
 using ClientLogic.Protocol;
@@ -74,7 +75,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             tunnelSession.PlayerDataChanged += RefreshPlayerSlots;
             tunnelSession.LaunchStatusChanged += () => UpdateLaunchGameButtonStatus();
 
-            gameHostInactiveChecker = ClientConfiguration.Instance.InactiveHostKickEnabled? new GameHostInactiveChecker(WindowManager, uiDispatcher) : null;
+            gameHostInactiveChecker = ClientConfiguration.Instance.InactiveHostKickEnabled? new GameHostInactiveChecker(new XnaDialogService(WindowManager), uiDispatcher) : null;
 
             ctcpCommandHandlers = new CommandHandlerBase[]
             {

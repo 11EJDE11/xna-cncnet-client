@@ -41,4 +41,7 @@ public sealed class CnCNetGameRoomViewModel : MultiplayerRoomViewModel
     public override string LayoutIniName => CnCNetGameRoom.LAYOUT_INI_NAME;
 
     protected override void ToggleRoomLock() => room.ToggleLock();
+
+    /// <summary>The mouse moved over the room: the host isn't inactive.</summary>
+    public void ResetInactivity() => room.ResetInactivity();
 }

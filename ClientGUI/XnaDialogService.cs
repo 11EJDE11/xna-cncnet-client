@@ -20,6 +20,13 @@ namespace ClientGUI
 
         public void ShowMessage(string title, string text) => XNAMessageBox.Show(windowManager, title, text);
 
+        public void ShowMessage(string title, string text, Action onOk)
+        {
+            var messageBox = new XNAMessageBox(windowManager, title, text, XNAMessageBoxButtons.OK);
+            messageBox.OKClickedAction = _ => onOk();
+            messageBox.Show();
+        }
+
         public void Confirm(string title, string text, Action onYes)
         {
             var messageBox = XNAMessageBox.ShowYesNoDialog(windowManager, title, text);

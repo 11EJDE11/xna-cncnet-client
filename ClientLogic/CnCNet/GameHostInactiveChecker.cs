@@ -2,15 +2,13 @@
 using System.Timers;
 using ClientCore;
 using ClientCore.Extensions;
-using ClientGUI;
 using ClientLogic.UI;
-using Rampastring.XNAUI;
 
-namespace DTAClient.DXGUI.Multiplayer.GameLobby
+namespace ClientLogic.CnCNet
 {
     public class GameHostInactiveChecker
     {
-        private readonly WindowManager windowManager;
+        private readonly IDialogService dialogs;
         private readonly IUiDispatcher uiDispatcher;
         private readonly Timer timer;
         private bool isWarningShown;
@@ -20,9 +18,9 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
 
         public event EventHandler CloseEvent;
 
-        public GameHostInactiveChecker(WindowManager windowManager, IUiDispatcher uiDispatcher)
+        public GameHostInactiveChecker(IDialogService dialogs, IUiDispatcher uiDispatcher)
         {
-            this.windowManager = windowManager;
+            this.dialogs = dialogs;
             this.uiDispatcher = uiDispatcher;
             timer = new Timer();
             timer.AutoReset = true;
@@ -71,14 +69,10 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         private void ShowWarning()
         {
             isWarningShown = true;
-            XNAMessageBox hostInactiveWarningMessageBox = new XNAMessageBox(
-            windowManager,
+            dialogs.ShowMessage(
                 "Are you still here?".L10N("Client:Main:InactiveHostWarningTitle"),
                 "Your game may be closed due to inactivity.".L10N("Client:Main:InactiveHostWarningText"),
-                XNAMessageBoxButtons.OK
-            );
-            hostInactiveWarningMessageBox.OKClickedAction = box => Reset();
-            hostInactiveWarningMessageBox.Show();
+                Reset);
         }
     }
 }
