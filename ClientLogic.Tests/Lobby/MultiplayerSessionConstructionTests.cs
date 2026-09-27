@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using ClientLogic.CnCNet;
 using ClientLogic.Lan;
@@ -73,5 +74,27 @@ public class MultiplayerSessionConstructionTests
         Assert.NotNull(lobby.CurrentChannel);
         Assert.Contains(room.ChatCommands, c => c.Command == "TUNNELINFO");
         Assert.Empty(lobby.Games);
+    }
+
+    [Fact]
+    public void ACnCNetPlayerSeesReturnMessagesInsteadOfTakingThemAsReadyRequests()
+    {
+        var dispatcher = new ImmediateDispatcher();
+        var random = new Random(1);
+        var gameCollection = new GameCollection();
+        var userData = new CnCNetUserData();
+        var connectionManager = new CnCNetManager(dispatcher, gameCollection, userData, random);
+        var room = new CnCNetGameRoom(connectionManager, new TunnelHandler(dispatcher), dispatcher, gameCollection, userData,
+            new MapLoader(), new GameProcessService(), new NullDialogs(), new NullSounds(), random);
+
+        var channel = new Channel("Room", "#cncnet-test-game1234567", false, true, "password", null);
+        room.SetUp(channel, isHost: false, playerLimit: 8, tunnel: null, hostName: "Host", isCustomPassword: false, skillLevel: 0);
+
+        var notices = new List<string>();
+        room.MessageAdded += (_, message) => notices.Add(message.Message);
+
+        channel.OnCTCPReceived("Guest", "RETURN");
+
+        Assert.Contains(notices, n => n.Contains("Guest") && n.Contains("returned"));
     }
 }

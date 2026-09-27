@@ -93,8 +93,9 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
         // The XNA lobby's handlers, in its order and with its matching rules (the first match wins)
         ctcpCommandHandlers =
         [
-            CtcpHandler.String("OR", HandleOptionsRequest),
-            CtcpHandler.String("R", HandleReadyRequest),
+            // Int handlers: a string handler for "R" would also take RETURN and RENEGALL
+            CtcpHandler.Int("OR", (sender, options) => HandleOptionsRequest(sender, new PlayerOptionsRequestMessage(PackedPlayerOptions.Unpack(options)).Encode())),
+            CtcpHandler.Int("R", (sender, readyState) => HandleReadyRequest(sender, new ReadyRequestMessage(readyState).Encode())),
             CtcpHandler.String("PO", ApplyPlayerOptions),
             CtcpHandler.String(PlayerExtraOptions.CNCNET_MESSAGE_KEY, HandlePlayerExtraOptions),
             CtcpHandler.String("GO", ApplyGameOptions),
