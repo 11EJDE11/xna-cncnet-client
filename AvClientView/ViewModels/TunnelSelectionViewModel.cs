@@ -28,14 +28,14 @@ public sealed partial class TunnelSelectionViewModel : ObservableObject
 {
     private static readonly TunnelMode[] modes = [TunnelMode.V3Dynamic, TunnelMode.V3Static, TunnelMode.V2Legacy];
 
-    private readonly CnCNetGameRoom room;
+    private readonly ITunnelSelectionTarget room;
     private readonly TunnelHandler tunnelHandler;
     private readonly TunnelListState state;
     private CnCNetTunnel originalTunnel;
     private TunnelMode originalMode;
     private bool updatingSelection;
 
-    public TunnelSelectionViewModel(CnCNetGameRoom room, TunnelHandler tunnelHandler)
+    public TunnelSelectionViewModel(ITunnelSelectionTarget room, TunnelHandler tunnelHandler)
     {
         this.room = room;
         this.tunnelHandler = tunnelHandler;

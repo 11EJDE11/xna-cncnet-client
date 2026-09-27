@@ -209,6 +209,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 SetPrimary(cncnetLobby.Room, "Game Lobby".L10N("Client:Main:GameLobby"));
                 CurrentPage = cncnetLobby.Room;
             };
+            cncnetLobby.LoadingRoomEntered += (_, _) =>
+            {
+                SetPrimary(cncnetLobby.LoadingRoom, "Load Game".L10N("Client:Main:LoadGame"));
+                CurrentPage = cncnetLobby.LoadingRoom;
+            };
+            cncnetLobby.LoadingRoomLeft += (_, _) =>
+            {
+                ResetPrimary();
+                if (CurrentPage == cncnetLobby.LoadingRoom)
+                    CurrentPage = cncnetLobby;
+            };
             cncnetLobby.RoomLeft += (_, _) =>
             {
                 ResetPrimary();

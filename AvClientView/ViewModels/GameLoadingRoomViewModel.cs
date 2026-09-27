@@ -77,12 +77,17 @@ public partial class GameLoadingRoomViewModel : ObservableObject
             OnPropertyChanged(nameof(LoadButtonText));
             OnPropertyChanged(nameof(CanSelectSavedGame));
             OnPropertyChanged(nameof(IsHost));
+            OnRefreshed();
             Refreshed?.Invoke(this, EventArgs.Empty);
         }
         finally
         {
             refreshing = false;
         }
+    }
+
+    protected virtual void OnRefreshed()
+    {
     }
 
     /// <summary>The state was shown again.</summary>

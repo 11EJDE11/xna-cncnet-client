@@ -191,8 +191,8 @@ public partial class CnCNetLobbyView : UserControl
     }
 
     /// <summary>
-    /// The game creation window, laid out as the XNA GameCreationWindow (without the advanced tunnel options and
-    /// saved-game loading, which the preview doesn't have).
+    /// The game creation window, laid out as the XNA GameCreationWindow (without the advanced tunnel options, which
+    /// the preview doesn't have).
     /// </summary>
     private static Control BuildGameCreationWindow(CnCNetLobbyViewModel viewModel)
     {
@@ -217,7 +217,14 @@ public partial class CnCNetLobbyView : UserControl
 
         int advancedOptionsY = tbPassword.Y + 1 + labelHeight + (margin * 3);
         LayoutControl btnCreateGame = ThemedWindow.Add(window, "btnCreateGame", "XNAClientButton", left, advancedOptionsY + 23 + (margin * 3), 133, 23, "Create Game");
-        ThemedWindow.Add(window, "btnCancel", "XNAClientButton", window.Width - 133 - sides - margin, btnCreateGame.Y, 133, 23, "Cancel");
+        LayoutControl btnCancel = ThemedWindow.Add(window, "btnCancel", "XNAClientButton", window.Width - 133 - sides - margin, btnCreateGame.Y, 133, 23, "Cancel");
+        if (!ClientCore.ClientConfiguration.Instance.DisableMultiplayerGameLoading)
+        {
+            int createRight = btnCreateGame.X + btnCreateGame.Width;
+            ThemedWindow.Add(window, "btnLoadMPGame", "XNAClientButton", createRight + (btnCancel.X - createRight) / 2 - 133 / 2, btnCreateGame.Y, 133, 23,
+                "Load Game".L10N("Client:Main:LoadGame"));
+        }
+
         window.Height = btnCreateGame.Y + btnCreateGame.Height + margin + 6;
 
         TextBox BoundTextBox(LayoutControl layout, string property)
@@ -254,10 +261,12 @@ public partial class CnCNetLobbyView : UserControl
             return dropDown;
         }
 
-        return ThemedWindow.Build(window, (name, layout) =>
+        Canvas createCanvas = ThemedWindow.Build(window, (name, layout) =>
             {
                 if (name == "btnCreateGame")
                     viewModel.CreateGameCommand.Execute(null);
+                else if (name == "btnLoadMPGame")
+                    viewModel.LoadGameCommand.Execute(null);
                 else if (name == "btnCancel")
                     viewModel.CancelCreateGameCommand.Execute(null);
             },
@@ -273,6 +282,14 @@ public partial class CnCNetLobbyView : UserControl
                 ["ddMaxPlayers"] = layout => DropDown(layout, nameof(CnCNetLobbyViewModel.MaxPlayerItems), nameof(CnCNetLobbyViewModel.NewRoomMaxPlayersIndex)),
                 ["ddSkillLevel"] = layout => DropDown(layout, nameof(CnCNetLobbyViewModel.SkillLevels), nameof(CnCNetLobbyViewModel.NewRoomSkillLevel)),
             });
+
+        if (LayoutView.FindNamed<ThemedButton>(createCanvas, "btnLoadMPGame") is ThemedButton loadButton)
+        {
+            loadButton.DataContext = viewModel;
+            loadButton.Bind(IsEnabledProperty, new Binding(nameof(CnCNetLobbyViewModel.CanLoadGame)));
+        }
+
+        return createCanvas;
     }
 
     /// <summary>The password prompt, laid out as the XNA PasswordRequestWindow.</summary>

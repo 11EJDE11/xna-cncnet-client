@@ -39,8 +39,13 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     private bool initialized;
 
     public CnCNetLobbyViewModel(CnCNetLobbyService lobby, CnCNetGameRoomViewModel roomViewModel, IDialogService dialogs,
-        GameCollection gameCollection, MapLoader mapLoader, CnCNetUserData userData, GameInvitationsViewModel invitations)
+        GameCollection gameCollection, MapLoader mapLoader, CnCNetUserData userData, GameInvitationsViewModel invitations,
+        TunnelHandler tunnelHandler)
     {
+        LoadingRoom = new CnCNetGameLoadingRoomViewModel(lobby.LoadingRoom, tunnelHandler);
+        lobby.LoadingRoomEntered += (_, _) => LoadingRoomEntered?.Invoke(this, EventArgs.Empty);
+        lobby.LoadingRoomLeft += (_, _) => LoadingRoomLeft?.Invoke(this, EventArgs.Empty);
+        lobby.LoadingRoom.ShowRequested += (_, _) => LoadingRoomEntered?.Invoke(this, EventArgs.Empty);
         this.invitations = invitations;
         this.userData = userData;
         this.mapLoader = mapLoader;
@@ -83,6 +88,19 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     }
 
     public CnCNetGameRoomViewModel Room { get; }
+
+    /// <summary>The saved game room (CnCNetGameLoadingLobby).</summary>
+    public CnCNetGameLoadingRoomViewModel LoadingRoom { get; }
+
+    /// <summary>The creation window's Load Game can be used (the local player hosted the saved game).</summary>
+    [ObservableProperty]
+    private bool canLoadGame;
+
+    /// <summary>The player entered the saved game room.</summary>
+    public event EventHandler LoadingRoomEntered;
+
+    /// <summary>The player left the saved game room.</summary>
+    public event EventHandler LoadingRoomLeft;
 
     public ObservableCollection<ChatLineViewModel> Messages { get; } = [];
 
@@ -353,6 +371,7 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
 
         NewRoomName = CnCNetLobbyService.DefaultRoomName;
         NewRoomPassword = string.Empty;
+        CanLoadGame = !ClientConfiguration.Instance.DisableMultiplayerGameLoading && CnCNetLobbyService.CanHostLoadedGame();
         ShowCreateGame = true;
     }
 
@@ -364,6 +383,24 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     {
         Room.Start();
         string error = lobby.CreateGame(NewRoomName, NewRoomPassword, int.Parse(MaxPlayerItems[Math.Max(0, NewRoomMaxPlayersIndex)]), NewRoomSkillLevel);
+        if (error != null)
+        {
+            dialogs.ShowMessage("Invalid game name".L10N("Client:Main:InvalidGameName"), error);
+            return;
+        }
+
+        ShowCreateGame = false;
+    }
+
+    /// <summary>The creation window's Load Game (BtnLoadMPGame_LeftClick): hosts the saved game.</summary>
+    [RelayCommand]
+    private void LoadGame()
+    {
+        if (!CanLoadGame)
+            return;
+
+        LoadingRoom.Start();
+        string error = lobby.CreateLoadedGame(NewRoomName);
         if (error != null)
         {
             dialogs.ShowMessage("Invalid game name".L10N("Client:Main:InvalidGameName"), error);
@@ -398,7 +435,10 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
 
     private void Join(HostedCnCNetGame game, string password)
     {
-        Room.Start();
+        if (game.IsLoadedGame)
+            LoadingRoom.Start();
+        else
+            Room.Start();
 
         if (lobby.JoinGame(game, password) == CnCNetLobbyService.JoinResult.NeedsPassword)
         {

@@ -35,9 +35,6 @@ public sealed class GameLoadingRoomView : UserControl
         DataContextChanged += (_, _) => Build();
     }
 
-    /// <summary>A button the view doesn't handle itself (CnCNet: btnChangeTunnel).</summary>
-    public static event Action<GameLoadingRoomViewModel, string> ExtraButtonClicked;
-
     private void Build()
     {
         if (DataContext is not GameLoadingRoomViewModel model || model == viewModel)
@@ -47,7 +44,11 @@ public sealed class GameLoadingRoomView : UserControl
 
         try
         {
-            Content = BuildWindow(model.HasChangeTunnelButton);
+            Canvas window = BuildWindow(model.HasChangeTunnelButton);
+            if (model is CnCNetGameLoadingRoomViewModel cncnet)
+                Content = new Panel { Children = { window, new TunnelSelectionView(cncnet.Tunnels) } };
+            else
+                Content = window;
         }
         catch (Exception ex)
         {
@@ -102,8 +103,8 @@ public sealed class GameLoadingRoomView : UserControl
                 case "btnLeaveGame":
                     viewModel.Leave();
                     break;
-                default:
-                    ExtraButtonClicked?.Invoke(viewModel, name);
+                case "btnChangeTunnel":
+                    (viewModel as CnCNetGameLoadingRoomViewModel)?.Tunnels.Open();
                     break;
             }
         }, new Dictionary<string, Func<LayoutControl, Control>>
@@ -137,7 +138,10 @@ public sealed class GameLoadingRoomView : UserControl
         void UpdateButtons()
         {
             if (LayoutView.FindNamed<ThemedButton>(canvas, "btnLoadGame") is ThemedButton load)
+            {
                 load.Text = viewModel.LoadButtonText;
+                load.IsEnabled = viewModel is not CnCNetGameLoadingRoomViewModel cncnet || cncnet.CanLoad;
+            }
 
             if (LayoutView.FindNamed<ThemedButton>(canvas, "btnChangeTunnel") is ThemedButton tunnel)
                 tunnel.IsVisible = viewModel.IsHost;
