@@ -29,7 +29,7 @@ namespace ClientLogic.CnCNet;
 /// for the game broadcasts. Map sharing, the inactive host check and the tunnel selection window are not supported
 /// yet.
 /// </summary>
-public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost, ITunnelSessionLobby, ILobbyTransport
+public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost, ITunnelSessionLobby, ILobbyTransport, ITunnelSelectionTarget
 {
     private const double GAME_BROADCAST_INTERVAL = 30.0;
     private const double GAME_BROADCAST_ACCELERATION = 10.0;

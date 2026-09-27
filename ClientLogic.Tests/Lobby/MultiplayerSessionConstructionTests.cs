@@ -66,7 +66,9 @@ public class MultiplayerSessionConstructionTests
 
         var room = new CnCNetGameRoom(connectionManager, tunnelHandler, dispatcher, gameCollection, userData, new MapLoader(),
             gameProcess, new NullDialogs(), new NullSounds(), random);
-        var lobby = new CnCNetLobbyService(connectionManager, tunnelHandler, gameCollection, userData, room, gameProcess, random);
+        var loadingRoom = new CnCNetGameLoadingRoom(connectionManager, tunnelHandler, dispatcher, gameCollection, userData, gameProcess,
+            new NullDialogs(), new NullSounds());
+        var lobby = new CnCNetLobbyService(connectionManager, tunnelHandler, gameCollection, userData, room, loadingRoom, gameProcess, random);
 
         lobby.Initialize("test");
 

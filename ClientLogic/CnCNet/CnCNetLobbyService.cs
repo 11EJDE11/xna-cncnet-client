@@ -45,9 +45,11 @@ public sealed class CnCNetLobbyService
     private bool channelsInitialized;
 
     public CnCNetLobbyService(CnCNetManager connectionManager, TunnelHandler tunnelHandler, GameCollection gameCollection,
-        CnCNetUserData cncnetUserData, CnCNetGameRoom room, GameProcessService gameProcess, Random random)
+        CnCNetUserData cncnetUserData, CnCNetGameRoom room, CnCNetGameLoadingRoom loadingRoom, GameProcessService gameProcess, Random random)
     {
         this.connectionManager = connectionManager;
+        LoadingRoom = loadingRoom;
+        loadingRoom.Left += (_, _) => LoadingRoom_Left();
         this.tunnelHandler = tunnelHandler;
         this.gameCollection = gameCollection;
         this.cncnetUserData = cncnetUserData;
@@ -132,6 +134,15 @@ public sealed class CnCNetLobbyService
 
     /// <summary>The local player left the game room.</summary>
     public event EventHandler RoomLeft;
+
+    /// <summary>The local player entered the saved game room.</summary>
+    public event EventHandler LoadingRoomEntered;
+
+    /// <summary>The local player left the saved game room.</summary>
+    public event EventHandler LoadingRoomLeft;
+
+    /// <summary>The room for loading saved multiplayer games (CnCNetGameLoadingLobby).</summary>
+    public CnCNetGameLoadingRoom LoadingRoom { get; }
 
     public int ChatColorIndex
     {
@@ -436,8 +447,13 @@ public sealed class CnCNetLobbyService
         AddNotice(string.Format("Cannot join game {0}, you've been banned by the game host!".L10N("Client:Main:PlayerBannedByHost"), game.RoomName));
 
         State.IsJoiningGame = false;
-        if (State.GameOfLastJoinAttempt != null && !State.GameOfLastJoinAttempt.IsLoadedGame)
-            Room.Clear();
+        if (State.GameOfLastJoinAttempt != null)
+        {
+            if (State.GameOfLastJoinAttempt.IsLoadedGame)
+                LoadingRoom.Clear();
+            else
+                Room.Clear();
+        }
     }
 
     /// <summary>Called regularly by the front end: drives the tunnels, the room and the game list.</summary>
@@ -447,6 +463,7 @@ public sealed class CnCNetLobbyService
             tunnelHandler.Update();
 
         Room.Update(elapsed);
+        LoadingRoom.Update(elapsed);
 
         int count = State.GameList.Games.Count;
         State.GameList.RemoveExpired(DateTime.Now);
@@ -761,12 +778,6 @@ public sealed class CnCNetLobbyService
         if (State.IsInGameRoom)
             return JoinResult.Failed;
 
-        if (hg.IsLoadedGame)
-        {
-            AddNotice("Joining saved games isn't supported in this client yet.", ChatColor.Red);
-            return JoinResult.Failed;
-        }
-
         if (hg.GameVersion != ProgramConstants.GAME_VERSION)
             AddNotice("The game host is on a different game version than you. Version incompatibilities may cause issues.".L10N("Client:Main:JoinGameVersionMismatch"), new ChatColor(255, 255, 0));
 
@@ -782,6 +793,16 @@ public sealed class CnCNetLobbyService
 
         Channel gameChannel = connectionManager.CreateChannel(hg.RoomName, hg.ChannelName, false, true, password);
         connectionManager.AddChannel(gameChannel);
+
+        if (hg.IsLoadedGame)
+        {
+            LoadingRoom.SetUp(false, hg.TunnelServer, gameChannel, hg.HostName);
+            gameChannel.UserAdded += GameLoadingChannel_UserAdded;
+            gameChannel.InvalidPasswordEntered += GameChannel_InvalidPasswordEntered_LoadedGame;
+            State.IsJoiningGame = false;
+            State.SendJoin(hg, password);
+            return JoinResult.Joining;
+        }
 
         Room.SetUp(gameChannel, false, hg.MaxPlayers, hg.TunnelServer, hg.HostName, hg.Passworded, hg.SkillLevel);
         gameChannel.UserAdded += GameChannel_UserAdded;
@@ -852,6 +873,105 @@ public sealed class CnCNetLobbyService
         channel.ChannelFull -= GameChannel_InviteOnlyErrorOnJoin;
         channel.TargetChangeTooFast -= GameChannel_TargetChangeTooFast;
         State.IsJoiningGame = false;
+    }
+
+    /// <summary>
+    /// Whether the local player can host the saved multiplayer game (GameCreationWindow.AllowLoadingGame): they hosted
+    /// it.
+    /// </summary>
+    public static bool CanHostLoadedGame()
+    {
+        System.IO.FileInfo savedGameSpawnIniFile = SafePath.GetFile(ProgramConstants.GamePath, ProgramConstants.SAVED_GAME_SPAWN_INI);
+
+        if (!savedGameSpawnIniFile.Exists)
+            return false;
+
+        var iniFile = new IniFile(savedGameSpawnIniFile.FullName);
+
+        if (iniFile.GetStringValue("Settings", "Name", string.Empty) != ProgramConstants.PLAYERNAME)
+            return false;
+
+        if (!iniFile.GetBooleanValue("Settings", "Host", false))
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Hosts the saved game (the creation window's Load Game and the lobby's Gcw_LoadedGameCreated): its password
+    /// comes from the saved game's ID.
+    /// </summary>
+    /// <returns>Why the game can't be created, or null.</returns>
+    public string CreateLoadedGame(string roomName)
+    {
+        if (State.IsInGameRoom || State.IsJoiningGame || LoadingRoom.IsActive)
+            return null;
+
+        string gameName = NameValidator.GetSanitizedGameName(roomName);
+
+        NameValidationError validationError = NameValidator.IsGameNameValid(gameName, out string errorMessage);
+        if (validationError != NameValidationError.None)
+            return errorMessage;
+
+        CnCNetTunnel tunnel = null;
+        var tunnelMode = (TunnelMode)UserINISettings.Instance.TunnelMode.Value;
+        if (tunnelMode != TunnelMode.V3Dynamic)
+        {
+            tunnel = PickBestTunnel(tunnelMode == TunnelMode.V2Legacy ? 2 : 3);
+            if (tunnel == null)
+                return "No tunnel server is available. Try again in a moment, or use dynamic tunnels.";
+        }
+
+        var spawnSGIni = new IniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, ProgramConstants.SAVED_GAME_SPAWN_INI));
+        string password = Utilities.CalculateSHA1ForString(spawnSGIni.GetStringValue("Settings", "GameID", string.Empty)).Substring(0, 10);
+
+        string channelName = RandomizeChannelName();
+
+        Channel gameLoadingChannel = connectionManager.CreateChannel(gameName, channelName, false, true, password);
+        connectionManager.AddChannel(gameLoadingChannel);
+        LoadingRoom.SetUp(true, tunnel, gameLoadingChannel, ProgramConstants.PLAYERNAME);
+        gameLoadingChannel.UserAdded += GameLoadingChannel_UserAdded;
+        connectionManager.SendCustomMessage(new QueuedMessage("JOIN " + channelName + " " + password,
+            QueuedMessageType.INSTANT_MESSAGE, 0));
+        AddNotice(string.Format("Creating a game named {0} ...".L10N("Client:Main:CreateGameNamed"), gameName));
+
+        return null;
+    }
+
+    private void GameChannel_InvalidPasswordEntered_LoadedGame(object sender, EventArgs e)
+    {
+        var channel = (Channel)sender;
+        channel.UserAdded -= GameLoadingChannel_UserAdded;
+        channel.InvalidPasswordEntered -= GameChannel_InvalidPasswordEntered_LoadedGame;
+        LoadingRoom.Clear();
+        State.IsJoiningGame = false;
+    }
+
+    private void GameLoadingChannel_UserAdded(object sender, ChannelUserEventArgs e)
+    {
+        var gameLoadingChannel = (Channel)sender;
+
+        if (e.User.IRCUser.Name == ProgramConstants.PLAYERNAME)
+        {
+            gameLoadingChannel.UserAdded -= GameLoadingChannel_UserAdded;
+            gameLoadingChannel.InvalidPasswordEntered -= GameChannel_InvalidPasswordEntered_LoadedGame;
+
+            LoadingRoom.OnJoined();
+            State.IsInGameRoom = true;
+            State.IsJoiningGame = false;
+            LoadingRoomEntered?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void LoadingRoom_Left()
+    {
+        State.IsJoiningGame = false;
+
+        if (!State.IsInGameRoom)
+            return;
+
+        State.IsInGameRoom = false;
+        LoadingRoomLeft?.Invoke(this, EventArgs.Empty);
     }
 
     private void Room_Left()
