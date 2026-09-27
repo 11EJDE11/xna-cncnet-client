@@ -8,6 +8,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 using AvClientView.Theme;
 using AvClientView.ViewModels;
@@ -285,6 +286,41 @@ public partial class CnCNetLobbyView : UserControl
 
         list.Bind(SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(CnCNetLobbyViewModel.SelectedGameIndex)) { Mode = BindingMode.TwoWay });
         list.DoubleTapped += (_, _) => viewModel.JoinGameCommand.Execute(null);
+
+        // The game information panel: to the right of the list, for the selected game, else the hovered one
+        var infoHost = new ContentControl { IsHitTestVisible = false, ZIndex = 2000 };
+        CnCNetGameItemViewModel shown = null;
+        CnCNetGameItemViewModel hovered = null;
+
+        void Refresh()
+        {
+            CnCNetGameItemViewModel game = list.SelectedItem as CnCNetGameItemViewModel ?? hovered;
+            if (game == shown)
+                return;
+
+            shown = game;
+            infoHost.Content = game == null ? null : GameInformationPanel.Build(game.Game, viewModel.FindMap);
+        }
+
+        list.PointerMoved += (_, e) =>
+        {
+            hovered = (e.Source as Avalonia.Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as CnCNetGameItemViewModel;
+            Refresh();
+        };
+        list.PointerExited += (_, _) => { hovered = null; Refresh(); };
+        list.SelectionChanged += (_, _) => Refresh();
+        viewModel.Games.CollectionChanged += (_, _) => { shown = null; hovered = null; Refresh(); };
+
+        list.AttachedToVisualTree += (_, _) =>
+        {
+            if (list.Parent is Canvas canvas && !canvas.Children.Contains(infoHost))
+            {
+                Canvas.SetLeft(infoHost, layout.X + layout.Width);
+                Canvas.SetTop(infoHost, layout.Y);
+                canvas.Children.Add(infoHost);
+            }
+        };
+
         return list;
     }
 

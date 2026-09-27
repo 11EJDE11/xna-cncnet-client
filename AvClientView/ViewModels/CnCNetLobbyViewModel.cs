@@ -16,6 +16,7 @@ using ClientLogic.UI;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
+using DTAClient.Domain.Multiplayer;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using DTAClient.Online;
 
@@ -27,6 +28,7 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     private readonly CnCNetLobbyService lobby;
     private readonly IDialogService dialogs;
     private readonly GameCollection gameCollection;
+    private readonly MapLoader mapLoader;
     private readonly DispatcherTimer timer;
     private readonly Stopwatch stopwatch = new();
     private List<HostedCnCNetGame> shownGames = [];
@@ -34,8 +36,9 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     private bool initialized;
 
     public CnCNetLobbyViewModel(CnCNetLobbyService lobby, CnCNetGameRoomViewModel roomViewModel, IDialogService dialogs,
-        GameCollection gameCollection)
+        GameCollection gameCollection, MapLoader mapLoader)
     {
+        this.mapLoader = mapLoader;
         this.lobby = lobby;
         this.gameCollection = gameCollection;
         this.dialogs = dialogs;
@@ -235,6 +238,23 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         SelectedGameIndex = selected == null ? -1 : shownGames.FindIndex(g => g.HostName == selected.HostName);
     }
 
+    /// <summary>A hosted game's map name and preview, as the XNA game information panel finds them by map hash.</summary>
+    public (string MapName, Avalonia.Media.Imaging.Bitmap Preview) FindMap(GenericHostedGame game)
+    {
+        Map map = string.IsNullOrEmpty(game.MapHash) ? null : mapLoader.FindMapByHash(game.MapHash);
+        if (map == null)
+            return (null, null);
+
+        using ClientCore.Caching.CacheLease<SixLabors.ImageSharp.Image> lease = mapLoader.GetCachedPreviewImageFromMap(map, syncLoadOnCacheMiss: true);
+        if (lease == null)
+            return (map.Name ?? map.UntranslatedName, null);
+
+        using var stream = new System.IO.MemoryStream();
+        SixLabors.ImageSharp.ImageExtensions.SaveAsPng(lease.Value, stream);
+        stream.Position = 0;
+        return (map.Name ?? map.UntranslatedName, new Avalonia.Media.Imaging.Bitmap(stream));
+    }
+
     [RelayCommand]
     private void Connect()
     {
@@ -338,7 +358,6 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     }
 }
 
-/// <summary>A user in the CnCNet channel's user list; admins show in the theme's admin colour.</summary>
 /// <summary>A CnCNet lobby user; the game is null if the user's game is unknown.</summary>
 public sealed record UserItemViewModel(string Name, bool IsAdmin, CnCNetGame Game = null,
     bool IsFriend = false, bool IsIgnored = false, bool HasVoice = false)
