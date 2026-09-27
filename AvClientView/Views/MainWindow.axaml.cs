@@ -71,6 +71,7 @@ public partial class MainWindow : Window
 
                 Root.Children.Add(new PrivateMessagesOverlay(viewModel.PrivateMessages) { ZIndex = 9500 });
                 Root.Children.Add(new PrivateMessageNotificationView(viewModel.PrivateMessages) { ZIndex = 12000 });
+                Root.Children.Add(new GameInProgressView(App.Services.GetRequiredService<ClientLogic.Launch.GameInProgressTracker>()) { ZIndex = 13000 });
                 Root.Children.Add(new GameInvitationsView(App.Services.GetRequiredService<GameInvitationsViewModel>()) { ZIndex = 12000 });
 
                 // The XNA options disable the top bar while the hotkey window is open

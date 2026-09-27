@@ -27,6 +27,7 @@ public static class ClientLogicServiceCollectionExtensions
         services.TryAddSingleton<CnCNetManager>();
         services.TryAddSingleton<PrivateMessageHandler>();
         services.TryAddSingleton<GameProcessService>();
+        services.TryAddSingleton<GameInProgressTracker>();
         services.TryAddSingleton(serviceProvider => new TunnelHandler(serviceProvider.GetRequiredService<IUiDispatcher>()));
         return services;
     }

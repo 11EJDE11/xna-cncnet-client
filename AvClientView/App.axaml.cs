@@ -1,12 +1,15 @@
 using System;
 
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
 using AvClientView.Services;
 using AvClientView.ViewModels;
 using AvClientView.Views;
+
+using ClientCore;
 
 using ClientLogic;
 using ClientLogic.CnCNet;
@@ -69,6 +72,23 @@ public sealed class App : Application
             // As the XNA client does at start-up: the selected renderer sets the game process's qres and single-core
             // affinity options
             Services.GetRequiredService<DirectDrawWrapperManager>();
+
+            // The game-in-progress state (IsInGame, error logs, settings reload), as the XNA GameInProgressWindow
+            var gameInProgress = Services.GetRequiredService<ClientLogic.Launch.GameInProgressTracker>();
+            WindowState stateBeforeGame = WindowState.Normal;
+            gameInProgress.GameStarted += (_, _) =>
+            {
+                if (!UserINISettings.Instance.MinimizeWindowsOnGameStart)
+                    return;
+
+                stateBeforeGame = mainWindow.WindowState == WindowState.Minimized ? WindowState.Normal : mainWindow.WindowState;
+                mainWindow.WindowState = WindowState.Minimized;
+            };
+            gameInProgress.GameExited += (_, _) =>
+            {
+                if (UserINISettings.Instance.MinimizeWindowsOnGameStart && mainWindow.WindowState == WindowState.Minimized)
+                    mainWindow.WindowState = stateBeforeGame;
+            };
 
             mainWindow.DataContext = Services.GetRequiredService<MainWindowViewModel>();
             desktop.MainWindow = mainWindow;
