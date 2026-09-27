@@ -166,6 +166,8 @@ public sealed class CnCNetLobbyService
         IRCColor color = ChatColors.Count > chatColorIndex ? ChatColors[chatColorIndex] : null;
         State.ChatColor = color;
         Room.IrcChatColor = color;
+        if (LoadingRoom != null)
+            LoadingRoom.IrcChatColor = color;
     }
 
     /// <summary>The messages of the current chat channel, as the list shows them.</summary>
