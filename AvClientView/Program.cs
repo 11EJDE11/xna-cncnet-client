@@ -65,6 +65,9 @@ internal static class Program
         // The theme folder, as the XNA client's Startup sets it
         ProgramConstants.RESOURCES_DIR = SafePath.CombineDirectoryPath(ProgramConstants.BASE_RESOURCE_PATH, UserINISettings.Instance.ThemeFolderPath);
 
+        // The theme's client settings (colours, layout constants), as the XNA client's Startup reloads them
+        ClientConfiguration.Instance.RefreshSettings();
+
         // The INI preprocessor, as the XNA client's Startup starts it; launching the game waits for it
         PreprocessorBackgroundTask.Instance.Run();
 
