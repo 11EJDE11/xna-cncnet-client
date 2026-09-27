@@ -42,6 +42,12 @@ public sealed class LanGameConnection
         this.uiDispatcher = uiDispatcher;
     }
 
+    /// <summary>
+    /// The saved game's ID, sent as a third JOIN part by the saved game room (LANGameLoadingLobby); null for a game
+    /// room. A player whose JOIN doesn't carry the same ID is refused.
+    /// </summary>
+    public string JoinGameId { get; set; }
+
     /// <summary>Host: whether a new player may join now (checked on the listener thread, as the XNA lobby does).</summary>
     public Func<bool> CanAcceptPlayer { get; set; } = () => true;
 
@@ -105,7 +111,11 @@ public sealed class LanGameConnection
         {
             new Thread(ListenForClients).Start();
 
-            byte[] buffer = encoding.GetBytes(PLAYER_JOIN_COMMAND + ProgramConstants.LAN_DATA_SEPARATOR + ProgramConstants.PLAYERNAME);
+            string join = PLAYER_JOIN_COMMAND + ProgramConstants.LAN_DATA_SEPARATOR + ProgramConstants.PLAYERNAME;
+            if (JoinGameId != null)
+                join += ProgramConstants.LAN_DATA_SEPARATOR + JoinGameId;
+
+            byte[] buffer = encoding.GetBytes(join);
             client.GetStream().Write(buffer, 0, buffer.Length);
             client.GetStream().Flush();
         }
@@ -177,10 +187,13 @@ public sealed class LanGameConnection
             string[] command = msg.Split(ProgramConstants.LAN_MESSAGE_SEPARATOR);
             string[] parts = command[0].Split(ProgramConstants.LAN_DATA_SEPARATOR);
 
-            if (parts.Length != 2)
+            if (parts.Length != (JoinGameId == null ? 2 : 3))
                 break;
 
             string name = parts[1].Trim();
+
+            if (JoinGameId != null && Conversions.IntFromString(parts[2], -1) != Conversions.IntFromString(JoinGameId, -1))
+                break;
 
             if (parts[0] == PLAYER_JOIN_COMMAND && !string.IsNullOrEmpty(name))
             {

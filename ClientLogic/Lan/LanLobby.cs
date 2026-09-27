@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -289,10 +290,44 @@ public sealed class LanLobby : IDisposable
         room.SetUp(true, new IPEndPoint(IPAddress.Loopback, ProgramConstants.LAN_GAME_LOBBY_PORT), null);
 
     /// <summary>
-    /// Joins a hosted game (the XNA lobby's checks, then connects and sends JOIN). Saved games can't be joined yet.
+    /// Whether the local player can host the saved multiplayer game (LANGameCreationWindow.AllowLoadingGame): they
+    /// hosted it, and it wasn't a CnCNet game.
+    /// </summary>
+    public static bool CanHostLoadedGame()
+    {
+        FileInfo savedGameSpawnIniFile = SafePath.GetFile(ProgramConstants.GamePath, ProgramConstants.SAVED_GAME_SPAWN_INI);
+
+        if (!savedGameSpawnIniFile.Exists)
+            return false;
+
+        var iniFile = new IniFile(savedGameSpawnIniFile.FullName);
+        if (iniFile.GetStringValue("Settings", "Name", string.Empty) != ProgramConstants.PLAYERNAME)
+            return false;
+
+        if (!iniFile.GetBooleanValue("Settings", "Host", false))
+            return false;
+
+        // Don't allow loading CnCNet games in LAN mode
+        if (iniFile.SectionExists("Tunnel"))
+            return false;
+
+        return true;
+    }
+
+    private static int SavedGameId() =>
+        new IniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, ProgramConstants.SAVED_GAME_SPAWN_INI)).GetIntValue("Settings", "GameID", -1);
+
+    /// <summary>Opens a room for loading the saved game as its host (GameCreationWindow_LoadGame).</summary>
+    /// <returns>False if the room couldn't be opened (an error was shown).</returns>
+    public static bool HostLoadedGame(LanGameLoadingRoom room) =>
+        room.SetUp(true, new IPEndPoint(IPAddress.Loopback, ProgramConstants.LAN_GAME_LOBBY_PORT), null, SavedGameId());
+
+    /// <summary>
+    /// Joins a hosted game (the XNA lobby's checks, then connects and sends JOIN): a game room, or the saved game room
+    /// for a saved game.
     /// </summary>
     /// <returns>True if the room was joined.</returns>
-    public bool JoinGame(HostedLANGame hg, LanGameRoom room)
+    public bool JoinGame(HostedLANGame hg, LanGameRoom room, LanGameLoadingRoom loadingRoom = null)
     {
         if (hg.Game.InternalName.ToUpper() != localGame.ToUpper())
         {
@@ -309,14 +344,22 @@ public sealed class LanLobby : IDisposable
 
         if (hg.IsLoadedGame)
         {
-            AddMessage(new ChatMessage(ChatColor.Red, "Joining saved LAN games isn't supported in this client yet."));
-            return false;
-        }
+            if (loadingRoom == null)
+                return false;
 
-        if (hg.Players.Contains(ProgramConstants.PLAYERNAME))
+            if (!hg.Players.Contains(ProgramConstants.PLAYERNAME))
+            {
+                AddMessage(new ChatMessage("You do not exist in the saved game!".L10N("Client:Main:NotInSavedGame")));
+                return false;
+            }
+        }
+        else
         {
-            AddMessage(new ChatMessage("Your name is already taken in the game.".L10N("Client:Main:NameOccupied")));
-            return false;
+            if (hg.Players.Contains(ProgramConstants.PLAYERNAME))
+            {
+                AddMessage(new ChatMessage("Your name is already taken in the game.".L10N("Client:Main:NameOccupied")));
+                return false;
+            }
         }
 
         if (hg.GameVersion != ProgramConstants.GAME_VERSION)
@@ -330,6 +373,23 @@ public sealed class LanLobby : IDisposable
         try
         {
             var client = new TcpClient(hg.EndPoint.Address.ToString(), ProgramConstants.LAN_GAME_LOBBY_PORT);
+
+            if (hg.IsLoadedGame)
+            {
+                int loadedGameId = SavedGameId();
+
+                loadingRoom.SetUp(false, hg.EndPoint, client, loadedGameId);
+
+                byte[] loadBuffer = encoding.GetBytes(LanGameConnection.PLAYER_JOIN_COMMAND + ProgramConstants.LAN_DATA_SEPARATOR +
+                    ProgramConstants.PLAYERNAME + ProgramConstants.LAN_DATA_SEPARATOR +
+                    loadedGameId + ProgramConstants.LAN_MESSAGE_SEPARATOR);
+
+                client.GetStream().Write(loadBuffer, 0, loadBuffer.Length);
+                client.GetStream().Flush();
+
+                loadingRoom.PostJoin();
+                return true;
+            }
 
             room.SetUp(false, hg.EndPoint, client);
 
