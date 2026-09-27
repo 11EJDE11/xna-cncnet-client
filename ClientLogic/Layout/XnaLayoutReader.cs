@@ -95,27 +95,37 @@ public sealed class XnaLayoutReader
         string section = keys != null ? window.Name : GENERIC_WINDOW_SECTION;
         ApplySection(ini, window, section);
 
-        IniSection extraControls = ini.GetSection(EXTRA_CONTROLS);
-        if (extraControls != null)
-        {
-            foreach (var kvp in extraControls.Keys)
-            {
-                string[] parts = kvp.Value.Split(':');
-                if (parts.Length != 2)
-                    throw new ClientConfigurationException("Invalid ExtraControl specified in " + window.Name + ": " + kvp.Value);
-
-                if (!window.Children.Any(c => c.Name == parts[0]))
-                {
-                    window.AddChild(new LayoutControl(parts[0], parts[1], KindOf(parts[1]))
-                    {
-                        DrawOrder = -window.Children.Count,
-                    });
-                }
-            }
-        }
+        AddExtraControls(ini, window, EXTRA_CONTROLS);
 
         foreach (LayoutControl child in window.Children)
             ReadControl(ini, child);
+    }
+
+    /// <summary>
+    /// Adds the extra controls ("name:Type" entries) of an INI section to a window or panel, as
+    /// XNAWindowBase.ParseExtraControls does; controls that exist already are skipped. They still need
+    /// <see cref="ReadControl"/>.
+    /// </summary>
+    public static void AddExtraControls(IniFile ini, LayoutControl parent, string sectionName)
+    {
+        IniSection extraControls = ini.GetSection(sectionName);
+        if (extraControls == null)
+            return;
+
+        foreach (var kvp in extraControls.Keys)
+        {
+            string[] parts = kvp.Value.Split(':');
+            if (parts.Length != 2)
+                throw new ClientConfigurationException("Invalid ExtraControl specified in " + parent.Name + ": " + kvp.Value);
+
+            if (!parent.Children.Any(c => c.Name == parts[0]))
+            {
+                parent.AddChild(new LayoutControl(parts[0], parts[1], KindOf(parts[1]))
+                {
+                    DrawOrder = -parent.Children.Count,
+                });
+            }
+        }
     }
 
     /// <summary>

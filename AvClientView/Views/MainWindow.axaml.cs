@@ -19,6 +19,22 @@ public partial class MainWindow : Window
 
     private TopBarView topBar;
 
+    /// <summary>Restarts the client (WindowManager.RestartGame): starts a new instance, then closes this one.</summary>
+    private void Restart()
+    {
+        string exe = Environment.ProcessPath;
+        if (exe != null)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
+            {
+                WorkingDirectory = Environment.CurrentDirectory,
+                UseShellExecute = false,
+            });
+        }
+
+        Close();
+    }
+
     protected override void OnPointerMoved(Avalonia.Input.PointerEventArgs e)
     {
         base.OnPointerMoved(e);
@@ -42,8 +58,10 @@ public partial class MainWindow : Window
 
             if (topBar == null)
             {
+                Root.Children.Add(new OptionsWindowView(viewModel.Options) { ZIndex = 9000 });
                 topBar = new TopBarView(viewModel.TopBar) { ZIndex = 10000 };
                 Root.Children.Add(topBar);
+                viewModel.RestartRequested += (_, _) => Restart();
             }
         }
     }

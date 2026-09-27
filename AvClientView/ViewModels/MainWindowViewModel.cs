@@ -13,11 +13,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly IServiceProvider services;
 
-    public MainWindowViewModel(MainMenuViewModel menu, TopBarViewModel topBar, IServiceProvider services)
+    public MainWindowViewModel(MainMenuViewModel menu, TopBarViewModel topBar, OptionsWindowViewModel options, IServiceProvider services)
     {
         this.services = services;
         Menu = menu;
         TopBar = topBar;
+        Options = options;
         Title = menu.Title;
         currentPage = menu;
         primaryPage = menu;
@@ -25,6 +26,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
         menu.SkirmishRequested += (_, _) => OpenSkirmish();
         menu.LanRequested += (_, _) => OpenLan();
         menu.CnCNetRequested += (_, _) => OpenCnCNet();
+        menu.OptionsRequested += (_, _) => OpenOptions();
+        topBar.OptionsRequested += (_, _) => OpenOptions();
+        options.RestartRequested += (_, _) => RestartRequested?.Invoke(this, EventArgs.Empty);
+
+        // While the options window is open, the top bar's switch and options buttons can't be used (XNA)
+        options.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(OptionsWindowViewModel.IsOpen))
+                return;
+
+            topBar.CanOpenOptions = !options.IsOpen;
+            if (!topBar.LanMode)
+                topBar.CanSwitch = !options.IsOpen;
+        };
 
         topBar.MainRequested += (_, _) => CurrentPage = primaryPage;
         topBar.CnCNetLobbyRequested += (_, _) => OpenCnCNet();
@@ -38,6 +53,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public MainMenuViewModel Menu { get; }
 
     public TopBarViewModel TopBar { get; }
+
+    public OptionsWindowViewModel Options { get; }
+
+    /// <summary>The options were saved and the user chose to restart the client.</summary>
+    public event EventHandler RestartRequested;
+
+    private void OpenOptions()
+    {
+        if (!Options.IsOpen)
+            Options.Open();
+    }
 
     /// <summary>
     /// The top bar's primary screen (TopBar's primary switchables): the main menu, or the skirmish lobby or CnCNet

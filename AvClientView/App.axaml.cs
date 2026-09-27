@@ -41,6 +41,7 @@ public sealed class App : Application
                 .AddSingleton<MainMenuViewModel>()
                 .AddSingleton<MainWindowViewModel>()
                 .AddSingleton<TopBarViewModel>()
+                .AddSingleton<OptionsWindowViewModel>()
                 .AddSingleton<SkirmishSession>()
                 .AddTransient<SkirmishViewModel>()
                 .AddSingleton<DirectDrawWrapperManager>()

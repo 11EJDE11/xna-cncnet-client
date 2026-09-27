@@ -197,5 +197,8 @@ public static class ThemeAssets
     /// <summary>The hovered game's row colour in the game lists (HoverOnGameColor).</summary>
     public static Color HoverOnGameColor => ParseColor(ClientConfiguration.Instance.HoverOnGameColor, Color.FromRgb(32, 32, 84));
 
+    /// <summary>The disabled item / tab colour (UISettings.DisabledItemColor from DisabledButtonColor).</summary>
+    public static Color DisabledItemColor => ParseColor(ClientConfiguration.Instance.DisabledButtonColor, Color.FromRgb(108, 108, 108));
+
     public static Color PanelBorderColor => ParseColor(ClientConfiguration.Instance.PanelBorderColor, Colors.Gray);
 }

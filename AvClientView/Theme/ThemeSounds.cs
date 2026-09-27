@@ -62,7 +62,8 @@ public sealed class ThemeSound
             lastPlayTime = now;
         }
 
-        float volume = (float)UserINISettings.Instance.ClientVolume.Value;
+        // The options window's slider while it is open, else the saved client volume
+        float volume = (float)(ViewModels.OptionsWindowViewModel.PreviewClientVolume ?? UserINISettings.Instance.ClientVolume.Value);
         if (volume <= 0f)
             return;
 

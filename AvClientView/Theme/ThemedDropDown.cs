@@ -98,6 +98,8 @@ public sealed class ThemedDropDown : Border
                 var itemText = new TextBlock { Text = item?.Text, VerticalAlignment = VerticalAlignment.Center };
                 if (item != null && ItemTextColor?.Invoke(item.Index) is Color color)
                     itemText.Foreground = new SolidColorBrush(color);
+                if (item != null && ItemSelectable?.Invoke(item.Index) == false)
+                    itemText.Foreground = new SolidColorBrush(ThemeAssets.DisabledItemColor);
 
                 row.Children.Add(itemText);
                 return row;
@@ -106,6 +108,12 @@ public sealed class ThemedDropDown : Border
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
         list.SelectionChanged += (_, _) =>
         {
+            if (popup.IsOpen && list.SelectedIndex >= 0 && ItemSelectable?.Invoke(list.SelectedIndex) == false)
+            {
+                list.SelectedIndex = -1;
+                return;
+            }
+
             if (popup.IsOpen && list.SelectedIndex >= 0)
             {
                 SelectedIndex = list.SelectedIndex;
@@ -142,6 +150,9 @@ public sealed class ThemedDropDown : Border
         get => GetValue(CanChangeProperty);
         set => SetValue(CanChangeProperty, value);
     }
+
+    /// <summary>Whether an item can be picked (XNADropDownItem.Selectable); others are drawn in the disabled colour.</summary>
+    public Func<int, bool> ItemSelectable { get; set; }
 
     /// <summary>An icon or colour swatch drawn left of an item's text (XNA TextAndIcon items), by item index.</summary>
     public Func<int, Control> ItemDecoration { get; set; }

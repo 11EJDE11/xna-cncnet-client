@@ -51,17 +51,21 @@ public static class ThemedWindow
     /// <summary>
     /// Applies the window's INI and builds it; <paramref name="overlays"/> make the interactive controls by name.
     /// </summary>
+    /// <param name="readIni">False when the screen has read the window's INI itself (and initialized the controls).</param>
     public static Canvas Build(LayoutControl window, Action<string, LayoutControl> onButton,
-        IReadOnlyDictionary<string, Func<LayoutControl, Control>> overlays)
+        IReadOnlyDictionary<string, Func<LayoutControl, Control>> overlays, bool readIni = true)
     {
-        XnaLayoutReader reader = CreateReader();
+        if (readIni)
+        {
+            XnaLayoutReader reader = CreateReader();
 
-        string iniPath = XnaLayoutReader.FindWindowIni(window.Name);
-        if (iniPath != null)
-            reader.ReadWindow(new CCIniFile(iniPath), window);
+            string iniPath = XnaLayoutReader.FindWindowIni(window.Name);
+            if (iniPath != null)
+                reader.ReadWindow(new CCIniFile(iniPath), window);
 
-        foreach (LayoutControl control in All(window))
-            reader.Initialize(control);
+            foreach (LayoutControl control in All(window))
+                reader.Initialize(control);
+        }
 
         Canvas root = LayoutView.Build(window, name => onButton(name, window.Find(name)),
             control => overlays.ContainsKey(control.Name));
