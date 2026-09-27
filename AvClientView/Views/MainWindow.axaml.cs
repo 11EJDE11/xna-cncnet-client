@@ -17,7 +17,7 @@ public partial class MainWindow : Window
     {
         base.OnDataContextChanged(e);
 
-        if (DataContext is MainMenuViewModel viewModel)
+        if (DataContext is MainWindowViewModel viewModel)
             viewModel.ExitRequested += (_, _) => Close();
     }
 }

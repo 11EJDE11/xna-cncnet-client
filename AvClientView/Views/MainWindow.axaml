@@ -1,17 +1,19 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:AvClientView.ViewModels"
+        xmlns:views="using:AvClientView.Views"
         x:Class="AvClientView.Views.MainWindow"
-        x:DataType="vm:MainMenuViewModel"
+        x:DataType="vm:MainWindowViewModel"
         Title="{Binding Title}"
         Width="1280" Height="768"
         WindowStartupLocation="CenterScreen">
-  <Grid RowDefinitions="*,Auto">
-    <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="240">
-      <TextBlock Text="{Binding Title}" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,12" />
-      <Button Content="Skirmish" Command="{Binding OpenSkirmishCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-      <Button Content="Exit" Command="{Binding ExitCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-    </StackPanel>
-    <TextBlock Grid.Row="1" Text="{Binding Status}" Margin="12,6" Opacity="0.7" />
-  </Grid>
+  <Window.DataTemplates>
+    <DataTemplate DataType="vm:MainMenuViewModel">
+      <views:MainMenuView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:SkirmishViewModel">
+      <views:SkirmishView />
+    </DataTemplate>
+  </Window.DataTemplates>
+  <ContentControl Content="{Binding CurrentPage}" />
 </Window>

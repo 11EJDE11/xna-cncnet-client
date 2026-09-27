@@ -9,6 +9,7 @@ using AvClientView.ViewModels;
 using AvClientView.Views;
 
 using ClientLogic;
+using ClientLogic.Skirmish;
 
 using DTAClient.Online;
 
@@ -33,9 +34,12 @@ public sealed class App : Application
                 .AddSingleton(new Random())
                 .AddClientLogic()
                 .AddSingleton<MainMenuViewModel>()
+                .AddSingleton<MainWindowViewModel>()
+                .AddSingleton<SkirmishSession>()
+                .AddTransient<SkirmishViewModel>()
                 .BuildServiceProvider();
 
-            mainWindow.DataContext = Services.GetRequiredService<MainMenuViewModel>();
+            mainWindow.DataContext = Services.GetRequiredService<MainWindowViewModel>();
             desktop.MainWindow = mainWindow;
             desktop.ShutdownRequested += (_, _) => Services.GetRequiredService<CnCNetUserData>().Save();
         }

@@ -1,0 +1,93 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:AvClientView.ViewModels"
+             x:Class="AvClientView.Views.SkirmishView"
+             x:DataType="vm:SkirmishViewModel">
+  <Grid ColumnDefinitions="320,*" RowDefinitions="*,Auto" Margin="12">
+
+    <!-- Map list -->
+    <DockPanel Grid.Column="0" Grid.Row="0" Margin="0,0,12,0">
+      <ComboBox DockPanel.Dock="Top" ItemsSource="{Binding GameModes}" SelectedItem="{Binding SelectedGameMode}"
+                HorizontalAlignment="Stretch" Margin="0,0,0,6" />
+      <ListBox ItemsSource="{Binding Maps}" SelectedIndex="{Binding SelectedMapIndex}" />
+    </DockPanel>
+
+    <Grid Grid.Column="1" Grid.Row="0" RowDefinitions="Auto,Auto,*">
+
+      <!-- Players -->
+      <ItemsControl Grid.Row="0" ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="vm:PlayerRowViewModel">
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
+              <Panel Width="150">
+                <TextBlock Text="{Binding PlayerName}" IsVisible="{Binding IsHuman}" VerticalAlignment="Center" />
+                <ComboBox ItemsSource="{Binding NameItems}" SelectedIndex="{Binding NameIndex}" IsVisible="{Binding IsAiOrFree}" HorizontalAlignment="Stretch" />
+              </Panel>
+              <ComboBox Width="150" ItemsSource="{Binding SideItems}" SelectedIndex="{Binding SideIndex}" IsEnabled="{Binding HasPlayer}" />
+              <ComboBox Width="130" ItemsSource="{Binding ColorItems}" SelectedIndex="{Binding ColorIndex}" IsEnabled="{Binding HasPlayer}" />
+              <ComboBox Width="80" ItemsSource="{Binding StartItems}" SelectedIndex="{Binding StartIndex}" IsEnabled="{Binding HasPlayer}" />
+              <ComboBox Width="70" ItemsSource="{Binding TeamItems}" SelectedIndex="{Binding TeamIndex}" IsEnabled="{Binding HasPlayer}" />
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <!-- Map preview with start markers -->
+      <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,10">
+        <Border BorderBrush="Gray" BorderThickness="1" Width="522" Height="332">
+          <Canvas Width="520" Height="330" Background="Black">
+            <Image Source="{Binding Preview}" Canvas.Left="{Binding PreviewX}" Canvas.Top="{Binding PreviewY}"
+                   Width="{Binding PreviewImageWidth}" Height="{Binding PreviewImageHeight}" Stretch="Fill" />
+            <ItemsControl ItemsSource="{Binding StartMarkers}" Width="520" Height="330">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <Canvas />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:StartMarkerViewModel">
+                  <Canvas>
+                    <Border Canvas.Left="{Binding Left}" Canvas.Top="{Binding Top}" Width="20" Height="20" CornerRadius="10"
+                            Background="Black" BorderBrush="White" BorderThickness="2" ToolTip.Tip="{Binding Players}">
+                      <TextBlock Text="{Binding Number}" Foreground="White" FontSize="11" FontWeight="Bold"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                  </Canvas>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Canvas>
+        </Border>
+        <TextBlock Text="{Binding MapInfo}" TextWrapping="Wrap" Width="260" VerticalAlignment="Top" />
+      </StackPanel>
+
+      <!-- Game options -->
+      <ScrollViewer Grid.Row="2">
+        <StackPanel Orientation="Horizontal" Spacing="24">
+          <ItemsControl ItemsSource="{Binding CheckBoxOptions}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:CheckBoxOptionViewModel">
+                <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEnabled}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <ItemsControl ItemsSource="{Binding DropDownOptions}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:DropDownOptionViewModel">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2">
+                  <TextBlock Text="{Binding Label}" Width="160" VerticalAlignment="Center" />
+                  <ComboBox Width="200" ItemsSource="{Binding Items}" SelectedIndex="{Binding SelectedIndex}" IsEnabled="{Binding IsEnabled}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+
+    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+      <Button Content="Launch Game" Command="{Binding LaunchCommand}" />
+      <Button Content="Main Menu" Command="{Binding BackCommand}" />
+    </StackPanel>
+  </Grid>
+</UserControl>

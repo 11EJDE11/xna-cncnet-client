@@ -8,6 +8,8 @@ using Avalonia;
 using ClientCore;
 using ClientCore.I18N;
 
+using DTAClient.Domain.Multiplayer.CnCNet;
+
 using Rampastring.Tools;
 
 namespace AvClientView;
@@ -59,6 +61,9 @@ internal static class Program
 
         UserINISettings.Initialize(ClientConfiguration.Instance.SettingsIniName);
 
+        // The theme folder, as the XNA client's Startup sets it
+        ProgramConstants.RESOURCES_DIR = SafePath.CombineDirectoryPath(ProgramConstants.BASE_RESOURCE_PATH, UserINISettings.Instance.ThemeFolderPath);
+
         try
         {
             FileInfo translationThemeFile = SafePath.GetFile(UserINISettings.Instance.TranslationThemeFolderPath, ClientConfiguration.Instance.TranslationIniName);
@@ -82,5 +87,15 @@ internal static class Program
         }
 
         CultureInfo.CurrentUICulture = Translation.Instance.Culture;
+
+        // The player name, as the XNA client's GameClass sets it (without the font check)
+        string playerName = UserINISettings.Instance.PlayerName.Value.Trim();
+        if (UserINISettings.Instance.AutoRemoveUnderscoresFromName)
+            playerName = playerName.TrimEnd('_');
+
+        if (string.IsNullOrEmpty(playerName))
+            playerName = Environment.UserName.Substring(Environment.UserName.IndexOf('\\') + 1);
+
+        ProgramConstants.PLAYERNAME = NameValidator.GetValidOfflineName(playerName);
     }
 }

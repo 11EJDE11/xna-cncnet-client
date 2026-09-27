@@ -58,9 +58,10 @@ public sealed partial class MainMenuViewModel : ObservableObject
         }
     }
 
+    public event EventHandler SkirmishRequested;
+
     [RelayCommand(CanExecute = nameof(MapsLoaded))]
-    private void OpenSkirmish() =>
-        dialogs.ShowMessage("Skirmish".L10N("Client:Main:Skirmish"), "The skirmish lobby comes in the next preview step.");
+    private void OpenSkirmish() => SkirmishRequested?.Invoke(this, EventArgs.Empty);
 
     [RelayCommand]
     private void Exit() => ExitRequested?.Invoke(this, EventArgs.Empty);
