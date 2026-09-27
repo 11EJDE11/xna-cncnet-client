@@ -21,5 +21,6 @@
   <ItemGroup>
     <ProjectReference Include="..\ClientCore\ClientCore.csproj" />
     <ProjectReference Include="..\ClientLogic\ClientLogic.csproj" />
+    <ProjectReference Include="..\ClientUpdater\ClientUpdater.csproj" />
   </ItemGroup>
 </Project>

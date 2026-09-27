@@ -47,6 +47,7 @@ public sealed class App : Application
                 .AddSingleton<TopBarViewModel>()
                 .AddSingleton<OptionsWindowViewModel>()
                 .AddSingleton<HotkeyWindowViewModel>()
+                .AddSingleton<CampaignViewModel>()
                 .AddSingleton<SkirmishSession>()
                 .AddTransient<SkirmishViewModel>()
                 .AddSingleton<DirectDrawWrapperManager>()

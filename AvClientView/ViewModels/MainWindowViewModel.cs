@@ -27,6 +27,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         menu.LanRequested += (_, _) => OpenLan();
         menu.CnCNetRequested += (_, _) => OpenCnCNet();
         menu.OptionsRequested += (_, _) => OpenOptions();
+        Campaign = services.GetRequiredService<CampaignViewModel>();
+        menu.CampaignRequested += (_, _) => Campaign.Open();
         topBar.OptionsRequested += (_, _) => OpenOptions();
         options.RestartRequested += (_, _) => RestartRequested?.Invoke(this, EventArgs.Empty);
 
@@ -55,6 +57,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public TopBarViewModel TopBar { get; }
 
     public OptionsWindowViewModel Options { get; }
+
+    public CampaignViewModel Campaign { get; }
 
     /// <summary>The options were saved and the user chose to restart the client.</summary>
     public event EventHandler RestartRequested;

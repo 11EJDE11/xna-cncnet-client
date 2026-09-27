@@ -58,6 +58,7 @@ public partial class MainWindow : Window
 
             if (topBar == null)
             {
+                Root.Children.Add(new CampaignView(viewModel.Campaign) { ZIndex = 8500 });
                 Root.Children.Add(new OptionsWindowView(viewModel.Options) { ZIndex = 9000 });
                 Root.Children.Add(new HotkeyWindowView(viewModel.Options.Hotkeys) { ZIndex = 11000 });
                 topBar = new TopBarView(viewModel.TopBar) { ZIndex = 10000 };

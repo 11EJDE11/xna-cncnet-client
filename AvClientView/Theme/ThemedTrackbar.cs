@@ -18,13 +18,17 @@ public sealed class ThemedTrackbar : Canvas
     public static readonly StyledProperty<int> ValueProperty =
         AvaloniaProperty.Register<ThemedTrackbar, int>(nameof(Value), defaultBindingMode: BindingMode.TwoWay);
 
-    private static readonly Bitmap ButtonTexture = ThemeAssets.LoadBitmap("trackbarButton.png");
-
     private readonly Image button;
+    private readonly ThemeSound clickSound;
     private bool isHeldDown;
 
-    public ThemedTrackbar(double width, double height, int minValue, int maxValue)
+    /// <param name="buttonTexture">The button texture (the campaign's difficulty uses trackbarButton_difficulty.png).</param>
+    /// <param name="clickSound">Played when dragging changes the value (the XNA trackbar's ClickSound), or null.</param>
+    public ThemedTrackbar(double width, double height, int minValue, int maxValue, string buttonTexture = "trackbarButton.png",
+        ThemeSound clickSound = null)
     {
+        this.clickSound = clickSound;
+        Bitmap ButtonTexture = ThemeAssets.LoadBitmap(buttonTexture) ?? ThemeAssets.LoadBitmap("trackbarButton.png");
         Width = width;
         Height = height;
         MinValue = minValue;
@@ -89,6 +93,14 @@ public sealed class ThemedTrackbar : Canvas
         e.Pointer.Capture(null);
     }
 
+    private void SetValueFromScroll(int value)
+    {
+        if (Value != value)
+            clickSound?.Play();
+
+        Value = value;
+    }
+
     /// <summary>XNATrackbar.Scroll: the value whose slot the cursor is in.</summary>
     private void Scroll(double xOffset)
     {
@@ -104,11 +116,11 @@ public sealed class ThemedTrackbar : Canvas
             }
             else
             {
-                Value = currentTab + MinValue;
+                SetValueFromScroll(currentTab + MinValue);
                 return;
             }
         }
 
-        Value = MaxValue;
+        SetValueFromScroll(MaxValue);
     }
 }

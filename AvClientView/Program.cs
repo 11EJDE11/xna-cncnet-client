@@ -74,6 +74,18 @@ internal static class Program
         // The client resolution settings, with the XNA client's defaults from the screen
         new ClientLogic.Settings.ScreenResolutions(new AvClientView.Services.WindowsDisplayModeSource()).CreateClientResolutionSettings();
 
+        // The updater's local file information, as the XNA client's Startup and loading screen set it up (no
+        // update check): the campaign's modified-files warning needs it
+        SafePath.DeleteFileIfExists(ProgramConstants.GamePath, "version_u");
+        ClientUpdater.Updater.Initialize(ProgramConstants.GamePath, ProgramConstants.GetBaseResourcePath(),
+            ClientConfiguration.Instance.SettingsIniName, ClientConfiguration.Instance.LocalGame,
+            SafePath.GetFile(ProgramConstants.StartupExecutable).Name);
+        System.Threading.Tasks.Task.Run(ClientUpdater.Updater.CheckLocalFileVersions);
+
+        // Custom mission files, as the XNA client's PreStartup: leftovers of the last mission are removed
+        DTAClient.Domain.CustomMissionHelper.Initialize();
+        DTAClient.Domain.CustomMissionHelper.DeleteSupplementalMissionFiles();
+
         // The theme's textures and fonts are found as the XNA client finds them
         AvClientView.Theme.ThemeAssets.Initialize();
 
