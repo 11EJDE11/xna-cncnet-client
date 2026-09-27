@@ -206,7 +206,54 @@ public abstract partial class LobbySession : ObservableObject
 
     private MatchStatistics matchStatistics;
 
-    protected void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+    protected void RaiseChanged()
+    {
+        Changed?.Invoke(this, EventArgs.Empty);
+        UpdateDiscordPresence();
+    }
+
+    /// <summary>Discord rich presence (the front end sets it; null for none).</summary>
+    public DTAClient.Domain.DiscordHandler DiscordHandler { get; set; }
+
+    private string lastDiscordPresence;
+
+    /// <summary>
+    /// Shows the lobby in Discord (the XNA lobbies' UpdateDiscordPresence). The XNA lobbies update it when the map,
+    /// the local side, the players or the lock change; here it's recomputed whenever the lobby changes and sent when
+    /// it differs, or with <paramref name="resetTimer"/> (joining, launching, the game exiting).
+    /// </summary>
+    protected virtual void UpdateDiscordPresence(bool resetTimer = false)
+    {
+    }
+
+    /// <summary>Sends a presence, unless it's the one last sent and the timer isn't reset.</summary>
+    /// <param name="key">The presence's values, to compare with the last one.</param>
+    protected void SetDiscordPresence(string key, bool resetTimer, Action<DTAClient.Domain.DiscordHandler> send)
+    {
+        if (DiscordHandler == null || (!resetTimer && key == lastDiscordPresence))
+            return;
+
+        lastDiscordPresence = key;
+        send(DiscordHandler);
+    }
+
+    /// <summary>Back to the client's default presence (the lobby was left).</summary>
+    protected void ResetDiscordPresence()
+    {
+        lastDiscordPresence = null;
+        DiscordHandler?.UpdatePresence();
+    }
+
+    /// <summary>The local player's side as the side drop-down's item name (Random, a selector, a side, Spectator).</summary>
+    protected string LocalSideName()
+    {
+        PlayerInfo player = Players.Find(p => p.Name == ProgramConstants.PLAYERNAME);
+        if (player == null)
+            return string.Empty;
+
+        List<string> names = ["Random", .. RandomSelectorNames, .. Sides, "Spectator"];
+        return player.SideId >= 0 && player.SideId < names.Count ? names[player.SideId] : string.Empty;
+    }
 
     /// <summary>The theme's copy of a layout INI, or the base one (as the XNA client finds window INIs).</summary>
     public static string FindLayoutIni(string windowName)
@@ -502,6 +549,7 @@ public abstract partial class LobbySession : ObservableObject
 
         GameProcess.GameProcessExited += GameProcess_Exited;
         GameProcess.Start(Dialogs);
+        UpdateDiscordPresence(true);
     }
 
     private void GameProcess_Exited()
@@ -526,6 +574,7 @@ public abstract partial class LobbySession : ObservableObject
         matchStatistics = null;
 
         RandomSeed = Random.Next();
+        UpdateDiscordPresence(true);
     }
 
     private void DeleteSupplementalMapFiles()

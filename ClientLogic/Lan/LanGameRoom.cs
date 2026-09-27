@@ -642,6 +642,25 @@ public sealed class LanGameRoom : MultiplayerLobbySession
         active = false;
         connection.Stop();
         RaiseChanged();
+        ResetDiscordPresence();
+    }
+
+    protected override void UpdateDiscordPresence(bool resetTimer = false)
+    {
+        PlayerInfo player = FindLocalPlayer();
+        if (!active || player == null || GameModeMap?.Map == null || GameModeMap.GameMode == null)
+            return;
+
+        string map = GameModeMap.Map.UntranslatedName;
+        string mode = GameModeMap.GameMode.UntranslatedUIName;
+        string side = LocalSideName();
+        string currentState = ProgramConstants.IsInGame ? "In Game" : "In Lobby"; // not UI strings
+        int players = Players.Count;
+        bool isHost = IsHost;
+        bool locked = Locked;
+
+        SetDiscordPresence(string.Join("|", map, mode, currentState, players, side, isHost, locked), resetTimer,
+            discord => discord.UpdatePresence(map, mode, "LAN", currentState, players, 8, side, "LAN Game", isHost, false, locked, resetTimer));
     }
 
     protected override void HandleGameProcessExited()

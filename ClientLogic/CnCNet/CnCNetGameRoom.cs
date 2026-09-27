@@ -275,6 +275,28 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
         AutoReady = false;
         TunnelSession.ReportCurrentTunnelPing();
         RaiseChanged();
+        UpdateDiscordPresence(true);
+    }
+
+    protected override void UpdateDiscordPresence(bool resetTimer = false)
+    {
+        PlayerInfo player = FindLocalPlayer();
+        if (player == null || GameModeMap?.Map == null || GameModeMap.GameMode == null || channel == null)
+            return;
+
+        string map = GameModeMap.Map.UntranslatedName;
+        string mode = GameModeMap.GameMode.UntranslatedUIName;
+        string side = LocalSideName();
+        string currentState = ProgramConstants.IsInGame ? "In Game" : "In Lobby"; // not UI strings
+        int players = Players.Count;
+        string roomName = channel.UIName;
+        bool isHost = IsHost;
+        bool isPassworded = roomSettings.IsCustomPassword;
+        bool locked = Locked;
+
+        SetDiscordPresence(string.Join("|", map, mode, currentState, players, roomSettings.PlayerLimit, side, roomName, isHost, isPassworded, locked),
+            resetTimer, discord => discord.UpdatePresence(map, mode, "Multiplayer", currentState, players, roomSettings.PlayerLimit, side,
+                roomName, isHost, isPassworded, locked, resetTimer));
     }
 
     /// <summary>Called regularly by the front end: announces the game while hosting.</summary>
@@ -450,6 +472,7 @@ public sealed class CnCNetGameRoom : MultiplayerLobbySession, IV3NegotiationHost
         tunnelHandler.CurrentTunnelPinged -= TunnelHandler_CurrentTunnelPinged;
 
         RaiseLeft(null);
+        ResetDiscordPresence();
     }
 
     private void ConnectionManager_Disconnected(object sender, EventArgs e) => Clear();

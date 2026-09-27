@@ -37,6 +37,39 @@ public sealed class SkirmishSession : LobbySession
 
     protected override void PostToUi(Action action) => uiDispatcher.Post(action);
 
+    private bool open;
+
+    /// <summary>The lobby is shown (the XNA lobby's Enabled): Discord shows it.</summary>
+    public void Opened()
+    {
+        open = true;
+        UpdateDiscordPresence(true);
+    }
+
+    /// <summary>The lobby was left: Discord shows the client again.</summary>
+    public void Closed()
+    {
+        open = false;
+        ResetDiscordPresence();
+    }
+
+    protected override void UpdateDiscordPresence(bool resetTimer = false)
+    {
+        if (!open || GameModeMap?.Map == null || GameModeMap.GameMode == null)
+            return;
+
+        if (!Players.Any(p => p.Name == ProgramConstants.PLAYERNAME))
+            return;
+
+        string map = GameModeMap.Map.UntranslatedName;
+        string mode = GameModeMap.GameMode.UntranslatedUIName;
+        string side = LocalSideName();
+        string currentState = ProgramConstants.IsInGame ? "In Game" : "Setting Up";
+
+        SetDiscordPresence(string.Join("|", map, mode, currentState, side), resetTimer,
+            discord => discord.UpdatePresence(map, mode, currentState, side, resetTimer));
+    }
+
     /// <summary>The game exited: the match is recorded on the UI thread and the lobby refreshes (its ranks).</summary>
     protected override void OnGameProcessExited() => uiDispatcher.Post(() =>
     {

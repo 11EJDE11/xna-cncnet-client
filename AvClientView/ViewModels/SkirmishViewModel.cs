@@ -23,6 +23,7 @@ public sealed partial class SkirmishViewModel : LobbyViewModelBase
 
         session.LoadSettings();
         Refresh();
+        session.Opened();
     }
 
     public event EventHandler BackRequested;
@@ -36,5 +37,9 @@ public sealed partial class SkirmishViewModel : LobbyViewModelBase
     }
 
     [RelayCommand]
-    private void Back() => BackRequested?.Invoke(this, EventArgs.Empty);
+    private void Back()
+    {
+        session.Closed();
+        BackRequested?.Invoke(this, EventArgs.Empty);
+    }
 }

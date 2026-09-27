@@ -42,8 +42,11 @@ public sealed partial class CampaignViewModel : ObservableObject
     private List<Mission> selectedMissions = [];
     private bool loaded;
 
-    public CampaignViewModel(GameProcessService gameProcess, IDialogService dialogs)
+    private readonly DiscordHandler discord;
+
+    public CampaignViewModel(GameProcessService gameProcess, IDialogService dialogs, DiscordHandler discord)
     {
+        this.discord = discord;
         this.gameProcess = gameProcess;
         this.dialogs = dialogs;
         gameOptionsIni = new IniFile(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), ClientConfiguration.GAME_OPTIONS));
@@ -244,7 +247,7 @@ public sealed partial class CampaignViewModel : ObservableObject
 
     private void LaunchMission(Mission mission)
     {
-        CampaignLauncher.WriteSpawnFiles(mission, Difficulty, CheckBoxes, DropDowns, gameOptionsIni);
+        string difficultyName = CampaignLauncher.WriteSpawnFiles(mission, Difficulty, CheckBoxes, DropDowns, gameOptionsIni);
         UserINISettings.Instance.Difficulty.Value = Difficulty;
         UserINISettings.Instance.SaveSettings();
 
@@ -253,6 +256,7 @@ public sealed partial class CampaignViewModel : ObservableObject
         else
             ControlsEnabled = false;
 
+        discord.UpdatePresence(mission.UntranslatedGUIName, difficultyName, mission.IconPath, true);
         gameProcess.GameProcessExited += GameProcessExited_Callback;
         gameProcess.Start(dialogs);
     }
@@ -263,6 +267,7 @@ public sealed partial class CampaignViewModel : ObservableObject
     {
         gameProcess.GameProcessExited -= GameProcessExited_Callback;
         CustomMissionHelper.DeleteSupplementalMissionFiles();
+        discord.UpdatePresence();
 
         if (!ClientConfiguration.Instance.ReturnToMainMenuOnMissionLaunch)
             ControlsEnabled = true;

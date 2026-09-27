@@ -27,8 +27,11 @@ public sealed partial class LoadGameViewModel : ObservableObject
     private readonly CampaignViewModel campaign;
     private List<SavedGame> savedGames = [];
 
-    public LoadGameViewModel(GameProcessService gameProcess, IDialogService dialogs, CampaignViewModel campaign)
+    private readonly DiscordHandler discord;
+
+    public LoadGameViewModel(GameProcessService gameProcess, IDialogService dialogs, CampaignViewModel campaign, DiscordHandler discord)
     {
+        this.discord = discord;
         this.gameProcess = gameProcess;
         this.dialogs = dialogs;
         this.campaign = campaign;
@@ -72,6 +75,8 @@ public sealed partial class LoadGameViewModel : ObservableObject
         Mission mission = campaign.Catalog.UniqueIDToMissions.GetValueOrDefault(sg.CustomMissionID, null);
         SavedGameLoader.WriteSpawnFiles(sg, mission);
 
+        discord.UpdatePresence(sg.GUIName, true);
+
         IsOpen = false;
         gameProcess.GameProcessExited += GameProcessExited_Callback;
         gameProcess.Start(dialogs);
@@ -81,6 +86,7 @@ public sealed partial class LoadGameViewModel : ObservableObject
     {
         gameProcess.GameProcessExited -= GameProcessExited_Callback;
         CustomMissionHelper.DeleteSupplementalMissionFiles();
+        discord.UpdatePresence();
     });
 
     public void Delete()

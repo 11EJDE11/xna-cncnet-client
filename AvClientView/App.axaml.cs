@@ -52,14 +52,15 @@ public sealed class App : Application
                 .AddSingleton<HotkeyWindowViewModel>()
                 .AddSingleton<CampaignViewModel>()
                 .AddSingleton<LoadGameViewModel>()
-                .AddSingleton<SkirmishSession>()
+                .AddSingleton<DiscordHandler>()
+                .AddSingleton(sp => WithDiscord(ActivatorUtilities.CreateInstance<SkirmishSession>(sp), sp))
                 .AddTransient<SkirmishViewModel>()
                 .AddSingleton<DirectDrawWrapperManager>()
                 .AddSingleton<LanLobby>()
-                .AddSingleton<LanGameRoom>()
+                .AddSingleton(sp => WithDiscord(ActivatorUtilities.CreateInstance<LanGameRoom>(sp), sp))
                 .AddSingleton<LanGameRoomViewModel>()
                 .AddSingleton<LanLobbyViewModel>()
-                .AddSingleton<CnCNetGameRoom>()
+                .AddSingleton(sp => WithDiscord(ActivatorUtilities.CreateInstance<CnCNetGameRoom>(sp), sp))
                 .AddSingleton<CnCNetLobbyService>()
                 .AddSingleton<CnCNetGameRoomViewModel>()
                 .AddSingleton<CnCNetLobbyViewModel>()
@@ -72,6 +73,16 @@ public sealed class App : Application
             // As the XNA client does at start-up: the selected renderer sets the game process's qres and single-core
             // affinity options
             Services.GetRequiredService<DirectDrawWrapperManager>();
+
+            // Discord rich presence, as the XNA client: connected at start-up when enabled, and on saving the settings
+            var discord = Services.GetRequiredService<DiscordHandler>();
+            UserINISettings.Instance.SettingsSaved += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (UserINISettings.Instance.DiscordIntegration && !ClientConfiguration.Instance.DiscordIntegrationGloballyDisabled)
+                    discord.Connect();
+                else
+                    discord.Disconnect();
+            });
 
             // The game-in-progress state (IsInGame, error logs, settings reload), as the XNA GameInProgressWindow
             var gameInProgress = Services.GetRequiredService<ClientLogic.Launch.GameInProgressTracker>();
@@ -96,9 +107,16 @@ public sealed class App : Application
             {
                 Services.GetRequiredService<MainWindowViewModel>().Shutdown();
                 Services.GetRequiredService<CnCNetUserData>().Save();
+                Services.GetRequiredService<DiscordHandler>().Dispose();
             };
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static T WithDiscord<T>(T session, IServiceProvider services) where T : ClientLogic.Lobby.LobbySession
+    {
+        session.DiscordHandler = services.GetRequiredService<DiscordHandler>();
+        return session;
     }
 }
