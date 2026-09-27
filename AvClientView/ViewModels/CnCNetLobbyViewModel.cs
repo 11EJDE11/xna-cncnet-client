@@ -54,6 +54,8 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         lobby.MessagesReset += (_, _) => ResetMessages();
         lobby.UsersChanged += (_, _) => RefreshUsers();
         lobby.GamesChanged += (_, _) => RefreshGames();
+        AvClientView.Theme.ThemeSound gameCreatedSound = AvClientView.Theme.ThemeSound.Load("gamecreated.wav");
+        lobby.GameHostedNotification += (_, _) => gameCreatedSound.Play();
         lobby.ConnectionChanged += (_, _) => RefreshConnection();
         lobby.RoomEntered += (_, _) => RoomEntered?.Invoke(this, EventArgs.Empty);
         lobby.RoomLeft += (_, _) => RoomLeft?.Invoke(this, EventArgs.Empty);

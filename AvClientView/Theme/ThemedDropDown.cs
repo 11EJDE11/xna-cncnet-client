@@ -187,6 +187,9 @@ public sealed class ThemedDropDown : Border
 
         list.ItemsSource = ItemsSource?.Cast<object>().Select((item, i) => new DropDownItem(i, item?.ToString())).ToList();
         list.SelectedIndex = -1;
+        if (!popup.IsOpen)
+            ThemeSounds.DropDown.Play();
+
         popup.IsOpen = !popup.IsOpen;
         e.Handled = true;
     }

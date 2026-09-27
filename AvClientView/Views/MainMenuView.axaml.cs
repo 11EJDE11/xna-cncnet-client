@@ -92,6 +92,7 @@ public partial class MainMenuView : UserControl
         foreach ((string name, string texture) in Buttons)
         {
             var button = new LayoutControl(name, "XNAClientButton", LayoutControlKind.Button);
+            button.Attributes["HoverSoundEffect"] = "MainMenu/button.wav";
             window.AddChild(button);
             reader.Apply(button, "IdleTexture", $"MainMenu/{texture}.png");
             reader.Apply(button, "HoverTexture", $"MainMenu/{texture}_c.png");

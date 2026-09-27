@@ -89,5 +89,5 @@ public static class AvaloniaFrontEndServiceCollectionExtensions
     public static IServiceCollection AddAvaloniaFrontEnd(this IServiceCollection services, Window mainWindow) => services
         .AddSingleton<IUiDispatcher>(new AvaloniaUiDispatcher())
         .AddSingleton<IDialogService>(new AvaloniaDialogService(mainWindow))
-        .AddSingleton<ISoundService>(new NullSoundService());
+        .AddSingleton<ISoundService>(_ => new AvClientView.Theme.ThemeLobbySoundService());
 }

@@ -16,6 +16,7 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="NAudio.WinMM" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ClientCore\ClientCore.csproj" />

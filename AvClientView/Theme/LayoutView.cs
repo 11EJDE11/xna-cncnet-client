@@ -189,12 +189,19 @@ public sealed class ThemedButton : Border
     private readonly Bitmap hover;
     private readonly IBrush idleBrush;
     private readonly IBrush hoverBrush;
+    private readonly ThemeSound hoverSound;
+    private readonly ThemeSound clickSound;
     private bool pressed;
 
     public ThemedButton(LayoutControl button)
     {
         idle = ThemeAssets.LoadBitmap(button.IdleTexture);
         hover = ThemeAssets.LoadBitmap(button.HoverTexture) ?? idle;
+        // XNAClientButton's default hover sound; HoverSoundEffect / ClickSoundEffect keys replace them
+        hoverSound = button.Attributes.TryGetValue("HoverSoundEffect", out string hoverSoundName) ? ThemeSound.Load(hoverSoundName)
+            : button.TypeName == "XNAClientButton" ? ThemeSounds.ButtonHover : null;
+        clickSound = button.Attributes.TryGetValue("ClickSoundEffect", out string clickSoundName) ? ThemeSound.Load(clickSoundName) : null;
+
         idleBrush = new SolidColorBrush(button.TextColor is { } idleColor ? ThemeAssets.ToColor(idleColor) : ThemeAssets.ButtonTextColor);
         hoverBrush = new SolidColorBrush(button.TextColorHover is { } hoverColor ? ThemeAssets.ToColor(hoverColor) : ThemeAssets.ButtonHoverColor);
 
@@ -232,6 +239,10 @@ public sealed class ThemedButton : Border
     protected override void OnPointerEntered(PointerEventArgs e)
     {
         base.OnPointerEntered(e);
+        if (!IsEffectivelyEnabled)
+            return;
+
+        hoverSound?.Play();
         image.Source = hover;
         caption.Foreground = hoverBrush;
     }
@@ -261,6 +272,7 @@ public sealed class ThemedButton : Border
         {
             pressed = false;
             e.Handled = true;
+            clickSound?.Play();
             Click?.Invoke(this, EventArgs.Empty);
         }
     }

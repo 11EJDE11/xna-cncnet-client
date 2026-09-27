@@ -82,6 +82,7 @@ public sealed class ThemedCheckBox : StackPanel
         if (IsEffectivelyEnabled && e.InitialPressMouseButton == MouseButton.Left)
         {
             IsChecked = !IsChecked;
+            ThemeSounds.CheckBox.Play();
             e.Handled = true;
         }
     }

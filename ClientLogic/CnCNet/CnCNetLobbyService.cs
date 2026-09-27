@@ -108,6 +108,12 @@ public sealed class CnCNetLobbyService
     /// <summary>The game list changed.</summary>
     public event EventHandler GamesChanged;
 
+    /// <summary>
+    /// A new, unlocked game of the local game was hosted while not in a game, and the user wants a sound for it
+    /// (PlaySoundOnGameHosted); the XNA lobby plays gamecreated.wav.
+    /// </summary>
+    public event EventHandler GameHostedNotification;
+
     /// <summary>The connection state changed.</summary>
     public event EventHandler ConnectionChanged;
 
@@ -579,7 +585,14 @@ public sealed class CnCNetLobbyService
                 return;
             }
 
-            State.GameList.AddOrUpdate(game);
+            bool isNew = State.GameList.AddOrUpdate(game);
+            if (isNew && UserINISettings.Instance.PlaySoundOnGameHosted &&
+                cncnetGame.InternalName == localGameID.ToLower() &&
+                !ProgramConstants.IsInGame && !game.Locked)
+            {
+                GameHostedNotification?.Invoke(this, EventArgs.Empty);
+            }
+
             GamesChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
