@@ -61,15 +61,19 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         this.session = session;
         this.mapLoader = mapLoader;
 
-        // Maps added, changed or removed while the client runs (e.g. a downloaded map) are listed
-        session.MapsChanged += (_, _) => OnMapSearchTextChanged(MapSearchText);
+        // Maps added, changed or removed while the client runs (e.g. a downloaded map) are listed, with their game
+        // modes (RefreshGameModeFilter)
+        session.MapsChanged += (_, _) =>
+        {
+            ListGameModes();
+            OnMapSearchTextChanged(MapSearchText);
+        };
 
         // A finished game can change the maps' ranks (the XNA skirmish lobby lists its maps again)
         ClientCore.Statistics.StatisticsManager.Instance.GameAdded += (_, _) =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() => OnMapSearchTextChanged(MapSearchText));
 
-        // The XNA map filter drop-down: "Favorites" first, then the game modes
-        GameModes = [FavoriteMapsLabel, .. mapLoader.GameModes.Where(gm => gm.Maps.Count > 0).Select(gm => gm.UIName).Distinct()];
+        ListGameModes();
 
         foreach (GameOption option in session.Options.CheckBoxes)
             CheckBoxOptions.Add(new CheckBoxOptionViewModel(option, () => CanChangeOptions));
@@ -92,7 +96,19 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     /// <summary>The complete snapshot is ready; themed views must not rebuild for each inserted row or marker.</summary>
     public event EventHandler Refreshed;
 
-    public IReadOnlyList<string> GameModes { get; }
+    public IReadOnlyList<string> GameModes { get; private set; } = [];
+
+    /// <summary>The XNA map filter drop-down: "Favorites" first, then the game modes that have maps.</summary>
+    private void ListGameModes()
+    {
+        List<string> gameModes = [FavoriteMapsLabel, .. mapLoader.GameModes.Where(gm => gm.Maps.Count > 0).Select(gm => gm.UIName).Distinct()];
+        if (gameModes.SequenceEqual(GameModes))
+            return;
+
+        GameModes = gameModes;
+        OnPropertyChanged(nameof(GameModes));
+        OnPropertyChanged(nameof(SelectedGameModeIndex));
+    }
 
     public ObservableCollection<MapListItem> Maps { get; } = [];
 
