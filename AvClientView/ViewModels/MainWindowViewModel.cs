@@ -113,6 +113,62 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void OpenStatistics() => Statistics.Open();
 
+    private bool startupChecksRun;
+
+    /// <summary>
+    /// The main menu's checks once the window is shown (the XNA MainMenu's PostInit): missing and interfering files,
+    /// the first run's question and the translation's game files.
+    /// </summary>
+    public void RunStartupChecks()
+    {
+        if (startupChecksRun)
+            return;
+
+        startupChecksRun = true;
+        var dialogs = services.GetRequiredService<ClientLogic.UI.IDialogService>();
+
+        if (ClientLogic.UI.StartupChecks.MissingRequiredFiles() is { } missing)
+            dialogs.ShowMessage(missing.Title, missing.Text);
+
+        if (ClientLogic.UI.StartupChecks.InterferingFiles() is { } interfering)
+            dialogs.ShowMessage(interfering.Title, interfering.Text);
+
+        if (ClientLogic.UI.StartupChecks.TakeFirstRunQuestion() is { } firstRun)
+            dialogs.Confirm(firstRun.Title, firstRun.Text, OpenOptions);
+
+        if (ClientLogic.UI.StartupChecks.ApplyTranslationGameFiles(ClientUpdater.Updater.GameVersion) is { } translation)
+            dialogs.ShowMessage(translation.Title, translation.Text);
+    }
+
+    /// <summary>The main menu buttons' hotkeys (SetButtonHotkeys), while the main menu is shown without a window over it.</summary>
+    public bool HandleMainMenuHotkey(Avalonia.Input.Key key)
+    {
+        if (CurrentPage != Menu || UserINISettings.Instance.DisableMainMenuHotkeys ||
+            Options.IsOpen || Campaign.IsOpen || LoadGame.IsOpen || Extras.IsOpen || Statistics.IsOpen || PrivateMessages.IsOpen)
+            return false;
+
+        string button = key switch
+        {
+            Avalonia.Input.Key.C => "btnNewCampaign",
+            Avalonia.Input.Key.L => "btnLoadGame",
+            Avalonia.Input.Key.S => "btnSkirmish",
+            Avalonia.Input.Key.M => "btnCnCNet",
+            Avalonia.Input.Key.N => "btnLan",
+            Avalonia.Input.Key.O => "btnOptions",
+            Avalonia.Input.Key.E => "btnMapEditor",
+            Avalonia.Input.Key.T => "btnStatistics",
+            Avalonia.Input.Key.R => "btnCredits",
+            Avalonia.Input.Key.X => "btnExtras",
+            _ => null,
+        };
+
+        if (button == null)
+            return false;
+
+        Menu.Click(button, string.Empty);
+        return true;
+    }
+
     private void OpenOptions()
     {
         if (!Options.IsOpen)

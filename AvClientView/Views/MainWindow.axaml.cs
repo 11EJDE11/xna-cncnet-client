@@ -48,6 +48,10 @@ public partial class MainWindow : Window
         base.OnKeyDown(e);
         if (!e.Handled && topBar != null && topBar.HandleKey(e.Key))
             e.Handled = true;
+
+        if (!e.Handled && e.KeyModifiers == Avalonia.Input.KeyModifiers.None && DataContext is MainWindowViewModel viewModel &&
+            viewModel.HandleMainMenuHotkey(e.Key))
+            e.Handled = true;
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -57,6 +61,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.ExitRequested += (_, _) => viewModel.Music.FadeOutAndExit(Close);
+            Opened += (_, _) => viewModel.RunStartupChecks();
 
             if (topBar == null)
             {

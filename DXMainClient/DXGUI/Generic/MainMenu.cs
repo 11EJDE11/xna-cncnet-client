@@ -3,6 +3,7 @@ using ClientCore.Enums;
 using ClientCore.I18N;
 using ClientGUI;
 using ClientLogic.Launch;
+using ClientLogic.UI;
 using DTAClient.Domain;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using DTAClient.DXGUI.Multiplayer;
@@ -439,61 +440,14 @@ namespace DTAClient.DXGUI.Generic
         /// </summary>
         private void CheckRequiredFiles()
         {
-            List<string> absentFiles = ClientConfiguration.Instance.RequiredFiles.ToList()
-                .FindAll(f => !string.IsNullOrWhiteSpace(f) && !SafePath.GetFile(ProgramConstants.GamePath, f).Exists);
-
-            if (absentFiles.Count > 0)
-            {
-                string description = string.Empty;
-                if (ClientConfiguration.Instance.ClientGameType == ClientType.Ares)
-                {
-                    description = ("You are missing Yuri's Revenge files that are required\n" +
-                        "to play this mod! Yuri's Revenge mods are not standalone,\n" +
-                        "so you need a copy of following Yuri's Revenge (v.1.001)\n" +
-                        "files placed in the mod folder to play the mod:").L10N("Client:Main:MissingFilesText1Ares");
-                }
-                else
-                {
-                    description = "The following required files are missing:".L10N("Client:Main:MissingFilesText1NonAres");
-                }
-
-                description += Environment.NewLine + Environment.NewLine +
-                    String.Join(Environment.NewLine, absentFiles) +
-                    Environment.NewLine + Environment.NewLine +
-                    "You won't be able to play without those files.".L10N("Client:Main:MissingFilesText2");
-
-                XNAMessageBox.Show(WindowManager, "Missing Files".L10N("Client:Main:MissingFilesTitle"), description);
-            }
+            if (StartupChecks.MissingRequiredFiles() is StartupMessage message)
+                XNAMessageBox.Show(WindowManager, message.Title, message.Text);
         }
 
         private void CheckForbiddenFiles()
         {
-            List<string> presentFiles = ClientConfiguration.Instance.ForbiddenFiles.ToList()
-                .FindAll(f => !string.IsNullOrWhiteSpace(f) && SafePath.GetFile(ProgramConstants.GamePath, f).Exists);
-
-            if (presentFiles.Count > 0)
-            {
-                string description;
-                if (ClientConfiguration.Instance.ClientGameType == ClientType.TS)
-                {
-                    description = ("You have installed the mod on top of a Tiberian Sun\n" +
-                    "copy! This mod is standalone, therefore you have to\n" +
-                    "install it in an empty folder. Otherwise the mod won't\n" +
-                    "function correctly.\n\n" +
-                    "Please reinstall the mod into an empty folder to play.").L10N("Client:Main:InterferingFilesDetectedTextTS");
-                }
-                else
-                {
-                    description = "The following interfering files are present:".L10N("Client:Main:InterferingFilesDetectedTextNonTS1") +
-                    Environment.NewLine + Environment.NewLine +
-                    String.Join(Environment.NewLine, presentFiles) +
-                    Environment.NewLine + Environment.NewLine +
-                    "The mod won't work correctly without those files removed.".L10N("Client:Main:InterferingFilesDetectedTextNonTS2");
-                }
-
-                XNAMessageBox.Show(WindowManager, "Interfering Files Detected".L10N("Client:Main:InterferingFilesDetectedTitle"), description);
-            }
-
+            if (StartupChecks.InterferingFiles() is StartupMessage message)
+                XNAMessageBox.Show(WindowManager, message.Title, message.Text);
         }
 
         /// <summary>
@@ -503,17 +457,9 @@ namespace DTAClient.DXGUI.Generic
         /// </summary>
         private void CheckIfFirstRun()
         {
-            if (UserINISettings.Instance.IsFirstRun)
+            if (StartupChecks.TakeFirstRunQuestion() is StartupMessage message)
             {
-                UserINISettings.Instance.IsFirstRun.Value = false;
-                UserINISettings.Instance.SaveSettings();
-
-                firstRunMessageBox = XNAMessageBox.ShowYesNoDialog(WindowManager,
-                    "Initial Installation".L10N("Client:Main:InitialInstallationTitle"),
-                    string.Format(("You have just installed {0}.\n" +
-                        "It's highly recommended that you configure your settings before playing.\n" +
-                        "Do you want to configure them now?").L10N("Client:Main:InitialInstallationText"),
-                    ClientConfiguration.Instance.LocalGame));
+                firstRunMessageBox = XNAMessageBox.ShowYesNoDialog(WindowManager, message.Title, message.Text);
                 firstRunMessageBox.YesClickedAction = FirstRunMessageBox_YesClicked;
                 firstRunMessageBox.NoClickedAction = FirstRunMessageBox_NoClicked;
             }
@@ -523,25 +469,8 @@ namespace DTAClient.DXGUI.Generic
 
         private void CheckAndApplyTranslationGameFiles(bool skipVersionCheck = false)
         {
-            // In ModMode there is no updater, so always apply translation game files.
-            // Otherwise, skip if already applied for the current game version.
-            if (!skipVersionCheck && !ClientConfiguration.Instance.ModMode &&
-                UserINISettings.Instance.TranslationGameFilesVersion.Value == Updater.GameVersion)
-                return;
-
-            try
-            {
-                Translation.Instance.ApplyTranslationGameFiles();
-                UserINISettings.Instance.TranslationGameFilesVersion.Value = Updater.GameVersion;
-                UserINISettings.Instance.SaveSettings();
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Failed to apply translation game files. " + ex.ToString());
-                XNAMessageBox.Show(WindowManager,
-                    "Applying Translation Files Failed".L10N("Client:Main:ApplyTranslationFilesFailTitle"),
-                    "Applying translation files failed! Error message:".L10N("Client:Main:ApplyTranslationFilesFailText") + " " + ex.Message);
-            }
+            if (StartupChecks.ApplyTranslationGameFiles(Updater.GameVersion, skipVersionCheck) is StartupMessage message)
+                XNAMessageBox.Show(WindowManager, message.Title, message.Text);
         }
 
         private void FirstRunMessageBox_NoClicked(XNAMessageBox messageBox)

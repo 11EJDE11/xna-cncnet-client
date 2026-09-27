@@ -55,7 +55,14 @@ public partial class MainMenuView : UserControl
             Canvas canvas = LayoutView.Build(layout, OnClick);
 
             if (LayoutView.FindNamed<TextBlock>(canvas, "lblVersion") is TextBlock version)
+            {
                 version.Text = ViewModel.Version;
+
+                // LblVersion_LeftClick: the changelog
+                version.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+                version.IsHitTestVisible = true;
+                version.PointerPressed += (_, _) => ClientCore.ProcessLauncher.StartShellProcess(ClientCore.ClientConfiguration.Instance.ChangelogURL);
+            }
 
             if (LayoutView.FindNamed<TextBlock>(canvas, "lblCnCNetPlayerCount") is TextBlock playerCount)
             {
