@@ -17,8 +17,11 @@
     <DataTemplate DataType="vm:LanLobbyViewModel">
       <views:LanLobbyView />
     </DataTemplate>
-    <DataTemplate DataType="vm:LanGameRoomViewModel">
-      <views:LanGameRoomView />
+    <DataTemplate DataType="vm:CnCNetLobbyViewModel">
+      <views:CnCNetLobbyView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:MultiplayerRoomViewModel">
+      <views:GameRoomView />
     </DataTemplate>
   </Window.DataTemplates>
   <ContentControl Content="{Binding CurrentPage}" />

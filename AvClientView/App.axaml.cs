@@ -9,6 +9,7 @@ using AvClientView.ViewModels;
 using AvClientView.Views;
 
 using ClientLogic;
+using ClientLogic.CnCNet;
 using ClientLogic.Lan;
 using ClientLogic.Skirmish;
 
@@ -44,6 +45,10 @@ public sealed class App : Application
                 .AddSingleton<LanGameRoom>()
                 .AddSingleton<LanGameRoomViewModel>()
                 .AddSingleton<LanLobbyViewModel>()
+                .AddSingleton<CnCNetGameRoom>()
+                .AddSingleton<CnCNetLobbyService>()
+                .AddSingleton<CnCNetGameRoomViewModel>()
+                .AddSingleton<CnCNetLobbyViewModel>()
                 .BuildServiceProvider();
 
             // As the XNA client does at start-up: the selected renderer sets the game process's qres and single-core
@@ -54,7 +59,7 @@ public sealed class App : Application
             desktop.MainWindow = mainWindow;
             desktop.ShutdownRequested += (_, _) =>
             {
-                Services.GetRequiredService<LanLobbyViewModel>().Shutdown();
+                Services.GetRequiredService<MainWindowViewModel>().Shutdown();
                 Services.GetRequiredService<CnCNetUserData>().Save();
             };
         }

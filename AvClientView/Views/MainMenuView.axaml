@@ -7,6 +7,7 @@
     <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="240">
       <TextBlock Text="{Binding Title}" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,12" />
       <Button Content="Skirmish" Command="{Binding OpenSkirmishCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+      <Button Content="CnCNet" Command="{Binding OpenCnCNetCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
       <Button Content="LAN" Command="{Binding OpenLanCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
       <Button Content="Exit" Command="{Binding ExitCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
     </StackPanel>

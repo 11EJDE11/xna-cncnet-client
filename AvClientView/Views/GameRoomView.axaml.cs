@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace AvClientView.Views;
 
-public partial class LanGameRoomView : UserControl
+public partial class GameRoomView : UserControl
 {
-    public LanGameRoomView()
+    public GameRoomView()
     {
         InitializeComponent();
     }

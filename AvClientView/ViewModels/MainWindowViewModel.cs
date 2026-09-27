@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AvClientView.ViewModels;
 
-/// <summary>The main window: shows the main menu, the skirmish lobby or the LAN screens.</summary>
+/// <summary>The main window: shows the main menu, the skirmish lobby, the LAN screens or the CnCNet screens.</summary>
 public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly IServiceProvider services;
@@ -20,6 +20,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         menu.SkirmishRequested += (_, _) => OpenSkirmish();
         menu.LanRequested += (_, _) => OpenLan();
+        menu.CnCNetRequested += (_, _) => OpenCnCNet();
     }
 
     public MainMenuViewModel Menu { get; }
@@ -56,5 +57,32 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         lanLobby.Open();
         CurrentPage = lanLobby;
+    }
+
+    private CnCNetLobbyViewModel cncnetLobby;
+
+    private void OpenCnCNet()
+    {
+        if (cncnetLobby == null)
+        {
+            cncnetLobby = services.GetRequiredService<CnCNetLobbyViewModel>();
+            cncnetLobby.BackRequested += (_, _) => CurrentPage = Menu;
+            cncnetLobby.RoomEntered += (_, _) => CurrentPage = cncnetLobby.Room;
+            cncnetLobby.RoomLeft += (_, _) =>
+            {
+                if (CurrentPage == cncnetLobby.Room)
+                    CurrentPage = cncnetLobby;
+            };
+        }
+
+        cncnetLobby.Open();
+        CurrentPage = cncnetLobby;
+    }
+
+    /// <summary>The client is closing: leave the multiplayer rooms and lobbies that were opened.</summary>
+    public void Shutdown()
+    {
+        lanLobby?.Shutdown();
+        cncnetLobby?.Shutdown();
     }
 }
