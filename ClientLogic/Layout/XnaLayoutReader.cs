@@ -109,6 +109,102 @@ public sealed class XnaLayoutReader
             ReadControl(ini, child);
     }
 
+    /// <summary>
+    /// Reads an INItializableWindow screen (e.g. the game lobbies): the window's section in INI order, where a "$CC"
+    /// key adds a child ("name:Type") and reads its section at once, "$X", "$Y", "$Width" and "$Height" are
+    /// expressions, and "$TextAnchor"/"$AnchorPoint" place labels; then the [$ExtraControls] "$CC" entries. Controls
+    /// the screen creates in code are children of <paramref name="window"/> already and read their sections when an
+    /// expression doesn't need them first (call <see cref="ReadInitializableControl"/> for them in the screen's
+    /// order).
+    /// </summary>
+    public LayoutExpressionParser ReadInitializableWindow(IniFile ini, LayoutControl window, Dictionary<string, int> constants)
+    {
+        var parser = new LayoutExpressionParser(constants, window);
+        ReadInitializableControl(ini, window, parser);
+
+        IniSection extraControls = ini.GetSection("$ExtraControls");
+        if (extraControls != null)
+        {
+            foreach (var kvp in extraControls.Keys.Where(k => k.Key.StartsWith("$CC")))
+            {
+                string[] parts = kvp.Value.Split(':');
+                if (parts.Length != 2)
+                    throw new ClientConfigurationException("Invalid $ExtraControl specified in " + window.Name + ": " + kvp.Value);
+
+                if (!window.Children.Any(c => c.Name == parts[0]))
+                {
+                    var control = new LayoutControl(parts[0], parts[1], KindOf(parts[1])) { DrawOrder = -window.Children.Count };
+                    window.AddChild(control);
+                    ReadInitializableControl(ini, control, parser);
+                }
+            }
+        }
+
+        return parser;
+    }
+
+    /// <summary>One control's section, with the INItializableWindow rules (see <see cref="ReadInitializableWindow"/>).</summary>
+    public void ReadInitializableControl(IniFile ini, LayoutControl control, LayoutExpressionParser parser)
+    {
+        IniSection section = ini.GetSection(control.Name);
+        if (section == null)
+            return;
+
+        foreach (var kvp in section.Keys)
+        {
+            string key = kvp.Key;
+            string value = kvp.Value;
+
+            if (key.StartsWith("$CC"))
+            {
+                string[] parts = value.Split([':'], StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length != 2)
+                    throw new ClientConfigurationException("Invalid child control definition " + value);
+
+                LayoutControl child = control.Children.FirstOrDefault(c => c.Name == parts[0]);
+                if (child == null)
+                {
+                    child = new LayoutControl(parts[0], parts[1], KindOf(parts[1]));
+                    control.AddChild(child);
+                }
+
+                ReadInitializableControl(ini, child, parser);
+                continue;
+            }
+
+            control.Attributes[key] = value;
+
+            switch (key)
+            {
+                case "$X":
+                    control.X = parser.GetExprValue(Localize(control, key, value), control);
+                    break;
+                case "$Y":
+                    control.Y = parser.GetExprValue(Localize(control, key, value), control);
+                    break;
+                case "$Width":
+                    control.Width = parser.GetExprValue(Localize(control, key, value), control);
+                    break;
+                case "$Height":
+                    control.Height = parser.GetExprValue(Localize(control, key, value), control);
+                    break;
+                case "$TextAnchor" when control.Kind == LayoutControlKind.Label:
+                    control.TextAnchor = value;
+                    break;
+                case "$AnchorPoint" when control.Kind == LayoutControlKind.Label:
+                    string[] point = value.Split(',');
+                    if (point.Length != 2)
+                        throw new FormatException("Invalid format for AnchorPoint: " + value);
+                    control.AnchorPoint = (parser.GetExprValue(point[0], control), parser.GetExprValue(point[1], control));
+                    break;
+                default:
+                    if (!key.StartsWith("$"))
+                        Apply(control, key, value);
+                    break;
+            }
+        }
+    }
+
     /// <summary>A control's attributes, as XNAControl.GetAttributes reads them: children first, then its own section.</summary>
     public void ReadControl(IniFile ini, LayoutControl control)
     {
