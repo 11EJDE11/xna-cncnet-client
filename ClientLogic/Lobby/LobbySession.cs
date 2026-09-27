@@ -76,6 +76,48 @@ public abstract partial class LobbySession : ObservableObject
 
     public PlayerExtraOptionsState ExtraOptions { get; } = new();
 
+    /// <summary>
+    /// Whether the lobby shows the extra player options (the theme has btnPlayerExtraOptionsOpen). Only then does
+    /// the XNA lobby react to extra option changes and apply the host's extra options.
+    /// </summary>
+    public bool HasExtraOptionsPanel { get; private set; }
+
+    /// <summary>The lobby shows the extra player options panel: extra option changes now apply to the players.</summary>
+    public void EnableExtraOptionsPanel()
+    {
+        if (HasExtraOptionsPanel)
+            return;
+
+        HasExtraOptionsPanel = true;
+        ExtraOptions.Changed += (_, _) => OnExtraOptionsChanged();
+    }
+
+    /// <summary>
+    /// The extra player options changed (GameLobbyBase.PlayerExtraOptions_OptionsChanged): forced random sides,
+    /// colours and starts and forced no teams reset those choices of every player and AI.
+    /// </summary>
+    protected virtual void OnExtraOptionsChanged()
+    {
+        PlayerExtraOptions extraOptions = ExtraOptions.ToPlayerExtraOptions();
+
+        foreach (PlayerInfo pInfo in Players.Concat(AIPlayers))
+        {
+            if (extraOptions.IsForceRandomSides)
+                pInfo.SideId = 0;
+
+            if (extraOptions.IsForceNoTeams)
+                pInfo.TeamId = 0;
+
+            if (extraOptions.IsForceRandomColors)
+                pInfo.ColorId = 0;
+
+            if (extraOptions.IsForceRandomStarts)
+                pInfo.StartingLocation = 0;
+        }
+
+        RaiseChanged();
+    }
+
     public GameLobbyState LobbyState { get; }
 
     /// <summary>The real sides (without the random selectors and Spectator).</summary>

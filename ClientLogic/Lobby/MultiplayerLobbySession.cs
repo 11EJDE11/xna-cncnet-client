@@ -426,11 +426,21 @@ public abstract class MultiplayerLobbySession : LobbySession
         BroadcastPlayerOptions();
     }
 
-    /// <summary>Player: applies the extra player options the host sent, with notices.</summary>
+    /// <summary>The LAN and CnCNet lobbies also send the extra options (the host) after a change.</summary>
+    protected override void OnExtraOptionsChanged()
+    {
+        base.OnExtraOptionsChanged();
+        BroadcastPlayerExtraOptions();
+    }
+
+    /// <summary>Player: applies the extra player options the host sent, with notices (only with the panel, as XNA).</summary>
     public void ApplyPlayerExtraOptions(string message)
     {
-        foreach (string notice in ExtraOptions.ApplyFromHost(PlayerExtraOptions.FromMessage(message)))
-            AddNotice(notice);
+        if (HasExtraOptionsPanel)
+        {
+            foreach (string notice in ExtraOptions.ApplyFromHost(PlayerExtraOptions.FromMessage(message)))
+                AddNotice(notice);
+        }
 
         RaiseChanged();
     }

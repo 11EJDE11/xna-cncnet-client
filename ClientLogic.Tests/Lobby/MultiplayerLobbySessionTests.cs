@@ -232,4 +232,37 @@ public class MultiplayerLobbySessionTests
         Assert.Null(player.GameModeMap);
         Assert.True(player.Players.Where(p => p.Name != "Host").All(p => !p.Ready));
     }
+
+    [Fact]
+    public void WithThePanelForcedExtraOptionsResetThePlayersAndTheHostSendsThem()
+    {
+        var room = new TestRoom(isHost: true);
+        room.Players[1].SideId = 3;
+        room.Players[1].ColorId = 2;
+
+        room.ExtraOptions.ForceRandomSides = true;
+        Assert.Equal(3, room.Players[1].SideId);
+        Assert.DoesNotContain("extra options", room.Recorder.Sent);
+
+        room.EnableExtraOptionsPanel();
+        room.ExtraOptions.ForceRandomColors = true;
+
+        Assert.Equal((0, 0), (room.Players[1].SideId, room.Players[1].ColorId));
+        Assert.Contains("extra options", room.Recorder.Sent);
+    }
+
+    [Fact]
+    public void APlayerAppliesTheHostsExtraOptionsOnlyWithThePanel()
+    {
+        var room = new TestRoom(isHost: false);
+        string message = new PlayerExtraOptions { IsForceRandomSides = true }.ToString();
+
+        room.ApplyPlayerExtraOptions(message);
+        Assert.False(room.ExtraOptions.ForceRandomSides);
+
+        room.EnableExtraOptionsPanel();
+        room.ApplyPlayerExtraOptions(message);
+        Assert.True(room.ExtraOptions.ForceRandomSides);
+        Assert.DoesNotContain("extra options", room.Recorder.Sent);
+    }
 }
