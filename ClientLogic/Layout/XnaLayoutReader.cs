@@ -27,9 +27,15 @@ public sealed class XnaLayoutReader
     public const string GENERIC_WINDOW_SECTION = "GenericWindow";
     public const string EXTRA_CONTROLS = "ExtraControls";
 
+    private const int CHECK_BOX_TEXT_PADDING = 5;
+    private const string CHECK_BOX_TEXTURE = "checkBoxChecked.png";
+
     private readonly Func<string, (int Width, int Height)?> textureSize;
     private readonly int renderWidth;
     private readonly int renderHeight;
+
+    /// <summary>Measures a text in an XNA font index (labels and check boxes take their size from it).</summary>
+    public Func<string, int, (int Width, int Height)> MeasureText { get; set; } = (_, _) => (0, 0);
 
     /// <param name="textureSize">The size of a texture (an IdleTexture sets a button's size), or null if not found.</param>
     /// <param name="renderWidth">The render resolution, for FillWidth on controls without a parent.</param>
@@ -69,6 +75,9 @@ public sealed class XnaLayoutReader
 
         if (typeName.Contains("Label"))
             return LayoutControlKind.Label;
+
+        if (typeName.Contains("CheckBox"))
+            return LayoutControlKind.CheckBox;
 
         if (typeName.Contains("Panel") || typeName.Contains("Window") || typeName.Contains("PictureBox"))
             return LayoutControlKind.Panel;
@@ -144,9 +153,10 @@ public sealed class XnaLayoutReader
     }
 
     /// <summary>One control's section, with the INItializableWindow rules (see <see cref="ReadInitializableWindow"/>).</summary>
-    public void ReadInitializableControl(IniFile ini, LayoutControl control, LayoutExpressionParser parser)
+    /// <param name="sectionName">The section to read, if not the control's name (e.g. lbChatMessages_Host).</param>
+    public void ReadInitializableControl(IniFile ini, LayoutControl control, LayoutExpressionParser parser, string sectionName = null)
     {
-        IniSection section = ini.GetSection(control.Name);
+        IniSection section = ini.GetSection(sectionName ?? control.Name);
         if (section == null)
             return;
 
@@ -202,6 +212,85 @@ public sealed class XnaLayoutReader
                         Apply(control, key, value);
                     break;
             }
+
+            if (key is "$TextAnchor" or "$AnchorPoint")
+                RefreshSize(control);
+        }
+
+        Initialize(control);
+    }
+
+    /// <summary>
+    /// What the XNA controls do in Initialize once their INI is read: a client button without textures uses
+    /// "{Width}pxbtn.png" (and takes its width from it), and labels and check boxes take their size from their text.
+    /// </summary>
+    public void Initialize(LayoutControl control)
+    {
+        if (control.TypeName is "XNAClientButton" or "GameLaunchButton" && control.IdleTexture == null)
+        {
+            string idle = control.Width + "pxbtn.png";
+            if (textureSize(idle) is (int width, int height))
+            {
+                control.IdleTexture = idle;
+                control.HoverTexture ??= control.Width + "pxbtn_c.png";
+                if (control.Width == 0)
+                    control.Width = width;
+                if (control.Height == 0)
+                    control.Height = height;
+            }
+        }
+
+        RefreshSize(control);
+    }
+
+    /// <summary>
+    /// A label's or check box's size from its text (XNALabel.RefreshClientRectangle, XNACheckBox
+    /// SetTextPositionAndSize); an anchored label is placed by its anchor point.
+    /// </summary>
+    public void RefreshSize(LayoutControl control)
+    {
+        if (control.Kind == LayoutControlKind.Label)
+        {
+            if (string.IsNullOrEmpty(control.Text))
+                return;
+
+            (int width, int height) = MeasureText(control.Text, control.FontIndex);
+            control.Width = width;
+            control.Height = height;
+
+            if (control.AnchorPoint is (float ax, float ay) && !string.IsNullOrEmpty(control.TextAnchor))
+            {
+                string anchor = control.TextAnchor.ToUpperInvariant();
+                control.X = (int)ax;
+                control.Y = (int)ay;
+
+                if (anchor.Contains("HORIZONTAL_CENTER") || anchor == "CENTER")
+                    control.X = (int)(ax - width / 2f);
+                else if (anchor.Contains("RIGHT"))
+                    control.X = (int)ax;
+                else if (anchor.Contains("LEFT"))
+                    control.X = (int)(ax - width);
+
+                if (anchor.Contains("VERTICAL_CENTER") || anchor == "CENTER")
+                    control.Y = (int)(ay - height / 2f);
+                else if (anchor.Contains("TOP"))
+                    control.Y = (int)(ay - height);
+                else if (anchor.Contains("BOTTOM"))
+                    control.Y = (int)ay;
+            }
+        }
+        else if (control.Kind == LayoutControlKind.CheckBox && textureSize(CHECK_BOX_TEXTURE) is (int boxWidth, int boxHeight))
+        {
+            if (string.IsNullOrEmpty(control.Text))
+            {
+                control.Width = boxWidth;
+                control.Height = boxHeight;
+                return;
+            }
+
+            (int width, int height) = MeasureText(control.Text, control.FontIndex);
+            control.Width = width + CHECK_BOX_TEXT_PADDING + boxWidth;
+            control.Height = Math.Max(height, boxHeight);
         }
     }
 
@@ -249,6 +338,7 @@ public sealed class XnaLayoutReader
                 return;
             case "Text":
                 control.Text = Localize(control, key, value.FromIniString());
+                RefreshSize(control);
                 return;
             case "ToolTip":
                 control.ToolTip = Localize(control, key, value.FromIniString());
@@ -303,6 +393,10 @@ public sealed class XnaLayoutReader
 
         switch (control.Kind)
         {
+            case LayoutControlKind.CheckBox when key == "FontIndex":
+                control.FontIndex = Conversions.IntFromString(value, 0);
+                RefreshSize(control);
+                return;
             case LayoutControlKind.Panel:
                 ApplyPanel(control, key, value);
                 return;
@@ -369,7 +463,7 @@ public sealed class XnaLayoutReader
         }
     }
 
-    private static void ApplyLabel(LayoutControl control, string key, string value)
+    private void ApplyLabel(LayoutControl control, string key, string value)
     {
         switch (key)
         {
@@ -379,14 +473,17 @@ public sealed class XnaLayoutReader
                 return;
             case "FontIndex":
                 control.FontIndex = Conversions.IntFromString(value, 0);
+                RefreshSize(control);
                 return;
             case "AnchorPoint":
                 string[] point = value.Split(',');
                 if (point.Length == 2)
                     control.AnchorPoint = (Conversions.FloatFromString(point[0], 0f), Conversions.FloatFromString(point[1], 0f));
+                RefreshSize(control);
                 return;
             case "TextAnchor":
                 control.TextAnchor = value;
+                RefreshSize(control);
                 return;
         }
     }

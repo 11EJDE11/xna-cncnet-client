@@ -9,6 +9,7 @@ using Avalonia.Media.Imaging;
 
 using ClientCore;
 using ClientCore.Caching;
+using ClientCore.Extensions;
 
 using ClientLogic.Lobby;
 using ClientLogic.MapPreview;
@@ -30,6 +31,26 @@ public abstract partial class LobbyViewModelBase : ObservableObject
 {
     public const double PreviewWidth = 520;
     public const double PreviewHeight = 330;
+
+    /// <summary>The map preview's size (a themed layout sets the XNA MapPreviewBox size).</summary>
+    public double PreviewAreaWidth { get; private set; } = PreviewWidth;
+
+    public double PreviewAreaHeight { get; private set; } = PreviewHeight;
+
+    /// <summary>Sets the map preview's size and redraws it.</summary>
+    public void SetPreviewArea(double width, double height)
+    {
+        PreviewAreaWidth = width;
+        PreviewAreaHeight = height;
+        Refresh();
+    }
+
+    /// <summary>Selects a random map of the current game mode (the XNA Pick Random Map button).</summary>
+    public void PickRandomMap()
+    {
+        if (CanChangeMap && currentMaps.Count > 0)
+            session.ChangeMap(currentMaps[Random.Shared.Next(currentMaps.Count)]);
+    }
 
     private readonly LobbySession session;
     private readonly MapLoader mapLoader;
@@ -112,8 +133,34 @@ public abstract partial class LobbyViewModelBase : ObservableObject
     [ObservableProperty]
     private string mapInfo;
 
+    // The XNA lobby's map labels under the preview
+    [ObservableProperty]
+    private string mapNameText = "Map: Unknown".L10N("Client:Main:MapUnknown");
+
+    [ObservableProperty]
+    private string mapAuthorText = "By Unknown Author".L10N("Client:Main:AuthorByUnknown");
+
+    [ObservableProperty]
+    private string gameModeText = "Game mode: Unknown".L10N("Client:Main:GameModeUnknown");
+
+    [ObservableProperty]
+    private string mapSizeText = "Size: Not available".L10N("Client:Main:MapSizeUnknown");
+
+    /// <summary>The selected game mode's index in <see cref="GameModes"/>.</summary>
+    public int SelectedGameModeIndex
+    {
+        get => GameModes.ToList().IndexOf(SelectedGameMode);
+        set
+        {
+            if (value >= 0 && value < GameModes.Count)
+                SelectedGameMode = GameModes[value];
+        }
+    }
+
     partial void OnSelectedGameModeChanged(string value)
     {
+        OnPropertyChanged(nameof(SelectedGameModeIndex));
+
         if (Refreshing)
             return;
 
@@ -153,6 +200,11 @@ public abstract partial class LobbyViewModelBase : ObservableObject
 
             SelectedMapIndex = gmm == null ? -1 : currentMaps.IndexOf(gmm);
             MapInfo = gmm == null ? string.Empty : $"{gmm.Map.Name} ({gmm.GameMode.UIName}), {gmm.MaxPlayers} players, by {gmm.Map.Author}";
+
+            MapNameText = gmm == null ? "Map: Unknown".L10N("Client:Main:MapUnknown") : "Map:".L10N("Client:Main:Map") + " " + gmm.Map.Name;
+            MapAuthorText = gmm == null ? "By Unknown Author".L10N("Client:Main:AuthorByUnknown") : "By".L10N("Client:Main:AuthorBy") + " " + gmm.Map.Author;
+            GameModeText = gmm == null ? "Game mode: Unknown".L10N("Client:Main:GameModeUnknown") : "Game mode:".L10N("Client:Main:GameModeLabel") + " " + gmm.GameMode.UIName;
+            MapSizeText = gmm == null ? "Size: Not available".L10N("Client:Main:MapSizeUnknown") : "Size:".L10N("Client:Main:MapSize") + " " + gmm.Map.GetSizeString();
 
             List<bool> starts = gmm == null ? [] : PlayerSlotRules.ComputeStartItems(MapSlotRules.FromGameModeMap(gmm), LobbySession.MAX_PLAYER_COUNT).ToList();
             StartItems = ["???", .. Enumerable.Range(1, starts.Count).Select(i => i.ToString())];
@@ -220,7 +272,7 @@ public abstract partial class LobbyViewModelBase : ObservableObject
         Preview = new Bitmap(stream);
 
         var previewSize = new MapPoint(lease.Value.Width, lease.Value.Height);
-        MapPreviewLayout layout = MapPreviewLayout.Fit((int)PreviewWidth, (int)PreviewHeight, previewSize.X, previewSize.Y);
+        MapPreviewLayout layout = MapPreviewLayout.Fit((int)PreviewAreaWidth, (int)PreviewAreaHeight, previewSize.X, previewSize.Y);
         PreviewX = layout.X;
         PreviewY = layout.Y;
         PreviewImageWidth = layout.Width;
@@ -285,6 +337,22 @@ public sealed partial class PlayerRowViewModel : ObservableObject
     public string Status { get; }
 
     public IReadOnlyList<string> NameItems => owner.NameItems;
+
+    /// <summary>The name drop-down's items: the player's name for humans (as XNA shows it), the AI levels otherwise.</summary>
+    public IReadOnlyList<string> DisplayNameItems => IsHuman ? [PlayerName] : owner.NameItems;
+
+    public int DisplayNameIndex
+    {
+        get => IsHuman ? 0 : NameIndex;
+        set
+        {
+            if (!IsHuman && value >= 0)
+                NameIndex = value;
+        }
+    }
+
+    /// <summary>The name drop-down can be changed (AI and free rows the local player may edit).</summary>
+    public bool CanChangeName => IsEditable && !IsHuman;
 
     public IReadOnlyList<string> SideItems => IsHuman ? owner.SideItems : owner.SideItems.Take(owner.SideItems.Count - 1).ToList();
 

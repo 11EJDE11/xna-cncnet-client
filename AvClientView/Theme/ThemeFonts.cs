@@ -81,6 +81,17 @@ public static class ThemeFonts
         }
     }
 
+    /// <summary>A text's size in an XNA font index, in pixels (rounded up).</summary>
+    public static (int Width, int Height) Measure(string text, int fontIndex)
+    {
+        if (string.IsNullOrEmpty(text))
+            return (0, 0);
+
+        (FontFamily family, double size) = Get(fontIndex);
+        using var layout = new Avalonia.Media.TextFormatting.TextLayout(text, new Typeface(family), size, Brushes.White);
+        return ((int)Math.Ceiling(layout.WidthIncludingTrailingWhitespace), (int)Math.Ceiling(layout.Height));
+    }
+
     /// <summary>The font of an XNA font index.</summary>
     public static (FontFamily Family, double Size) Get(int index) =>
         index >= 0 && index < fonts.Count ? fonts[index] : (FontFamily.Default, DEFAULT_SIZE);

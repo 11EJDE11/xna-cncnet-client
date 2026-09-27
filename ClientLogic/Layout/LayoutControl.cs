@@ -17,6 +17,9 @@ public enum LayoutControlKind
     /// <summary>A text label.</summary>
     Label,
 
+    /// <summary>A check box: its texture and text set its size.</summary>
+    CheckBox,
+
     /// <summary>Anything else; the front end decides.</summary>
     Other,
 }

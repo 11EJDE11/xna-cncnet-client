@@ -89,6 +89,13 @@ public static class ThemeAssets
     public static (int Width, int Height)? TextureSize(string name) =>
         LoadBitmap(name) is Bitmap bitmap ? (bitmap.PixelSize.Width, bitmap.PixelSize.Height) : null;
 
+    /// <summary>Opens a link button's web address (XNALinkButton); other targets are ignored.</summary>
+    public static void OpenUrl(string url)
+    {
+        if (!string.IsNullOrEmpty(url) && url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+    }
+
     public static Color ToColor(ChatColor color) => Color.FromArgb(color.A, color.R, color.G, color.B);
 
     /// <summary>A colour from the client configuration ("R,G,B" or "R,G,B,A").</summary>
