@@ -136,6 +136,9 @@ public sealed partial class CampaignViewModel : ObservableObject
         return option;
     }
 
+    /// <summary>The missions (read the first time they are needed; the load game window uses them too).</summary>
+    public CampaignCatalog Catalog => catalog ??= CampaignCatalog.Load();
+
     /// <summary>Opens the window; the first time, the missions and settings are read.</summary>
     public void Open()
     {
@@ -143,7 +146,6 @@ public sealed partial class CampaignViewModel : ObservableObject
         {
             loaded = true;
             Difficulty = UserINISettings.Instance.Difficulty;
-            catalog = CampaignCatalog.Load();
             LoadMissionsWithFilter(null, disableCustomMissions: true, disableOfficialMissions: false);
             LoadSettings();
         }
@@ -160,7 +162,7 @@ public sealed partial class CampaignViewModel : ObservableObject
     /// <summary>Lists missions (CampaignSelector.LoadMissionsWithFilter).</summary>
     public void LoadMissionsWithFilter(ISet<string> selectedTags, bool disableCustomMissions = true, bool disableOfficialMissions = false)
     {
-        selectedMissions = catalog.Filter(selectedTags, disableCustomMissions, disableOfficialMissions);
+        selectedMissions = Catalog.Filter(selectedTags, disableCustomMissions, disableOfficialMissions);
         Missions.Clear();
         foreach (Mission mission in selectedMissions)
         {

@@ -80,6 +80,8 @@ public sealed partial class MainMenuViewModel : ObservableObject
 
     public event EventHandler CampaignRequested;
 
+    public event EventHandler LoadGameRequested;
+
     public event EventHandler CnCNetRequested;
 
     [RelayCommand(CanExecute = nameof(MapsLoaded))]
@@ -113,6 +115,9 @@ public sealed partial class MainMenuViewModel : ObservableObject
             case "btnLan":
                 if (OpenLanCommand.CanExecute(null))
                     OpenLanCommand.Execute(null);
+                break;
+            case "btnLoadGame":
+                LoadGameRequested?.Invoke(this, EventArgs.Empty);
                 break;
             case "btnNewCampaign":
                 CampaignRequested?.Invoke(this, EventArgs.Empty);

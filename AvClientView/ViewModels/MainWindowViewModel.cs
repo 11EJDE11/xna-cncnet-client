@@ -30,6 +30,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         menu.OptionsRequested += (_, _) => OpenOptions();
         Campaign = services.GetRequiredService<CampaignViewModel>();
         menu.CampaignRequested += (_, _) => Campaign.Open();
+        LoadGame = services.GetRequiredService<LoadGameViewModel>();
+        menu.LoadGameRequested += (_, _) => LoadGame.Open();
         topBar.OptionsRequested += (_, _) => OpenOptions();
         options.RestartRequested += (_, _) => RestartRequested?.Invoke(this, EventArgs.Empty);
 
@@ -72,6 +74,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public OptionsWindowViewModel Options { get; }
 
     public CampaignViewModel Campaign { get; }
+
+    public LoadGameViewModel LoadGame { get; }
 
     public PrivateMessagesViewModel PrivateMessages { get; }
 
