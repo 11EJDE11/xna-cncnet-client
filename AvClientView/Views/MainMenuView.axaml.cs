@@ -59,12 +59,10 @@ public partial class MainMenuView : UserControl
 
             if (LayoutView.FindNamed<TextBlock>(canvas, "lblCnCNetPlayerCount") is TextBlock playerCount)
             {
-                playerCount.Text = ViewModel.PlayerCount;
-                ViewModel.PropertyChanged += (_, e) =>
-                {
-                    if (e.PropertyName == nameof(MainMenuViewModel.PlayerCount))
-                        playerCount.Text = ViewModel.PlayerCount;
-                };
+                // The view model outlives the view's DataContext (other pages replace this view), so keep it
+                MainMenuViewModel viewModel = ViewModel;
+                playerCount.DataContext = viewModel;
+                playerCount.Bind(TextBlock.TextProperty, new Avalonia.Data.Binding(nameof(MainMenuViewModel.PlayerCount)));
             }
 
             MenuHost.Content = canvas;
