@@ -65,6 +65,8 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         lobby.MessageAdded += (_, message) => Messages.Add(ChatLineViewModel.From(message));
         lobby.MessagesReset += (_, _) => ResetMessages();
         lobby.UsersChanged += (_, _) => RefreshUsers();
+        userData.UserFriendToggled += (_, _) => RefreshUsers();
+        userData.UserIgnoreToggled += (_, _) => RefreshUsers();
         lobby.GamesChanged += (_, _) => RefreshGames();
 
         // An admin announced a new version: update now (the main menu checks), or stop asking
