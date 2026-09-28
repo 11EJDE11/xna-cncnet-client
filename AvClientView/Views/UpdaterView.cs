@@ -230,7 +230,7 @@ public sealed class UpdaterView : Panel
         IBrush idle = link.Foreground;
         var hover = new SolidColorBrush(ThemeAssets.ButtonTextColor);
         link.IsHitTestVisible = true;
-        link.Cursor = new Cursor(StandardCursorType.Hand);
+        link.Cursor = ThemeAssets.HandCursor;
         link.TextDecorations = TextDecorations.Underline;
         link.PointerEntered += (_, _) => link.Foreground = hover;
         link.PointerExited += (_, _) => link.Foreground = idle;

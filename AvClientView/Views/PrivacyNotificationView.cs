@@ -49,7 +49,7 @@ public sealed class PrivacyNotificationView : Border
         {
             TextBlock link = Label(url, new SolidColorBrush(ThemeAssets.ButtonTextColor));
             link.TextWrapping = TextWrapping.NoWrap;
-            link.Cursor = new Cursor(StandardCursorType.Hand);
+            link.Cursor = ThemeAssets.HandCursor;
             link.Margin = new Thickness(MARGIN, 0, 0, 0);
             link.PointerEntered += (_, _) => link.TextDecorations = TextDecorations.Underline;
             link.PointerExited += (_, _) => link.TextDecorations = null;

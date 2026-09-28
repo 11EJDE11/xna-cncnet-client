@@ -63,7 +63,7 @@ public sealed class ThemedTabControl : StackPanel
             Width = defaultTexture?.PixelSize.Width ?? width,
             Height = defaultTexture?.PixelSize.Height ?? 23,
             Background = Brushes.Transparent,
-            Cursor = selectable ? new Cursor(StandardCursorType.Hand) : Cursor.Default,
+            Cursor = selectable ? ThemeAssets.HandCursor : ThemeAssets.ArrowCursor,
             Children = { image, caption },
         };
         tab.PointerPressed += (_, e) =>

@@ -405,7 +405,7 @@ public partial class CnCNetLobbyView : UserControl
             _ => "sortAlphaNone.png",
         });
 
-        var button = new Border { Child = image, Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand) };
+        var button = new Border { Child = image, Background = Brushes.Transparent, Cursor = ThemeAssets.HandCursor };
         ToolTip.SetTip(button, "Sort Games Alphabetically".L10N("Client:Main:SortAlphabet"));
         button.PointerPressed += (_, e) =>
         {
@@ -427,7 +427,7 @@ public partial class CnCNetLobbyView : UserControl
         var image = new Image { Width = layout.Width, Height = layout.Height, Stretch = Stretch.Fill };
         void Refresh() => image.Source = ThemeAssets.LoadBitmap(viewModel.GameFiltersApplied ? "filterActive.png" : "filterInactive.png");
 
-        var button = new Border { Child = image, Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand) };
+        var button = new Border { Child = image, Background = Brushes.Transparent, Cursor = ThemeAssets.HandCursor };
         ToolTip.SetTip(button, "Game Filters".L10N("Client:Main:GameFilters"));
         button.PointerPressed += (_, e) =>
         {

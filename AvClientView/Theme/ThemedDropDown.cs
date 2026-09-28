@@ -50,7 +50,7 @@ public sealed class ThemedDropDown : Border
         Background = Brushes.Black;
         BorderBrush = new SolidColorBrush(ThemeAssets.PanelBorderColor);
         BorderThickness = new Thickness(1);
-        Cursor = new Cursor(StandardCursorType.Hand);
+        Cursor = ThemeAssets.HandCursor;
 
         (FontFamily family, double size) = ThemeFonts.Get(fontIndex);
         IBrush foreground = new SolidColorBrush(ThemeAssets.ButtonTextColor);
@@ -132,7 +132,8 @@ public sealed class ThemedDropDown : Border
             }
         };
 
-        var scaler = new LayoutTransformControl { Child = list };
+        // Popups are their own windows: the client cursor is set on them too
+        var scaler = new LayoutTransformControl { Child = list, Cursor = ThemeAssets.ArrowCursor };
         popup = new Popup
         {
             Child = scaler,
@@ -256,7 +257,7 @@ public sealed class ThemedDropDown : Border
         }
 
         text.Margin = new Thickness(left, 0, arrow.IsVisible && Arrow != null ? Arrow.PixelSize.Width : 0, 0);
-        Cursor = arrow.IsVisible ? new Cursor(StandardCursorType.Hand) : Cursor.Default;
+        Cursor = arrow.IsVisible ? ThemeAssets.HandCursor : ThemeAssets.ArrowCursor;
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)

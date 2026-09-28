@@ -694,7 +694,7 @@ public static class ThemedLobbyView
     private static Control BuildMapSortButton(LayoutControl layout, LobbyViewModelBase viewModel)
     {
         string[] textures = ["sortAlphaNone.png", "sortAlphaAsc.png", "sortAlphaDesc.png"];
-        var image = new Image { Width = layout.Width, Height = layout.Height, Stretch = Stretch.Fill, Cursor = new Cursor(StandardCursorType.Hand) };
+        var image = new Image { Width = layout.Width, Height = layout.Height, Stretch = Stretch.Fill, Cursor = ThemeAssets.HandCursor };
         ToolTip.SetTip(image, "Sort Maps Alphabetically");
 
         void Update() => image.Source = ThemeAssets.LoadBitmap(textures[Math.Clamp(viewModel.MapSortState, 0, 2)]);

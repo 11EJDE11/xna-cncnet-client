@@ -452,7 +452,7 @@ public sealed class MapPreviewView : Canvas
     private sealed class Indicator
     {
         private readonly MapPreviewView owner;
-        private readonly Canvas root = new() { IsVisible = false, Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand) };
+        private readonly Canvas root = new() { IsVisible = false, Background = Brushes.Transparent, Cursor = ThemeAssets.HandCursor };
         private readonly Image shadow = new() { Stretch = Stretch.Fill, IsHitTestVisible = false };
         private readonly Image hover = new() { Stretch = Stretch.Fill, IsHitTestVisible = false, IsVisible = false };
         private readonly Image main = new() { Stretch = Stretch.Fill, IsHitTestVisible = false };

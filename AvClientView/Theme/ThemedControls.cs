@@ -33,7 +33,7 @@ public sealed class ThemedCheckBox : StackPanel
         Orientation = Orientation.Horizontal;
         Spacing = 5;
         Background = Brushes.Transparent;
-        Cursor = new Cursor(StandardCursorType.Hand);
+        Cursor = ThemeAssets.HandCursor;
 
         (FontFamily family, double size) = ThemeFonts.Get(fontIndex);
         box = new Image { Stretch = Stretch.None, VerticalAlignment = VerticalAlignment.Center };
@@ -134,6 +134,10 @@ public static class ThemedStyle
         textBox.Resources["TextControlBackgroundFocused"] = Brushes.Black;
         textBox.Resources["TextControlForegroundFocused"] = new SolidColorBrush(ThemeAssets.ButtonTextColor);
         textBox.Resources["TextControlForegroundPointerOver"] = new SolidColorBrush(ThemeAssets.ButtonTextColor);
+
+        // XNA shows its one cursor over text boxes too (no text cursor)
+        if (ThemeAssets.ClientCursor != null)
+            textBox.Cursor = ThemeAssets.ClientCursor;
         return textBox;
     }
 }

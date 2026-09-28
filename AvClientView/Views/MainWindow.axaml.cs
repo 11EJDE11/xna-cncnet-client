@@ -14,6 +14,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         ApplyGraphicsMode();
+
+        // The WinForms XNA client's native cursor (cursor.cur), over the whole window
+        if (AvClientView.Theme.ThemeAssets.ClientCursor is Avalonia.Input.Cursor cursor)
+            Cursor = cursor;
     }
 
     private LayoutTransformControl scaler;

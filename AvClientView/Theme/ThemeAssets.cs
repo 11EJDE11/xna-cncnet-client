@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using Avalonia;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 
@@ -31,6 +33,66 @@ public static class ThemeAssets
     /// The render resolution the XNA client lays its screens out for (the client resolution, clamped to the theme's
     /// render limits and scaled to the window).
     /// </summary>
+    private static Cursor clientCursor;
+    private static bool clientCursorLoaded;
+
+    /// <summary>
+    /// The client's native cursor (the WinForms XNA client's cursor.cur, from the theme or the base Resources), shown
+    /// over every control; null if there is none.
+    /// </summary>
+    public static Cursor ClientCursor
+    {
+        get
+        {
+            if (!clientCursorLoaded)
+            {
+                clientCursorLoaded = true;
+                clientCursor = LoadClientCursor();
+            }
+
+            return clientCursor;
+        }
+    }
+
+    /// <summary>The cursor over clickable things: the client cursor (XNA has no hand cursor), else the hand.</summary>
+    public static Cursor HandCursor => ClientCursor ?? new Cursor(StandardCursorType.Hand);
+
+    /// <summary>The cursor over other things: the client cursor, else the default.</summary>
+    public static Cursor ArrowCursor => ClientCursor ?? Cursor.Default;
+
+    private static Cursor LoadClientCursor()
+    {
+        FileInfo file = SafePath.GetFile(ProgramConstants.GetResourcePath(), "cursor.cur");
+        if (!file.Exists)
+            file = SafePath.GetFile(ProgramConstants.GetBaseResourcePath(), "cursor.cur");
+        if (!file.Exists)
+            return null;
+
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(file.FullName);
+            if (bytes.Length < 22 || bytes[2] != 2)
+                return null;
+
+            // A .cur is an .ico with the hot spot in the first entry's planes / bit count; read it as an icon
+            var hotSpot = new PixelPoint(System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(10)),
+                System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(12)));
+            bytes[2] = 1;
+            bytes[10] = 1;
+            bytes[11] = 0;
+            bytes[12] = 32;
+            bytes[13] = 0;
+
+            using var stream = new MemoryStream(bytes);
+            return new Cursor(new Bitmap(stream), hotSpot);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Loading the client cursor failed: " + ex.Message);
+            return null;
+        }
+    }
+
     /// <summary>The window's scale of the render resolution (popups, which are drawn outside it, apply it themselves).</summary>
     public static double UiScale { get; set; } = 1;
 

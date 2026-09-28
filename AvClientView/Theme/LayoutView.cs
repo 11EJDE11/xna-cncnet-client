@@ -213,7 +213,7 @@ public sealed class ThemedButton : Border
         Width = button.Width > 0 ? button.Width : idle?.PixelSize.Width ?? double.NaN;
         Height = button.Height > 0 ? button.Height : idle?.PixelSize.Height ?? double.NaN;
         Background = Brushes.Transparent;
-        Cursor = new Cursor(StandardCursorType.Hand);
+        Cursor = ThemeAssets.HandCursor;
         Focusable = true;
 
         image = new Image { Source = idle, Stretch = Stretch.Fill };

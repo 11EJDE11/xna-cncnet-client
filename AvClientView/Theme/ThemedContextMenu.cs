@@ -40,8 +40,9 @@ public static class ThemedContextMenu
             IsLightDismissEnabled = true,
             Child = new LayoutTransformControl
             {
-                // Scaled like the window's content
+                // Scaled like the window's content, with the client cursor (popups are their own windows)
                 LayoutTransform = ThemeAssets.PopupTransform,
+                Cursor = ThemeAssets.ArrowCursor,
                 Child = new Border
                 {
                     Background = Brushes.Black,
@@ -59,7 +60,7 @@ public static class ThemedContextMenu
             {
                 Background = Brushes.Transparent,
                 Padding = new Thickness(4, 1),
-                Cursor = item.Selectable ? new Cursor(StandardCursorType.Hand) : Cursor.Default,
+                Cursor = item.Selectable ? ThemeAssets.HandCursor : ThemeAssets.ArrowCursor,
                 Child = new TextBlock
                 {
                     Text = item.Text,

@@ -64,7 +64,7 @@ public partial class MainMenuView : UserControl
                 version.Bind(TextBlock.TextProperty, new Avalonia.Data.Binding(nameof(MainMenuViewModel.Version)));
 
                 // LblVersion_LeftClick: the changelog
-                version.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+                version.Cursor = AvClientView.Theme.ThemeAssets.HandCursor;
                 version.IsHitTestVisible = true;
                 version.PointerPressed += (_, _) => ClientCore.ProcessLauncher.StartShellProcess(ClientCore.ClientConfiguration.Instance.ChangelogURL);
             }
@@ -105,7 +105,7 @@ public partial class MainMenuView : UserControl
         {
             label.Text = status.Text;
             label.TextDecorations = status.IsClickable && status.IsUnderlined ? TextDecorations.Underline : null;
-            label.Cursor = status.IsClickable ? new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) : null;
+            label.Cursor = status.IsClickable ? AvClientView.Theme.ThemeAssets.HandCursor : AvClientView.Theme.ThemeAssets.ArrowCursor;
         }
 
         void Changed(object sender, EventArgs e) => Refresh();
