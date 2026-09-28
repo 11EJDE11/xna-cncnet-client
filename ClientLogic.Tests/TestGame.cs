@@ -35,6 +35,15 @@ internal static class TestGame
         }
     }
 
+    /// <summary>
+    /// Sets the entry assembly as soon as the test assembly loads, so a test that reaches ProgramConstants before
+    /// calling <see cref="EnsureInitialized"/> can't make its type initializer fail for every later test.
+    /// </summary>
+#pragma warning disable CA2255 // A test assembly's own set-up
+    [ModuleInitializer]
+    internal static void OnModuleLoaded() => SetEntryAssembly();
+#pragma warning restore CA2255
+
     // Separate and not inlined: the .NET Framework JIT may initialize ProgramConstants when it compiles
     // a method that uses it, which must happen after SetEntryAssembly.
     [MethodImpl(MethodImplOptions.NoInlining)]
