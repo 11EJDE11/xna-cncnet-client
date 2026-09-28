@@ -147,6 +147,7 @@ public sealed class ThemedDropDown : Border
 
         // Popups are their own windows: the client cursor is set on them too
         var scaler = new LayoutTransformControl { Child = list, Cursor = ThemeAssets.ArrowCursor };
+        ThemedAppStyles.ApplyTextRendering(scaler);
         popup = new Popup
         {
             Child = scaler,

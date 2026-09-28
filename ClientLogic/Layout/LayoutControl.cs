@@ -73,7 +73,23 @@ public sealed class LayoutControl(string name, string typeName, LayoutControlKin
     /// <summary>Stretched (default), Tiled or Centered.</summary>
     public string DrawMode { get; set; } = "Stretched";
 
-    public bool DrawBorders { get; set; }
+    /// <summary>The panel's one-pixel border (XNAPanel draws it unless the control or its INI turns it off).</summary>
+    public bool DrawBorders { get; set; } = DrawsBordersByDefault(typeName);
+
+    /// <summary>
+    /// Whether an XNA control type draws its border by default: XNAPanel and the windows and panels derived from it do,
+    /// except the ones that turn it off in their constructor (XNAExtraPanel, DarkeningPanel, TopBar, ...).
+    /// </summary>
+    public static bool DrawsBordersByDefault(string typeName) => typeName switch
+    {
+        "XNAExtraPanel" or "DarkeningPanel" or "TopBar" or "GameInProgressWindow" or "GameInformationIconPanel"
+            or "GameInformationIconOnlyPanel" => false,
+        "XNAPanel" or "XNAWindow" or "INItializableWindow" or "XNAOptionsPanel" or "MapPreviewBox" or "PlayerExtraOptionsPanel"
+            or "TeamStartMappingPanel" or "TeamStartMappingsPanel" or "CoopBriefingBox" or "GameFiltersPanel" or "GameInformationPanel"
+            or "MapSharingConfirmationPanel" or "TunnelNegotiationStatusPanel" or "XNAScrollPanel" or "ChoiceNotificationBox"
+            or "PrivateMessageNotificationBox" or "MainMenu" => true,
+        _ => typeName != null && (typeName.EndsWith("Window") || typeName.EndsWith("Lobby")),
+    };
 
     public ChatColor? BorderColor { get; set; }
 

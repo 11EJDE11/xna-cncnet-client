@@ -43,6 +43,8 @@ public sealed class App : Application
             var mainWindow = new MainWindow();
             AvClientView.Theme.ThemedToolTips.Apply(this, mainWindow);
             AvClientView.Theme.ThemedScrollBars.Apply(this);
+            AvClientView.Theme.ThemedAppStyles.Apply(this);
+            AvClientView.Theme.ThemedAppStyles.ApplyTextRendering(mainWindow);
 
             Services = new ServiceCollection()
                 .AddAvaloniaFrontEnd(mainWindow)
