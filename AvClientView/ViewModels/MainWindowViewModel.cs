@@ -65,8 +65,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // used (XNA)
         options.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(OptionsWindowViewModel.IsOpen))
-                UpdateTopBarLock();
+            if (e.PropertyName != nameof(OptionsWindowViewModel.IsOpen))
+                return;
+
+            UpdateTopBarLock();
+            if (!options.IsOpen && customComponentDialogQueued)
+                OnCustomComponentsOutdated();
         };
 
         // The updater (the XNA main menu's update windows)
@@ -74,6 +78,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         menu.UpdateStatus.Changed += (_, _) => UpdateTopBarLock();
         Updater.VersionChanged += (_, _) => menu.RefreshVersion();
         options.ForceUpdateRequested += (_, _) => Updater.ForceUpdate();
+        services.GetRequiredService<ClientLogic.Updates.IUpdater>().CustomComponentsOutdated +=
+            () => Dispatcher.UIThread.Post(OnCustomComponentsOutdated);
         Updater.RestartRequested += (_, _) => UpdaterRestartRequested?.Invoke(this, EventArgs.Empty);
 
         topBar.MainRequested += (_, _) => CurrentPage = primaryPage;
@@ -116,6 +122,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     /// <summary>The updater started its second stage, which replaces the client's files: the client exits.</summary>
     public event EventHandler UpdaterRestartRequested;
+
+    private bool customComponentDialogQueued;
+
+    /// <summary>
+    /// The custom components are outdated: offer the Components tab (Updater_OnCustomComponentsOutdated), later if the
+    /// options window is open.
+    /// </summary>
+    private void OnCustomComponentsOutdated()
+    {
+        if (Updater.IsQueryOpen || Menu.UpdateStatus.IsUpdateInProgress)
+            return;
+
+        if (Options.IsOpen)
+        {
+            customComponentDialogQueued = true;
+            return;
+        }
+
+        customComponentDialogQueued = false;
+        services.GetRequiredService<ClientLogic.UI.IDialogService>().Confirm(
+            "Custom Component Updates Available".L10N("Client:Main:CustomUpdateAvailableTitle"),
+            ("Updates for custom components are available. Do you want to open\nthe Options menu where you can update the custom components?").L10N("Client:Main:CustomUpdateAvailableText"),
+            () => Options.OpenComponents(primaryPage == Menu && !TopBar.LanMode));
+    }
 
     private void UpdateTopBarLock()
     {

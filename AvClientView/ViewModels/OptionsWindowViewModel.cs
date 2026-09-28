@@ -22,7 +22,7 @@ namespace AvClientView.ViewModels;
 
 /// <summary>
 /// The options window, as DXMainClient's OptionsWindow: the Display, Audio, Game, CnCNet, Storage and Updater tabs
-/// (Components can't be selected yet). Opening loads every tab; Save refreshes the file settings (and stops with a notice if one changed), saves
+/// (Updater and Components need update mirrors, Components also custom components). Opening loads every tab; Save refreshes the file settings (and stops with a notice if one changed), saves
 /// every tab and the settings INI, and offers a restart when a change needs one.
 /// </summary>
 public sealed partial class OptionsWindowViewModel : ObservableObject
@@ -40,7 +40,7 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
 
     public OptionsWindowViewModel(DirectDrawWrapperManager directDrawWrapperManager, GameCollection gameCollection,
         TunnelHandler tunnelHandler, GameProcessService gameProcess, IDialogService dialogs, HotkeyWindowViewModel hotkeys,
-        ClientLogic.Updates.IUpdater updater)
+        ClientLogic.Updates.IUpdater updater, IUiDispatcher uiDispatcher)
     {
         this.dialogs = dialogs;
         this.updater = updater;
@@ -52,7 +52,8 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
         CnCNet = new CnCNetOptionsModel(gameCollection, tunnelHandler);
         Storage = new StorageOptionsModel();
         Updater = new UpdaterOptionsModel(updater);
-        Panels = [Display, Audio, Game, CnCNet, Storage, Updater];
+        Components = new ComponentsOptionsModel(updater, dialogs, uiDispatcher);
+        Panels = [Display, Audio, Game, CnCNet, Storage, Updater, Components];
 
         Audio.PropertyChanged += Audio_PropertyChanged;
         CnCNet.PropertyChanged += CnCNet_PropertyChanged;
@@ -78,6 +79,15 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
     public StorageOptionsModel Storage { get; }
 
     public UpdaterOptionsModel Updater { get; }
+
+    public ComponentsOptionsModel Components { get; }
+
+    /// <summary>Opens the window on the Components tab (the main menu's custom component update question).</summary>
+    public void OpenComponents(bool mainMenuOnlyOptions)
+    {
+        Open(mainMenuOnlyOptions);
+        SelectedTab = COMPONENTS_INDEX;
+    }
 
     /// <summary>The user confirmed Force Update: the window closed and the main menu updates (OnForceUpdate).</summary>
     public event EventHandler ForceUpdateRequested;
@@ -113,7 +123,7 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
     public bool IsTabSelectable(int index) => index switch
     {
         UPDATER_INDEX => !ClientConfiguration.Instance.ModMode && updater.HasUpdateMirrors,
-        COMPONENTS_INDEX => false,
+        COMPONENTS_INDEX => !ClientConfiguration.Instance.ModMode && updater.HasUpdateMirrors && updater.HasCustomComponents,
         _ => true,
     };
 
@@ -186,11 +196,44 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
 
     public void Cancel()
     {
+        if (ComponentsOptionsModel.IsDownloadInProgress)
+        {
+            ConfirmCancellingDownloads(Close);
+            return;
+        }
+
+        Close();
+    }
+
+    private void Close()
+    {
         PreviewClientVolume = null;
         IsOpen = false;
     }
 
+    /// <summary>Closing the window cancels the component downloads: asks first (OptionsWindow).</summary>
+    private void ConfirmCancellingDownloads(Action then)
+    {
+        (string title, string text) = ComponentsOptionsModel.DownloadsInProgressQuestion;
+        dialogs.Confirm(title, text, () =>
+        {
+            Components.CancelAllDownloads();
+            then();
+        });
+    }
+
     public void Save()
+    {
+        if (ComponentsOptionsModel.IsDownloadInProgress)
+        {
+            ConfirmCancellingDownloads(SaveSettings);
+            return;
+        }
+
+        SaveSettings();
+    }
+
+    private void SaveSettings()
     {
         if (RefreshOptionPanels())
             return;

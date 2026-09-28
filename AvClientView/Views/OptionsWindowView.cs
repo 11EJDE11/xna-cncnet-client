@@ -118,6 +118,7 @@ public sealed class OptionsWindowView : Panel
             (BuildCnCNetPanel(window), viewModel.CnCNet),
             (BuildStoragePanel(window), viewModel.Storage),
             (BuildUpdaterPanel(window), viewModel.Updater),
+            (BuildComponentsPanel(window), viewModel.Components),
         };
 
         for (int i = 0; i < panels.Length; i++)
@@ -151,6 +152,7 @@ public sealed class OptionsWindowView : Panel
         overlays["tabControl"] = _ => TabControl();
 
         windowCanvas = ThemedWindow.Build(window, (name, layout) => OnButton(name, layout), overlays, readIni: false);
+        BindComponentButtons();
         windowCanvas.HorizontalAlignment = HorizontalAlignment.Center;
         windowCanvas.VerticalAlignment = VerticalAlignment.Center;
         Children.Add(windowCanvas);
@@ -223,7 +225,9 @@ public sealed class OptionsWindowView : Panel
                     viewModel.ConfirmForceUpdate();
                 break;
             default:
-                if (!string.IsNullOrEmpty(layout?.Url))
+                if (viewModel.Components.Components.FirstOrDefault(row => "btn" + row.IniName == name) is { } component)
+                    viewModel.Components.Click(component);
+                else if (!string.IsNullOrEmpty(layout?.Url))
                     ThemeAssets.OpenUrl(layout.Url);
                 break;
         }
@@ -506,6 +510,41 @@ public sealed class OptionsWindowView : Panel
         overlays["lblScrollRateValue"] = layout => BoundValueLabel(layout, model, nameof(GameOptionsModel.ScrollRate));
         overlays["tbPlayerName"] = layout => BoundTextBox(layout, model, nameof(GameOptionsModel.PlayerName), model.MaxNameLength);
         return panel;
+    }
+
+    /// <summary>DXMainClient's ComponentsPanel: a label and an install / update / uninstall button per component.</summary>
+    private LayoutControl BuildComponentsPanel(LayoutControl window)
+    {
+        ComponentsOptionsModel model = viewModel.Components;
+        LayoutControl panel = Panel(window, model.Name);
+
+        int componentIndex = 0;
+        foreach (ComponentRow row in model.Components)
+        {
+            LayoutControl button = ThemedWindow.Add(panel, "btn" + row.IniName, "XNAClientButton", panel.Width - 145, 12 + componentIndex * 35,
+                133, 23, row.ButtonText);
+            Label(panel, "lbl" + row.IniName, 12, button.Y + 2, row.Name);
+            componentIndex++;
+        }
+
+        return panel;
+    }
+
+    /// <summary>The component buttons follow their rows' texts (downloading, installed...).</summary>
+    private void BindComponentButtons()
+    {
+        foreach (ComponentRow row in viewModel.Components.Components)
+        {
+            if (LayoutView.FindNamed<ThemedButton>(windowCanvas, "btn" + row.IniName) is not ThemedButton button)
+                continue;
+
+            button.Text = row.ButtonText;
+            row.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(ComponentRow.ButtonText))
+                    button.Text = row.ButtonText;
+            };
+        }
     }
 
     /// <summary>DXMainClient's UpdaterOptionsPanel: the mirror list with Move Up / Down, auto check, Force Update.</summary>
