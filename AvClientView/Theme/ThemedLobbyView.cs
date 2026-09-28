@@ -116,6 +116,10 @@ public static class ThemedLobbyView
                 control.Visible = false;
         }
 
+        // XNA enables it (which also shows it) whatever the INI says; the room view hides it without dynamic tunnels
+        if (viewModel is CnCNetGameRoomViewModel && window.Find("btnNegotiationStatus") is LayoutControl negotiationButton)
+            negotiationButton.Visible = negotiationButton.Enabled = true;
+
         // The extra player options: only when the theme has the button (GameLobbyBase), with the panel's controls
         // created as PlayerExtraOptionsPanel.Initialize does
         bool hasExtraOptions = window.Find("btnPlayerExtraOptionsOpen") != null && window.Find("PlayerExtraOptionsPanel") != null;
