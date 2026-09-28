@@ -90,6 +90,8 @@ public partial class MainWindow : Window
 
         AvClientView.Theme.ThemeAssets.UiScale = scale;
         scaler.LayoutTransform = AvClientView.Theme.ThemeAssets.PopupTransform;
+        if (Avalonia.Application.Current is { } application)
+            AvClientView.Theme.ThemedToolTips.Scale(application, scale);
     }
 
     private TopBarView topBar;

@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Styling;
 
@@ -17,10 +18,15 @@ namespace AvClientView.Theme;
 /// </summary>
 public static class ThemedToolTips
 {
+    private const string FontSizeKey = "ThemedToolTipFontSize";
+    private const string PaddingKey = "ThemedToolTipPadding";
+    private const string BorderKey = "ThemedToolTipBorder";
+
     public static void Apply(Application application)
     {
         ClientConfiguration config = ClientConfiguration.Instance;
-        (FontFamily family, double size) = ThemeFonts.Get(config.ToolTipFontIndex);
+        (FontFamily family, _) = ThemeFonts.Get(config.ToolTipFontIndex);
+        Scale(application, ThemeAssets.UiScale);
         var altBrush = new SolidColorBrush(ThemeAssets.ButtonTextColor);
         var background = new SolidColorBrush(ThemeAssets.ParseColor(config.AltUIBackgroundColor, Color.FromRgb(196, 196, 196)));
 
@@ -30,12 +36,12 @@ public static class ThemedToolTips
             {
                 new Setter(TemplatedControl.BackgroundProperty, background),
                 new Setter(TemplatedControl.BorderBrushProperty, altBrush),
-                new Setter(TemplatedControl.BorderThicknessProperty, new Thickness(1)),
+                new Setter(TemplatedControl.BorderThicknessProperty, new DynamicResourceExtension(BorderKey)),
                 new Setter(TemplatedControl.CornerRadiusProperty, new CornerRadius(0)),
-                new Setter(TemplatedControl.PaddingProperty, new Thickness(config.ToolTipMargin)),
+                new Setter(TemplatedControl.PaddingProperty, new DynamicResourceExtension(PaddingKey)),
                 new Setter(TemplatedControl.ForegroundProperty, altBrush),
                 new Setter(TemplatedControl.FontFamilyProperty, family),
-                new Setter(TemplatedControl.FontSizeProperty, size),
+                new Setter(TemplatedControl.FontSizeProperty, new DynamicResourceExtension(FontSizeKey)),
                 new Setter(Layoutable.MaxWidthProperty, double.PositiveInfinity),
             },
         });
@@ -58,15 +64,30 @@ public static class ThemedToolTips
 
         // The tooltips appear after the delay, above and right of the cursor (ToolTip.DisplayAtLocation: the cursor
         // plus ToolTipOffsetX/Y, then moved up by its height). Pointer placement puts the tooltip's top left at the
-        // cursor, so it is moved up by the height of its text, margins and border; set on each control that gets one.
+        // cursor, so it is moved up by the height of its text, margins and border, at the window's current scale.
         int showDelay = (int)Math.Round(config.ToolTipDelay * 1000);
-        ToolTip.TipProperty.Changed.AddClassHandler<Control>((control, e) =>
+        ToolTip.TipProperty.Changed.AddClassHandler<Control>((control, _) =>
         {
-            int textHeight = ThemeFonts.Measure(e.NewValue?.ToString(), config.ToolTipFontIndex).Height;
             ToolTip.SetShowDelay(control, showDelay);
             ToolTip.SetPlacement(control, PlacementMode.Pointer);
-            ToolTip.SetHorizontalOffset(control, config.ToolTipOffsetX);
-            ToolTip.SetVerticalOffset(control, config.ToolTipOffsetY - (textHeight + (config.ToolTipMargin * 2) + 2));
         });
+        ToolTip.ToolTipOpeningEvent.AddClassHandler<Control>((control, _) =>
+        {
+            double scale = ThemeAssets.UiScale;
+            int textHeight = ThemeFonts.Measure(ToolTip.GetTip(control)?.ToString(), config.ToolTipFontIndex).Height;
+            ToolTip.SetHorizontalOffset(control, config.ToolTipOffsetX * scale);
+            ToolTip.SetVerticalOffset(control, (config.ToolTipOffsetY - (textHeight + (config.ToolTipMargin * 2) + 2)) * scale);
+        });
+    }
+
+    /// <summary>
+    /// Scales the tooltips like the window's content (tooltips are popups, drawn outside the window's scaling).
+    /// </summary>
+    public static void Scale(Application application, double scale)
+    {
+        ClientConfiguration config = ClientConfiguration.Instance;
+        application.Resources[FontSizeKey] = ThemeFonts.Get(config.ToolTipFontIndex).Size * scale;
+        application.Resources[PaddingKey] = new Thickness(config.ToolTipMargin * scale);
+        application.Resources[BorderKey] = new Thickness(scale);
     }
 }
