@@ -142,12 +142,40 @@ public static class ThemedWindow
     };
 
     /// <summary>A chat input bound to a view model's ChatInput, sending with Enter.</summary>
-    public static TextBox ChatInput(LayoutControl layout, object dataContext, System.Windows.Input.ICommand send, string suggestion = "Type here to chat...")
+    public static TextBox ChatInput(LayoutControl layout, object dataContext, System.Windows.Input.ICommand send,
+        string suggestion = "Type here to chat...", bool history = false, int maxLength = 200, string colorProperty = null)
     {
         TextBox textBox = ThemedStyle.TextBox(layout.Width, layout.Height, suggestion);
         textBox.DataContext = dataContext;
+        textBox.MaxLength = maxLength;
         textBox.Bind(TextBox.TextProperty, new Binding("ChatInput") { Mode = BindingMode.TwoWay });
-        textBox.KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.Enter), Command = send });
+        if (colorProperty != null)
+            textBox.Bind(TextBox.ForegroundProperty, new Binding(colorProperty));
+
+        var entered = history ? new ClientLogic.UI.ChatInputHistory() : null;
+        textBox.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (entered != null && (e.Key == Key.Up || e.Key == Key.Down))
+            {
+                string previous = e.Key == Key.Up ? entered.Older() : entered.Newer();
+                if (previous != null)
+                {
+                    textBox.SetCurrentValue(TextBox.TextProperty, previous);
+                    textBox.CaretIndex = previous.Length;
+                }
+                e.Handled = true;
+                return;
+            }
+
+            entered?.ResetNavigation();
+            if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None)
+            {
+                entered?.Record(textBox.Text);
+                if (send.CanExecute(null))
+                    send.Execute(null);
+                e.Handled = true;
+            }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         return textBox;
     }
 

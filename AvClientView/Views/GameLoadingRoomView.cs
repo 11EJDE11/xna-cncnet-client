@@ -111,7 +111,8 @@ public sealed class GameLoadingRoomView : UserControl
         {
             ["panelPlayers"] = PlayersPanel,
             ["lbChatMessages"] = layout => ThemedWindow.ChatList(layout, viewModel),
-            ["tbChatInput"] = layout => ThemedWindow.ChatInput(layout, viewModel, viewModel.SendChatCommand, string.Empty),
+            ["tbChatInput"] = layout => ThemedWindow.ChatInput(layout, viewModel, viewModel.SendChatCommand, string.Empty,
+                colorProperty: isCnCNet ? nameof(CnCNetGameLoadingRoomViewModel.ChatInputBrush) : null),
             ["ddSavedGame"] = layout =>
             {
                 var dropDown = new ThemedDropDown(layout.Width, 22, layout.FontIndex) { DataContext = viewModel };
@@ -147,7 +148,10 @@ public sealed class GameLoadingRoomView : UserControl
                 tunnel.IsVisible = viewModel.IsHost;
         }
 
-        viewModel.Refreshed += (_, _) => UpdateButtons();
+        GameLoadingRoomViewModel buttonModel = viewModel;
+        void Refreshed(object sender, EventArgs e) => UpdateButtons();
+        canvas.AttachedToVisualTree += (_, _) => { buttonModel.Refreshed += Refreshed; UpdateButtons(); };
+        canvas.DetachedFromVisualTree += (_, _) => buttonModel.Refreshed -= Refreshed;
         UpdateButtons();
 
         canvas.HorizontalAlignment = HorizontalAlignment.Center;
@@ -177,7 +181,10 @@ public sealed class GameLoadingRoomView : UserControl
             }
         }
 
-        viewModel.Refreshed += (_, _) => Update();
+        GameLoadingRoomViewModel playerModel = viewModel;
+        void Refreshed(object sender, EventArgs e) => Update();
+        canvas.AttachedToVisualTree += (_, _) => { playerModel.Refreshed += Refreshed; Update(); };
+        canvas.DetachedFromVisualTree += (_, _) => playerModel.Refreshed -= Refreshed;
         Update();
         return canvas;
     }

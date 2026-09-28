@@ -14,6 +14,7 @@ using AvClientView.ViewModels;
 using ClientCore.Extensions;
 
 using ClientLogic.Layout;
+using ClientLogic.Lan;
 
 using Rampastring.Tools;
 
@@ -41,7 +42,8 @@ public partial class LanLobbyView : UserControl
                     ["lbGameList"] = layout => GameList(layout, viewModel),
                     ["lbPlayerList"] = layout => ThemedWindow.List(layout, viewModel, nameof(LanLobbyViewModel.Players)),
                     ["lbChatMessages"] = layout => ThemedWindow.ChatList(layout, viewModel),
-                    ["tbChatInput"] = layout => ThemedWindow.ChatInput(layout, viewModel, viewModel.SendChatCommand),
+                    ["tbChatInput"] = layout => ThemedWindow.ChatInput(layout, viewModel, viewModel.SendChatCommand,
+                        history: true, colorProperty: nameof(LanLobbyViewModel.ChatInputBrush)),
                     ["ddColor"] = layout => ColorDropDown(layout, viewModel),
                 });
         }
@@ -147,7 +149,12 @@ public partial class LanLobbyView : UserControl
 
     private static Control ColorDropDown(LayoutControl layout, LanLobbyViewModel viewModel)
     {
-        var dropDown = new ThemedDropDown(layout.Width, layout.Height) { DataContext = viewModel, ItemsSource = viewModel.ChatColors };
+        var dropDown = new ThemedDropDown(layout.Width, layout.Height)
+        {
+            DataContext = viewModel,
+            ItemTextColor = i => ThemeAssets.ToColor(LanChatColors.All[i].Color),
+            ItemsSource = viewModel.ChatColors,
+        };
         dropDown.Bind(ThemedDropDown.SelectedIndexProperty, new Binding(nameof(LanLobbyViewModel.SelectedChatColorIndex)) { Mode = BindingMode.TwoWay });
         return dropDown;
     }

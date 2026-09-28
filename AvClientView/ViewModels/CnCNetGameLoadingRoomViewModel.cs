@@ -21,8 +21,15 @@ public sealed class CnCNetGameLoadingRoomViewModel : GameLoadingRoomViewModel
     /// <summary>The Load Game button can be used (not while the host's tunnel is invalid).</summary>
     public bool CanLoad => room.CanLoad;
 
+    public Avalonia.Media.IBrush ChatInputBrush =>
+        new Avalonia.Media.SolidColorBrush(AvClientView.Theme.ThemeAssets.ToColor(room.IrcChatColor.Color));
+
     /// <summary>The host's tunnel selection window (btnChangeTunnel).</summary>
     public TunnelSelectionViewModel Tunnels { get; }
 
-    protected override void OnRefreshed() => OnPropertyChanged(nameof(CanLoad));
+    protected override void OnRefreshed()
+    {
+        OnPropertyChanged(nameof(CanLoad));
+        OnPropertyChanged(nameof(ChatInputBrush));
+    }
 }

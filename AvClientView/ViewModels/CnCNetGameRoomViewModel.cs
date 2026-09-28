@@ -40,6 +40,9 @@ public sealed class CnCNetGameRoomViewModel : MultiplayerRoomViewModel
 
     public override string LayoutIniName => CnCNetGameRoom.LAYOUT_INI_NAME;
 
+    public override Avalonia.Media.IBrush ChatInputBrush =>
+        new Avalonia.Media.SolidColorBrush(AvClientView.Theme.ThemeAssets.ToColor(room.IrcChatColor.Color));
+
     protected override void ToggleRoomLock() => room.ToggleLock();
 
     /// <summary>The tunnel negotiation status panel is shown (dynamic tunnels only).</summary>

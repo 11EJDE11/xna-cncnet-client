@@ -120,6 +120,15 @@ public static class ThemedLobbyView
         if (viewModel is CnCNetGameRoomViewModel && window.Find("btnNegotiationStatus") is LayoutControl negotiationButton)
             negotiationButton.Visible = negotiationButton.Enabled = true;
 
+        // The theme starts these disabled/hidden. CnCNetGameLobby.Refresh enables them for the host after
+        // reading the INI; leaving their INI defaults in place hides the already-wired Avalonia windows.
+        if (viewModel is CnCNetGameRoomViewModel)
+        {
+            foreach (string name in new[] { "btnChangeTunnel", "btnGameLobbySettings" })
+                if (window.Find(name) is LayoutControl control)
+                    control.Visible = control.Enabled = isHost;
+        }
+
         // The extra player options: only when the theme has the button (GameLobbyBase), with the panel's controls
         // created as PlayerExtraOptionsPanel.Initialize does
         bool hasExtraOptions = window.Find("btnPlayerExtraOptionsOpen") != null && window.Find("PlayerExtraOptionsPanel") != null;
@@ -761,7 +770,7 @@ public static class ThemedLobbyView
                     Text = item?.Text,
                     Margin = new Thickness(3, 1),
                     VerticalAlignment = VerticalAlignment.Center,
-                    Foreground = item?.IsDisabled == true ? new SolidColorBrush(ThemeAssets.DisabledItemColor) : null,
+                    Foreground = new SolidColorBrush(item?.IsDisabled == true ? ThemeAssets.DisabledItemColor : ThemeAssets.ButtonTextColor),
                     [ToolTip.TipProperty] = item?.ToolTip,
                 },
             },
@@ -840,6 +849,8 @@ public static class ThemedLobbyView
 
         // TbMapSearch_RightClick: search the current mode or all modes ("< " marks the current choice)
         textBox.ContextMenu = null;
+        textBox.ContextFlyout = null;
+        textBox.ContextRequested += (_, e) => e.Handled = true;
         textBox.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
         {
             if (!e.GetCurrentPoint(textBox).Properties.IsRightButtonPressed)
@@ -895,11 +906,9 @@ public static class ThemedLobbyView
 
     private static Control BuildChatInput(LayoutControl layout, MultiplayerRoomViewModel room)
     {
-        TextBox textBox = ThemedStyle.TextBox(layout.Width, layout.Height, layout.Attributes.GetValueOrDefault("Suggestion", "Type here to chat..."));
-        textBox.DataContext = room;
-        textBox.Bind(TextBox.TextProperty, new Binding(nameof(MultiplayerRoomViewModel.ChatInput)) { Mode = BindingMode.TwoWay });
-        textBox.KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.Enter), Command = room.SendChatCommand });
-        return textBox;
+        return ThemedWindow.ChatInput(layout, room, room.SendChatCommand,
+            layout.Attributes.GetValueOrDefault("Suggestion", "Type here to chat..."), history: true, maxLength: 150,
+            colorProperty: nameof(MultiplayerRoomViewModel.ChatInputBrush));
     }
 
     private static Control BuildAutoReady(LayoutControl layout, MultiplayerRoomViewModel room)

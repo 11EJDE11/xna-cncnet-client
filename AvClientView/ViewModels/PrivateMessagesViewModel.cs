@@ -137,9 +137,7 @@ public sealed partial class PrivateMessagesViewModel : ObservableObject
         };
         var players = names.Select(n => new PrivateMessagePlayer(n, IsOnline(n),
             connection.UserList.Find(u => u.Name == n)?.GameID ?? -1)).ToList();
-        Users.Clear();
-        foreach (var player in players)
-            Users.Add(player);
+        ObservableCollectionSync.Synchronize(Users, players, player => player.Name);
         Select(selected);
         if (SelectedUser?.Name == selected && selected != null)
             ChatInput = draft;

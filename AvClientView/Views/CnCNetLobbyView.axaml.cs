@@ -48,7 +48,8 @@ public partial class CnCNetLobbyView : UserControl
                     ["lbGameList"] = layout => GameList(layout, viewModel),
                     ["lbPlayerList"] = layout => PlayerList(layout, viewModel),
                     ["lbChatMessages"] = layout => ThemedWindow.ChatList(layout, viewModel),
-                    ["tbChatInput"] = layout => ThemedWindow.ChatInput(layout, viewModel, viewModel.SendChatCommand),
+                    ["tbChatInput"] = layout => ThemedWindow.ChatInput(layout, viewModel, viewModel.SendChatCommand,
+                        history: true, colorProperty: nameof(CnCNetLobbyViewModel.ChatInputBrush)),
                     ["ddColor"] = layout => DropDown(layout, viewModel, nameof(CnCNetLobbyViewModel.ChatColors), nameof(CnCNetLobbyViewModel.SelectedChatColorIndex)),
                     ["ddCurrentChannel"] = layout => DropDown(layout, viewModel, nameof(CnCNetLobbyViewModel.ChatChannels), nameof(CnCNetLobbyViewModel.SelectedChannelIndex)),
                     ["tbGameSearch"] = layout =>
@@ -184,6 +185,8 @@ public partial class CnCNetLobbyView : UserControl
                 ["tbPlayerName"] = layout =>
                 {
                     TextBox textBox = ThemedStyle.TextBox(layout.Width, layout.Height, string.Empty);
+                    textBox.MaxLength = ClientCore.ClientConfiguration.Instance.MaxNameLength;
+                    InputMethod.SetIsInputMethodEnabled(textBox, false);
                     textBox.DataContext = viewModel;
                     textBox.Bind(TextBox.TextProperty, new Binding(nameof(CnCNetLobbyViewModel.PlayerName)) { Mode = BindingMode.TwoWay });
                     textBox.KeyBindings.Add(new Avalonia.Input.KeyBinding { Gesture = new Avalonia.Input.KeyGesture(Avalonia.Input.Key.Enter), Command = viewModel.ConnectCommand });
@@ -267,11 +270,7 @@ public partial class CnCNetLobbyView : UserControl
         // XNA draws each chat colour in its colour and each channel with its game's icon
         if (items == nameof(CnCNetLobbyViewModel.ChatColors))
         {
-            dropDown.ItemTextColor = i =>
-            {
-                var color = viewModel.ChatColorOptions[i].Color;
-                return Color.FromArgb(color.A, color.R, color.G, color.B);
-            };
+            dropDown.ItemTextColor = i => ThemeAssets.ToColor(viewModel.ChatColorOptions[i].Color);
         }
         else if (items == nameof(CnCNetLobbyViewModel.ChatChannels))
         {
@@ -305,7 +304,12 @@ public partial class CnCNetLobbyView : UserControl
                     textBox.MaxLength = 23;
                     return textBox;
                 },
-                ["tbPassword"] = layout => BoundTextBox(layout, nameof(CnCNetLobbyViewModel.NewRoomPassword)),
+                ["tbPassword"] = layout =>
+                {
+                    TextBox textBox = BoundTextBox(layout, nameof(CnCNetLobbyViewModel.NewRoomPassword));
+                    textBox.MaxLength = 20;
+                    return textBox;
+                },
                 ["ddMaxPlayers"] = layout => DropDown(layout, nameof(CnCNetLobbyViewModel.MaxPlayerItems), nameof(CnCNetLobbyViewModel.NewRoomMaxPlayersIndex)),
                 ["ddSkillLevel"] = layout => DropDown(layout, nameof(CnCNetLobbyViewModel.SkillLevels), nameof(CnCNetLobbyViewModel.NewRoomSkillLevel)),
                 ["ddTunnelMode"] = layout =>
@@ -367,6 +371,22 @@ public partial class CnCNetLobbyView : UserControl
                     textBox.DataContext = viewModel;
                     textBox.Bind(Avalonia.Controls.TextBox.TextProperty, new Binding(nameof(CnCNetLobbyViewModel.JoinPassword)) { Mode = BindingMode.TwoWay });
                     textBox.KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.Enter), Command = viewModel.SubmitPasswordCommand });
+                    void FocusPassword()
+                    {
+                        if (viewModel.ShowPasswordPrompt)
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                if (viewModel.ShowPasswordPrompt && TopLevel.GetTopLevel(textBox) != null)
+                                    textBox.Focus();
+                            }, Avalonia.Threading.DispatcherPriority.Loaded);
+                    }
+                    void PromptChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+                    {
+                        if (e.PropertyName == nameof(CnCNetLobbyViewModel.ShowPasswordPrompt))
+                            FocusPassword();
+                    }
+                    textBox.AttachedToVisualTree += (_, _) => { viewModel.PropertyChanged += PromptChanged; FocusPassword(); };
+                    textBox.DetachedFromVisualTree += (_, _) => viewModel.PropertyChanged -= PromptChanged;
                     return textBox;
                 },
             });
@@ -504,7 +524,8 @@ public partial class CnCNetLobbyView : UserControl
                         return;
 
                     list.SelectedItem = user;
-                    ThemedContextMenu.Open(row, e.GetPosition(row), messages.PlayerMenu(user.Name, user.IsAdmin));
+                    // Keep the popup rooted in the list: its row can be replaced by an IRC status update.
+                    ThemedContextMenu.Open(list, e.GetPosition(list), messages.PlayerMenu(user.Name, user.IsAdmin));
                     e.Handled = true;
                 };
                 row.DoubleTapped += (_, _) =>
@@ -514,12 +535,24 @@ public partial class CnCNetLobbyView : UserControl
                 };
                 return row;
             }));
+        list.Bind(SelectingItemsControl.SelectedItemProperty, new Binding(nameof(CnCNetLobbyViewModel.SelectedUser)) { Mode = BindingMode.TwoWay });
         return list;
     }
 
     private static Control DropDown(LayoutControl layout, CnCNetLobbyViewModel viewModel, string items, string index)
     {
         var dropDown = new ThemedDropDown(layout.Width, layout.Height) { DataContext = viewModel };
+        if (items == nameof(CnCNetLobbyViewModel.ChatColors))
+        {
+            dropDown.ItemTextColor = i => ThemeAssets.ToColor(viewModel.ChatColorOptions[i].Color);
+        }
+        else if (items == nameof(CnCNetLobbyViewModel.ChatChannels))
+        {
+            var games = viewModel.ChatChannelGames;
+            dropDown.ItemDecoration = i => i >= 0 && i < games.Count
+                ? new Image { Source = ThemeAssets.GameIcon(games[i]), Stretch = Stretch.None }
+                : null;
+        }
         dropDown.Bind(ThemedDropDown.ItemsSourceProperty, new Binding(items));
         dropDown.Bind(ThemedDropDown.SelectedIndexProperty, new Binding(index) { Mode = BindingMode.TwoWay });
         dropDown.Bind(ThemedDropDown.CanChangeProperty, new Binding(nameof(CnCNetLobbyViewModel.IsConnected)));

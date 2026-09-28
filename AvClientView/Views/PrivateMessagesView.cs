@@ -8,6 +8,7 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 using AvClientView.Theme;
 using AvClientView.ViewModels;
 using ClientCore.Extensions;
@@ -73,7 +74,7 @@ public sealed class PrivateMessagesView : UserControl
                         if (player == null || !e.GetCurrentPoint(row).Properties.IsRightButtonPressed)
                             return;
                         list.SelectedItem = player;
-                        ThemedContextMenu.Open(row, e.GetPosition(row), model.PlayerMenu(player.Name, allowInvite: true));
+                        ThemedContextMenu.Open(list, e.GetPosition(list), model.PlayerMenu(player.Name, allowInvite: true));
                         e.Handled = true;
                     };
                     row.DoubleTapped += (_, _) =>
@@ -109,6 +110,15 @@ public sealed class PrivateMessagesView : UserControl
         var userLayout = window.Find("lbUserList");
         var messageLayout = window.Find("lbMessages");
         var recent = ThemedStyle.List(messageLayout.X + messageLayout.Width - userLayout.X, userLayout.Height - 23);
+        recent.Styles.Add(new Avalonia.Styling.Style(selector => selector.OfType<ListBoxItem>())
+        {
+            Setters =
+            {
+                new Avalonia.Styling.Setter(TemplatedControl.MinHeightProperty, 0.0),
+                new Avalonia.Styling.Setter(TemplatedControl.PaddingProperty, new Thickness(0)),
+                new Avalonia.Styling.Setter(ContentControl.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch),
+            },
+        });
         recent.DataContext = model;
         recent.Bind(ItemsControl.ItemsSourceProperty, new Binding(nameof(model.RecentPlayers)));
         recent.Bind(IsVisibleProperty, new Binding(nameof(model.ShowRecentPlayers)));

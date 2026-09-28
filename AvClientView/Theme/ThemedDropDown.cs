@@ -108,6 +108,12 @@ public sealed class ThemedDropDown : Border
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
         list.SelectionChanged += (_, _) =>
         {
+            if (!CanChange || !IsEffectivelyEnabled)
+            {
+                popup.IsOpen = false;
+                return;
+            }
+
             if (popup.IsOpen && list.SelectedIndex >= 0 && ItemSelectable?.Invoke(list.SelectedIndex) == false)
             {
                 list.SelectedIndex = -1;
@@ -179,6 +185,11 @@ public sealed class ThemedDropDown : Border
             return;
 
         List<object> items = ItemsSource?.Cast<object>().ToList() ?? [];
+        // XNA's AllowDropDown setter closes an open list when it becomes locked.
+        // A detached popup must not remain interactive after its owning control is disabled either.
+        if (!CanChange || !IsEffectivelyEnabled || items.Count == 0)
+            popup.IsOpen = false;
+
         int index = SelectedIndex;
         bool hasItem = index >= 0 && index < items.Count;
         text.Text = hasItem ? items[index]?.ToString() : string.Empty;

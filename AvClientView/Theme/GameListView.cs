@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Specialized;
+using System.Linq;
 
 using Avalonia;
 using Avalonia.Controls;
@@ -54,10 +55,22 @@ public static class GameListView
         };
         list.PointerExited += (_, _) => { hovered = null; Refresh(); };
         list.SelectionChanged += (_, _) => Refresh();
-        items.CollectionChanged += (_, _) => { hovered = null; Refresh(force: true); };
+        void ItemsChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            // A broadcast may replace a game's row. Keep the hovered game by identity instead of hiding its
+            // information panel whenever any other game is announced or leaves.
+            hovered = list.ItemsSource?.Cast<HostedGameItemViewModel>().FirstOrDefault(item =>
+                item.Game == hovered?.Game || (item.Game is DTAClient.Domain.Multiplayer.CnCNet.HostedCnCNetGame game &&
+                    hovered?.Game is DTAClient.Domain.Multiplayer.CnCNet.HostedCnCNetGame oldGame && game.ChannelName == oldGame.ChannelName) ||
+                (item.Game is DTAClient.Domain.LAN.HostedLANGame lanGame &&
+                    hovered?.Game is DTAClient.Domain.LAN.HostedLANGame oldLanGame && lanGame.EndPoint.Equals(oldLanGame.EndPoint)));
+            Refresh(force: true);
+        }
 
         list.AttachedToVisualTree += (_, _) =>
         {
+            items.CollectionChanged += ItemsChanged;
+            ItemsChanged(items, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
             if (list.Parent is Canvas canvas && !canvas.Children.Contains(infoHost))
             {
                 Canvas.SetLeft(infoHost, layout.X + layout.Width);
@@ -65,6 +78,7 @@ public static class GameListView
                 canvas.Children.Add(infoHost);
             }
         };
+        list.DetachedFromVisualTree += (_, _) => items.CollectionChanged -= ItemsChanged;
 
         return list;
     }

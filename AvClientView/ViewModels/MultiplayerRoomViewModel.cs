@@ -60,6 +60,8 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
     /// <summary>The layout INI the XNA lobby of this room type reads (LANGameLobby or CnCNetGameLobby).</summary>
     public abstract string LayoutIniName { get; }
 
+    public abstract Avalonia.Media.IBrush ChatInputBrush { get; }
+
     /// <summary>The room is being opened (the view rebuilds its layout for the local player's role).</summary>
     public event System.EventHandler Opened;
 
@@ -103,6 +105,7 @@ public abstract partial class MultiplayerRoomViewModel : LobbyViewModelBase
         OnPropertyChanged(nameof(LockText));
         OnPropertyChanged(nameof(AutoReady));
         OnPropertyChanged(nameof(RoomInfo));
+        OnPropertyChanged(nameof(ChatInputBrush));
         OnPropertyChanged(nameof(SlotStatusTextures));
     }
 

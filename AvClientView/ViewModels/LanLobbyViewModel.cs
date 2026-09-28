@@ -108,11 +108,15 @@ public sealed partial class LanLobbyViewModel : ObservableObject
 
     public event EventHandler BackRequested;
 
+    public Avalonia.Media.IBrush ChatInputBrush =>
+        new Avalonia.Media.SolidColorBrush(AvClientView.Theme.ThemeAssets.ToColor(LanChatColors.All[lobby.ChatColorIndex].Color));
+
     partial void OnSelectedChatColorIndexChanged(int value)
     {
         lobby.ChatColorIndex = value;
         room.ChatColorIndex = lobby.ChatColorIndex;
         loadingRoom.ChatColorIndex = lobby.ChatColorIndex;
+        OnPropertyChanged(nameof(ChatInputBrush));
     }
 
     /// <summary>Opens the lobby (from the main menu).</summary>
@@ -150,9 +154,9 @@ public sealed partial class LanLobbyViewModel : ObservableObject
         HostedLANGame selected = SelectedGameIndex >= 0 && SelectedGameIndex < shownGames.Count ? shownGames[SelectedGameIndex] : null;
 
         shownGames = lobby.Games.ToList();
-        Games.Clear();
-        foreach (HostedLANGame game in shownGames)
-            Games.Add(new HostedGameItemViewModel(game));
+        ObservableCollectionSync.Synchronize(Games,
+            shownGames.Select(game => new HostedGameItemViewModel(game)).ToList(),
+            item => ((HostedLANGame)item.Game).EndPoint);
 
         SelectedGameIndex = selected == null ? -1 : shownGames.FindIndex(g => g.EndPoint.Equals(selected.EndPoint));
     }

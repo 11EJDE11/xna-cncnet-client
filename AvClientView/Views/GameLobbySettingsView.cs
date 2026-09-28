@@ -31,13 +31,8 @@ public sealed class GameLobbySettingsView : Panel
     {
         this.viewModel = viewModel;
         Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
-        IsVisible = false;
-
-        viewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(GameLobbySettingsViewModel.IsOpen))
-                IsVisible = viewModel.IsOpen;
-        };
+        DataContext = viewModel;
+        this.Bind(IsVisibleProperty, new Binding(nameof(GameLobbySettingsViewModel.IsOpen)));
 
         try
         {

@@ -52,13 +52,8 @@ public sealed class TunnelSelectionView : Panel
     {
         this.viewModel = viewModel;
         Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
-        IsVisible = false;
-
-        viewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(TunnelSelectionViewModel.IsOpen))
-                IsVisible = viewModel.IsOpen;
-        };
+        DataContext = viewModel;
+        this.Bind(IsVisibleProperty, new Binding(nameof(TunnelSelectionViewModel.IsOpen)));
 
         try
         {

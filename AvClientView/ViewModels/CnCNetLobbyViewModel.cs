@@ -250,7 +250,14 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     /// <summary>The lobby page must be shown (an accepted invitation needs the password prompt).</summary>
     public event EventHandler ShowRequested;
 
-    partial void OnSelectedChatColorIndexChanged(int value) => lobby.ChatColorIndex = value;
+    public Avalonia.Media.IBrush ChatInputBrush =>
+        new Avalonia.Media.SolidColorBrush(AvClientView.Theme.ThemeAssets.ToColor(lobby.ChatColors[lobby.ChatColorIndex].Color));
+
+    partial void OnSelectedChatColorIndexChanged(int value)
+    {
+        lobby.ChatColorIndex = value;
+        OnPropertyChanged(nameof(ChatInputBrush));
+    }
 
     partial void OnSelectedChannelIndexChanged(int value)
     {
@@ -307,24 +314,30 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
 
     private void RefreshUsers()
     {
-        Users.Clear();
+        string selectedName = SelectedUser?.Name;
+        var updated = new List<UserItemViewModel>();
         foreach (ChannelUser user in lobby.CurrentUsers)
         {
             int gameId = user.IRCUser.GameID;
             CnCNetGame game = gameId >= 0 && gameId < gameCollection.GameList.Count ? gameCollection.GameList[gameId] : null;
-            Users.Add(new UserItemViewModel(user.IRCUser.Name, user.IsAdmin, game,
+            updated.Add(new UserItemViewModel(user.IRCUser.Name, user.IsAdmin, game,
                 user.IRCUser.IsFriend, user.IRCUser.IsIgnored, user.HasVoice));
         }
+        ObservableCollectionSync.Synchronize(Users, updated, user => user.Name);
+        SelectedUser = Users.FirstOrDefault(user => user.Name == selectedName);
     }
+
+    [ObservableProperty]
+    private UserItemViewModel selectedUser;
 
     private void RefreshGames()
     {
         HostedCnCNetGame selected = SelectedGameIndex >= 0 && SelectedGameIndex < shownGames.Count ? shownGames[SelectedGameIndex] : null;
 
         shownGames = lobby.Games.Where(HostedGameMatches).ToList();
-        Games.Clear();
-        foreach (HostedCnCNetGame game in shownGames)
-            Games.Add(new HostedGameItemViewModel(game, lobby.Room.Options));
+        ObservableCollectionSync.Synchronize(Games,
+            shownGames.Select(game => new HostedGameItemViewModel(game, lobby.Room.Options)).ToList(),
+            item => ((HostedCnCNetGame)item.Game).ChannelName);
 
         SelectedGameIndex = selected == null ? -1 : shownGames.FindIndex(g => g.HostName == selected.HostName);
     }
