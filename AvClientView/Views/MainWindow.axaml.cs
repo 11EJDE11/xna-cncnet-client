@@ -70,7 +70,8 @@ public partial class MainWindow : Window
         if (AvClientView.Theme.ThemeAssets.GraphicsMode?.IntegerScale == true && scale >= 1)
             scale = Math.Floor(scale);
 
-        scaler.LayoutTransform = Math.Abs(scale - 1) < 0.001 ? null : new Avalonia.Media.ScaleTransform(scale, scale);
+        AvClientView.Theme.ThemeAssets.UiScale = scale;
+        scaler.LayoutTransform = AvClientView.Theme.ThemeAssets.PopupTransform;
     }
 
     private TopBarView topBar;

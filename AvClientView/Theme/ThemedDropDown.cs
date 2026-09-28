@@ -132,13 +132,17 @@ public sealed class ThemedDropDown : Border
             }
         };
 
+        var scaler = new LayoutTransformControl { Child = list };
         popup = new Popup
         {
-            Child = list,
+            Child = scaler,
             PlacementTarget = this,
             Placement = PlacementMode.Bottom,
             IsLightDismissEnabled = true,
         };
+
+        // Scaled like the window's content
+        popup.Opened += (_, _) => scaler.LayoutTransform = ThemeAssets.PopupTransform;
 
         Child = new Grid { Children = { decoration, text, arrow, popup } };
         AttachedToVisualTree += (_, _) => { ObserveItems(); RefreshItems(); };

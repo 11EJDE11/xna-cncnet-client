@@ -38,12 +38,17 @@ public static class ThemedContextMenu
             PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight,
             PlacementRect = new Rect(position, new Size(1, 1)),
             IsLightDismissEnabled = true,
-            Child = new Border
+            Child = new LayoutTransformControl
             {
-                Background = Brushes.Black,
-                BorderBrush = new SolidColorBrush(ThemeAssets.PanelBorderColor),
-                BorderThickness = new Thickness(1),
-                Child = list,
+                // Scaled like the window's content
+                LayoutTransform = ThemeAssets.PopupTransform,
+                Child = new Border
+                {
+                    Background = Brushes.Black,
+                    BorderBrush = new SolidColorBrush(ThemeAssets.PanelBorderColor),
+                    BorderThickness = new Thickness(1),
+                    Child = list,
+                },
             },
         };
 

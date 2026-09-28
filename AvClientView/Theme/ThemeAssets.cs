@@ -31,6 +31,12 @@ public static class ThemeAssets
     /// The render resolution the XNA client lays its screens out for (the client resolution, clamped to the theme's
     /// render limits and scaled to the window).
     /// </summary>
+    /// <summary>The window's scale of the render resolution (popups, which are drawn outside it, apply it themselves).</summary>
+    public static double UiScale { get; set; } = 1;
+
+    /// <summary>The scale for a popup's content, or null at 1.</summary>
+    public static Transform PopupTransform => Math.Abs(UiScale - 1) < 0.001 ? null : new ScaleTransform(UiScale, UiScale);
+
     public static int RenderWidth => GraphicsMode?.RenderWidth
         ?? UserINISettings.Instance.SettingsIni.GetIntValue(UserINISettings.VIDEO, "ClientResolutionX", 1280);
 
