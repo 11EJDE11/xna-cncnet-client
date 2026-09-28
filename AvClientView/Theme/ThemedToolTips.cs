@@ -17,7 +17,7 @@ namespace AvClientView.Theme;
 /// </summary>
 public static class ThemedToolTips
 {
-    public static void Apply(Application application, Window window)
+    public static void Apply(Application application)
     {
         ClientConfiguration config = ClientConfiguration.Instance;
         (FontFamily family, double size) = ThemeFonts.Get(config.ToolTipFontIndex);
@@ -57,31 +57,16 @@ public static class ThemedToolTips
         });
 
         // The tooltips appear after the delay, above and right of the cursor (ToolTip.DisplayAtLocation: the cursor
-        // plus ToolTipOffsetX/Y, then moved up by its height); set on each control that gets a tooltip
+        // plus ToolTipOffsetX/Y, then moved up by its height). Pointer placement puts the tooltip's top left at the
+        // cursor, so it is moved up by the height of its text, margins and border; set on each control that gets one.
         int showDelay = (int)Math.Round(config.ToolTipDelay * 1000);
-        var offset = new Point(config.ToolTipOffsetX, config.ToolTipOffsetY);
-        void AboveCursor(Avalonia.Controls.Primitives.PopupPositioning.CustomPopupPlacement placement)
+        ToolTip.TipProperty.Changed.AddClassHandler<Control>((control, e) =>
         {
-            Point? cursor = window.TranslatePoint(LastPointer, placement.Target);
-            if (cursor == null)
-                return;
-
-            placement.AnchorRectangle = new Rect(cursor.Value, new Size(1, 1));
-            placement.Anchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft;
-            placement.Gravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.TopRight;
-            placement.Offset = offset;
-        }
-
-        ToolTip.TipProperty.Changed.AddClassHandler<Control>((control, _) =>
-        {
+            int textHeight = ThemeFonts.Measure(e.NewValue?.ToString(), config.ToolTipFontIndex).Height;
             ToolTip.SetShowDelay(control, showDelay);
-            ToolTip.SetPlacement(control, PlacementMode.Custom);
-            ToolTip.SetCustomPopupPlacementCallback(control, AboveCursor);
+            ToolTip.SetPlacement(control, PlacementMode.Pointer);
+            ToolTip.SetHorizontalOffset(control, config.ToolTipOffsetX);
+            ToolTip.SetVerticalOffset(control, config.ToolTipOffsetY - (textHeight + (config.ToolTipMargin * 2) + 2));
         });
-        window.AddHandler(Avalonia.Input.InputElement.PointerMovedEvent, (_, e) => LastPointer = e.GetPosition(window),
-            Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
     }
-
-    /// <summary>The pointer's last position in the main window.</summary>
-    private static Point LastPointer { get; set; }
 }
