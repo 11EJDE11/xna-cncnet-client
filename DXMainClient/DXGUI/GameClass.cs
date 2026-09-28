@@ -361,95 +361,9 @@ namespace DTAClient.DXGUI
                     throw new GraphicsModeInitializationException("Setting default graphics mode failed!".L10N("Client:Main:SettingDefaultGraphicModeFailed"));
             }
 
-            int renderResolutionX = 0;
-            int renderResolutionY = 0;
-
-            if (!integerScale || windowWidth < clientConfiguration.MinimumRenderWidth || windowHeight < clientConfiguration.MinimumRenderHeight)
-            {
-                int initialXRes = Math.Max(windowWidth, clientConfiguration.MinimumRenderWidth);
-                initialXRes = Math.Min(initialXRes, clientConfiguration.MaximumRenderWidth);
-
-                int initialYRes = Math.Max(windowHeight, clientConfiguration.MinimumRenderHeight);
-                initialYRes = Math.Min(initialYRes, clientConfiguration.MaximumRenderHeight);
-
-                double xRatio = (windowWidth) / (double)initialXRes;
-                double yRatio = (windowHeight) / (double)initialYRes;
-
-                double ratio = xRatio > yRatio ? yRatio : xRatio;
-
-                // Special rule for 1360x768 and 1366x768                
-                if ((windowWidth == 1366 || windowWidth == 1360) && windowHeight == 768)
-                {
-                    // Most client interface has been designed for 1280x720 or 1280x800.
-                    // 1280x720 upscaled to 1366x768 doesn't look great, so we allow players with 1366x768 to use their native resolution with small black bars on the sides
-                    // This behavior is enforced even if IntegerScaledClient is turned off.
-                    renderResolutionX = windowWidth;
-                    renderResolutionY = windowHeight;
-                }
-
-                // Special rule: if 1280x720 is a valid render resolution, we allow 1.5x scaling for 1920x1080.
-                if (windowWidth == 1920 && windowHeight == 1080
-                    && 1280 >= clientConfiguration.MinimumRenderWidth && 1280 <= clientConfiguration.MaximumRenderWidth
-                    && 720 >= clientConfiguration.MinimumRenderHeight && 720 <= clientConfiguration.MaximumRenderHeight)
-                {
-                    renderResolutionX = 1280;
-                    renderResolutionY = 720;
-                }
-
-                // Special rule: if 1280x800 is a valid render resolution, we allow 1.5x scaling for 1920x1200.
-                if (windowWidth == 1920 && windowHeight == 1200
-                    && 1280 >= clientConfiguration.MinimumRenderWidth && 1280 <= clientConfiguration.MaximumRenderWidth
-                    && 800 >= clientConfiguration.MinimumRenderHeight && 800 <= clientConfiguration.MaximumRenderHeight)
-                {
-                    renderResolutionX = 1280;
-                    renderResolutionY = 800;
-                }
-
-                // Check whether we could integer-scale our client window
-                if (ratio > 1.0)
-                {
-                    for (int i = 2; i <= XNAScreenResolutionManager.MAX_INT_SCALE; i++)
-                    {
-                        int sharpScaleRenderResX = windowWidth / i;
-                        int sharpScaleRenderResY = windowHeight / i;
-
-                        if (sharpScaleRenderResX >= clientConfiguration.MinimumRenderWidth &&
-                            sharpScaleRenderResX <= clientConfiguration.MaximumRenderWidth &&
-                            sharpScaleRenderResY >= clientConfiguration.MinimumRenderHeight &&
-                            sharpScaleRenderResY <= clientConfiguration.MaximumRenderHeight)
-                        {
-                            renderResolutionX = sharpScaleRenderResX;
-                            renderResolutionY = sharpScaleRenderResY;
-                            break;
-                        }
-                    }
-                }
-
-                // No special rules are triggered. Just zoom the client to the window size with minimal black bars.
-                if (renderResolutionX == 0 || renderResolutionY == 0)
-                {
-                    renderResolutionX = initialXRes;
-                    renderResolutionY = initialYRes;
-
-                    if (ratio == xRatio)
-                        renderResolutionY = (int)(windowHeight / ratio);
-                }
-            }
-            else
-            {
-                // Compute integer scale ratio using minimum render resolution
-                // Note: this means we prefer larger scale ratio than render resolution.
-                // This policy works best when maximum and minimum render resolution are close.
-                int xScale = windowWidth / clientConfiguration.MinimumRenderWidth;
-                int yScale = windowHeight / clientConfiguration.MinimumRenderHeight;
-                int scale = Math.Min(xScale, yScale);
-
-                // Compute render resolution
-                renderResolutionX = Math.Min(clientConfiguration.MaximumRenderWidth,
-                    clientConfiguration.MinimumRenderWidth + (windowWidth - clientConfiguration.MinimumRenderWidth * scale) / scale);
-                renderResolutionY = Math.Min(clientConfiguration.MaximumRenderHeight,
-                    clientConfiguration.MinimumRenderHeight + (windowHeight - clientConfiguration.MinimumRenderHeight * scale) / scale);
-            }
+            (int renderResolutionX, int renderResolutionY) = ClientLogic.Settings.ClientGraphicsMode.GetRenderResolution(windowWidth, windowHeight,
+                integerScale, clientConfiguration.MinimumRenderWidth, clientConfiguration.MinimumRenderHeight,
+                clientConfiguration.MaximumRenderWidth, clientConfiguration.MaximumRenderHeight);
 
             wm.SetBorderlessMode(borderlessWindowedClient);
 

@@ -75,7 +75,12 @@ internal static class Program
         PreprocessorBackgroundTask.Instance.Run();
 
         // The client resolution settings, with the XNA client's defaults from the screen
-        new ClientLogic.Settings.ScreenResolutions(new AvClientView.Services.WindowsDisplayModeSource()).CreateClientResolutionSettings();
+        var screenResolutions = new ClientLogic.Settings.ScreenResolutions(new AvClientView.Services.WindowsDisplayModeSource());
+        screenResolutions.CreateClientResolutionSettings();
+
+        // The window size and the render resolution the screens are laid out for (GameClass.SetGraphicsMode)
+        AvClientView.Theme.ThemeAssets.GraphicsMode = ClientLogic.Settings.ClientGraphicsMode.FromSettings(screenResolutions.DesktopResolution);
+        Logger.Log("Graphics mode: " + AvClientView.Theme.ThemeAssets.GraphicsMode);
 
         // The updater's local file information, as the XNA client's Startup and loading screen set it up (no
         // update check): the campaign's modified-files warning needs it

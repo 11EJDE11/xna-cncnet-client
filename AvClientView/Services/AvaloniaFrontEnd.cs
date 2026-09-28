@@ -38,7 +38,8 @@ public sealed class AvaloniaDialogService(Window owner) : IDialogService
 
     private void Show(string title, string text, Action onYes, Action onOk = null, Action onNo = null)
     {
-        if (owner.Content is Panel host)
+        // The main window's Root grid (inside the scaling border)
+        if ((owner.FindControl<Panel>("Root") ?? owner.Content as Panel) is Panel host)
         {
             ThemedMessageBox.Show(host, title, text, onOk, onYes, onNo);
             return;

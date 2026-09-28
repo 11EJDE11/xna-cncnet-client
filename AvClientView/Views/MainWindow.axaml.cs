@@ -13,10 +13,64 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ApplyGraphicsMode();
+    }
 
-        // The XNA client's window size (its render resolution), so the theme's layouts come out the same
-        Width = AvClientView.Theme.ThemeAssets.RenderWidth;
-        Height = AvClientView.Theme.ThemeAssets.RenderHeight;
+    private LayoutTransformControl scaler;
+
+    /// <summary>
+    /// GameClass.SetGraphicsMode: the window is the client resolution; the screens are laid out for the render
+    /// resolution and scaled to the window (whole steps with integer scaling), with black bars around them;
+    /// borderless windowed, and full screen when the client resolution is the desktop's.
+    /// </summary>
+    private void ApplyGraphicsMode()
+    {
+        ClientLogic.Settings.ClientGraphicsMode mode = AvClientView.Theme.ThemeAssets.GraphicsMode;
+        int renderWidth = AvClientView.Theme.ThemeAssets.RenderWidth;
+        int renderHeight = AvClientView.Theme.ThemeAssets.RenderHeight;
+
+        Width = mode?.WindowWidth ?? renderWidth;
+        Height = mode?.WindowHeight ?? renderHeight;
+
+        Grid root = Root;
+        Content = null;
+        root.Width = renderWidth;
+        root.Height = renderHeight;
+        root.ClipToBounds = true;
+        scaler = new LayoutTransformControl
+        {
+            Child = root,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        Content = new Border { Background = Avalonia.Media.Brushes.Black, Child = scaler };
+
+        if (mode != null)
+        {
+            // XNA's window can be resized only when windowed with integer scaling
+            CanResize = !mode.Borderless && mode.IntegerScale;
+            if (mode.Borderless)
+                WindowDecorations = WindowDecorations.None;
+            if (mode.FullScreen)
+                WindowState = WindowState.FullScreen;
+        }
+
+        SizeChanged += (_, _) => UpdateScale();
+    }
+
+    private void UpdateScale()
+    {
+        double renderWidth = AvClientView.Theme.ThemeAssets.RenderWidth;
+        double renderHeight = AvClientView.Theme.ThemeAssets.RenderHeight;
+        Avalonia.Size size = ClientSize;
+        if (size.Width <= 0 || size.Height <= 0)
+            return;
+
+        double scale = Math.Min(size.Width / renderWidth, size.Height / renderHeight);
+        if (AvClientView.Theme.ThemeAssets.GraphicsMode?.IntegerScale == true && scale >= 1)
+            scale = Math.Floor(scale);
+
+        scaler.LayoutTransform = Math.Abs(scale - 1) < 0.001 ? null : new Avalonia.Media.ScaleTransform(scale, scale);
     }
 
     private TopBarView topBar;
@@ -40,7 +94,7 @@ public partial class MainWindow : Window
     protected override void OnPointerMoved(Avalonia.Input.PointerEventArgs e)
     {
         base.OnPointerMoved(e);
-        topBar?.OnCursorMoved(e.GetPosition(this).Y);
+        topBar?.OnCursorMoved(e.GetPosition(Root).Y);
     }
 
     protected override void OnKeyDown(Avalonia.Input.KeyEventArgs e)
