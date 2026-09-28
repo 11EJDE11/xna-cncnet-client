@@ -6,6 +6,8 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 
+using AvClientView.Theme;
+
 using ClientLogic.UI;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -20,7 +22,10 @@ public sealed class AvaloniaUiDispatcher : IUiDispatcher
     public bool CheckAccess() => Dispatcher.UIThread.CheckAccess();
 }
 
-/// <summary>Shows message boxes as small modal windows over the main window.</summary>
+/// <summary>
+/// Shows message boxes as the XNA client does, themed over the main window's content (<see cref="ThemedMessageBox"/>);
+/// as small modal windows if the main window has no content panel yet.
+/// </summary>
 public sealed class AvaloniaDialogService(Window owner) : IDialogService
 {
     public void ShowMessage(string title, string text) => Show(title, text, null);
@@ -33,6 +38,12 @@ public sealed class AvaloniaDialogService(Window owner) : IDialogService
 
     private void Show(string title, string text, Action onYes, Action onOk = null, Action onNo = null)
     {
+        if (owner.Content is Panel host)
+        {
+            ThemedMessageBox.Show(host, title, text, onOk, onYes, onNo);
+            return;
+        }
+
         var dialog = new Window
         {
             Title = title,
