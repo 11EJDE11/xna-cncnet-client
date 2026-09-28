@@ -184,6 +184,7 @@ public static class LayoutView
 public sealed class ThemedButton : Border
 {
     private readonly Image image;
+    private readonly Image hoverImage;
     private readonly TextBlock caption;
     private Bitmap idle;
     private Bitmap hover;
@@ -216,7 +217,19 @@ public sealed class ThemedButton : Border
         Cursor = ThemeAssets.HandCursor;
         Focusable = true;
 
-        image = new Image { Source = idle, Stretch = Stretch.Fill };
+        // XNAButton cross-fades its idle and hover textures at AlphaRate per 10 ms (the theme's AlphaRate, or the
+        // button's own)
+        float alphaRate = button.Attributes.TryGetValue("AlphaRate", out string rateValue)
+            ? Rampastring.Tools.Conversions.FloatFromString(rateValue, 0.01f)
+            : ClientCore.ClientConfiguration.Instance.DefaultAlphaRate;
+        TimeSpan fadeTime = TimeSpan.FromMilliseconds(alphaRate > 0 ? Math.Min(10 / alphaRate, 5000) : 0);
+        Avalonia.Animation.Transitions Fade() =>
+        [
+            new Avalonia.Animation.DoubleTransition { Property = OpacityProperty, Duration = fadeTime },
+        ];
+
+        image = new Image { Source = idle, Stretch = Stretch.Fill, Transitions = Fade() };
+        hoverImage = new Image { Source = hover, Stretch = Stretch.Fill, Opacity = 0, Transitions = Fade() };
         caption = new TextBlock
         {
             Text = button.Text,
@@ -228,7 +241,7 @@ public sealed class ThemedButton : Border
             TextAlignment = TextAlignment.Center,
         };
 
-        Child = new Grid { Children = { image, caption } };
+        Child = new Grid { Children = { image, hoverImage, caption } };
     }
 
     public event EventHandler Click;
@@ -238,7 +251,8 @@ public sealed class ThemedButton : Border
     {
         idle = ThemeAssets.LoadBitmap(idleTexture) ?? idle;
         hover = ThemeAssets.LoadBitmap(hoverTexture) ?? idle;
-        image.Source = IsPointerOver ? hover : idle;
+        image.Source = idle;
+        hoverImage.Source = hover;
     }
 
     public string Text
@@ -287,14 +301,16 @@ public sealed class ThemedButton : Border
             return;
 
         hoverSound?.Play();
-        image.Source = hover;
+        image.Opacity = 0;
+        hoverImage.Opacity = 1;
         caption.Foreground = hoverBrush;
     }
 
     protected override void OnPointerExited(PointerEventArgs e)
     {
         base.OnPointerExited(e);
-        image.Source = idle;
+        image.Opacity = 1;
+        hoverImage.Opacity = 0;
         caption.Foreground = idleBrush;
         pressed = false;
     }

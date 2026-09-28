@@ -26,6 +26,8 @@ public sealed class ThemedCheckBox : StackPanel
     private static readonly Bitmap ClearDisabled = ThemeAssets.LoadBitmap("checkBoxClearD.png") ?? Clear;
 
     private readonly Image box;
+    private readonly Image check;
+    private bool hovered;
     private readonly TextBlock label;
 
     public ThemedCheckBox(string text, int fontIndex = 0)
@@ -36,7 +38,9 @@ public sealed class ThemedCheckBox : StackPanel
         Cursor = ThemeAssets.HandCursor;
 
         (FontFamily family, double size) = ThemeFonts.Get(fontIndex);
+        // XNACheckBox draws the clear texture and fades the checked one over it (CheckBoxAlphaRate per 10 ms)
         box = new Image { Stretch = Stretch.None, VerticalAlignment = VerticalAlignment.Center };
+        check = new Image { Stretch = Stretch.None, VerticalAlignment = VerticalAlignment.Center };
         label = new TextBlock
         {
             Text = text,
@@ -47,9 +51,22 @@ public sealed class ThemedCheckBox : StackPanel
             RenderTransform = new TranslateTransform(0, ThemeFonts.CenteringOffset(fontIndex)),
         };
 
-        Children.Add(box);
+        Children.Add(new Grid { Children = { box, check } });
         Children.Add(label);
         UpdateImage();
+
+        // The first value (usually from a binding) shows at once, as XNACheckBox's Initialize does; changes fade
+        float alphaRate = ClientCore.ClientConfiguration.Instance.CheckBoxAlphaRate;
+        AttachedToVisualTree += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (alphaRate > 0 && check.Transitions == null)
+            {
+                check.Transitions =
+                [
+                    new Avalonia.Animation.DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(Math.Min(10 / alphaRate, 5000)) },
+                ];
+            }
+        });
     }
 
     public bool IsChecked
@@ -72,8 +89,25 @@ public sealed class ThemedCheckBox : StackPanel
             return;
 
         bool enabled = IsEffectivelyEnabled;
-        box.Source = IsChecked ? (enabled ? Checked : CheckedDisabled) : (enabled ? Clear : ClearDisabled);
-        label.Foreground = new SolidColorBrush(enabled ? ThemeAssets.LabelColor : Colors.Gray);
+        box.Source = enabled ? Clear : ClearDisabled;
+        check.Source = enabled ? Checked : CheckedDisabled;
+        check.Opacity = IsChecked ? 1 : 0;
+        label.Foreground = new SolidColorBrush(!enabled ? Colors.Gray : hovered ? ThemeAssets.ButtonTextColor : ThemeAssets.LabelColor);
+    }
+
+    // The text is in the highlight colour under the mouse (XNACheckBox's HighlightColor)
+    protected override void OnPointerEntered(Avalonia.Input.PointerEventArgs e)
+    {
+        base.OnPointerEntered(e);
+        hovered = true;
+        UpdateImage();
+    }
+
+    protected override void OnPointerExited(Avalonia.Input.PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        hovered = false;
+        UpdateImage();
     }
 
     protected override void OnPointerReleased(Avalonia.Input.PointerReleasedEventArgs e)
