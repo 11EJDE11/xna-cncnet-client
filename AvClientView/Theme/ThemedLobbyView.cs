@@ -100,8 +100,11 @@ public static class ThemedLobbyView
         }
 
         // Players don't see the map list (MultiplayerGameLobby.HideMapList), nor the host's tunnel and room settings
-        // buttons (disabled XNA controls are hidden); the negotiation status panel isn't in the preview yet
-        var hidden = new List<string> { "btnNegotiationStatus" };
+        // buttons (disabled XNA controls are hidden); the negotiation status button is only in CnCNet rooms, where the
+        // room view shows it with dynamic tunnels
+        var hidden = new List<string>();
+        if (viewModel is not CnCNetGameRoomViewModel)
+            hidden.Add("btnNegotiationStatus");
         if (kind.IsMultiplayer && !mapListShown)
             hidden.AddRange(["ddGameMode", "lblGameModeSelect", "lbMapList", "tbMapSearch", "btnPickRandomMap", "btnMapSortAlphabetically"]);
         if (kind.IsMultiplayer && !isHost)

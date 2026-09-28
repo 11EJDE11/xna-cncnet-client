@@ -98,6 +98,10 @@ public partial class GameRoomView : UserControl
 
         if (LayoutView.FindNamed<ThemedButton>(root, "btnLockGame") is ThemedButton lockButton)
             lockButton.Text = viewModel.LockText;
+
+        // Enabled (and so shown) with dynamic tunnels only, as the XNA CnCNetGameLobby does
+        if (LayoutView.FindNamed<ThemedButton>(root, "btnNegotiationStatus") is ThemedButton negotiation)
+            negotiation.IsVisible = viewModel is CnCNetGameRoomViewModel { IsDynamicTunnel: true };
     }
 
     private void OnButton(string name, LayoutControl layout)
@@ -124,6 +128,9 @@ public partial class GameRoomView : UserControl
                 break;
             case "btnGameLobbySettings":
                 (viewModel as CnCNetGameRoomViewModel)?.Settings.Open();
+                break;
+            case "btnNegotiationStatus":
+                (viewModel as CnCNetGameRoomViewModel)?.ToggleNegotiationStatus();
                 break;
             default:
                 ThemeAssets.OpenUrl(layout?.Url);

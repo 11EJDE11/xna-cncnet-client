@@ -59,6 +59,12 @@ public sealed class CnCNetGameRoomViewModel : MultiplayerRoomViewModel
     public System.Collections.Generic.List<ClientLogic.Tunnels.NegotiationPairRow> NegotiationRows =>
         ClientLogic.Tunnels.NegotiationStatusRows.ListPairs(NegotiationPlayers, room.NegotiationData, inferInProgress: true);
 
+    /// <summary>The room uses dynamic tunnels: the negotiation status button can be used.</summary>
+    public bool IsDynamicTunnel => room.TunnelMode == TunnelMode.V3Dynamic;
+
+    /// <summary>The theme's btnNegotiationStatus (ToggleNegotiationStatus).</summary>
+    public void ToggleNegotiationStatus() => room.ToggleNegotiationStatus();
+
     public void CloseNegotiationStatus()
     {
         if (room.ShowNegotiationStatus)
