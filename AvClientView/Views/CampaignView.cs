@@ -116,6 +116,14 @@ public sealed class CampaignView : Panel
         LayoutControl btnLaunch = ThemedWindow.Add(window, "btnLaunch", "XNAClientButton", 12, window.Height - 35, 133, 23, "Launch".L10N("Client:Main:ButtonLaunch"));
         ThemedWindow.Add(window, "btnCancel", "XNAClientButton", window.Width - 145, btnLaunch.Y, 133, 23, "Cancel".L10N("Client:Main:ButtonCancel"));
 
+        // With the campaign tag selector: Campaigns, disabled (so hidden) unless the theme enables it
+        if (ClientConfiguration.Instance.CampaignTagSelectorEnabled)
+        {
+            LayoutControl btnReturn = ThemedWindow.Add(window, "btnReturn", "XNAClientButton", trbDifficultySelector.X, btnLaunch.Y, 133, 23,
+                "Campaigns".L10N("Client:Main:ButtonReturnToCampaigns"));
+            btnReturn.Visible = btnReturn.Enabled = false;
+        }
+
         if (previewEnabled)
             ThemedWindow.Add(window, "pnlMissionPreview", "XNAPanel", tbMissionDescription.X, Bottom(tbMissionDescription) + 12, tbMissionDescription.Width, 200);
 
@@ -269,6 +277,9 @@ public sealed class CampaignView : Panel
                 break;
             case "btnCancel":
                 viewModel.Cancel();
+                break;
+            case "btnReturn":
+                viewModel.Return();
                 break;
         }
     }

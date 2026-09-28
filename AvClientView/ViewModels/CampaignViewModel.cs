@@ -162,6 +162,15 @@ public sealed partial class CampaignViewModel : ObservableObject
         IsOpen = false;
     }
 
+    /// <summary>The Campaigns button (btnReturn, with the campaign tag selector): back to the tags.</summary>
+    public event EventHandler ReturnRequested;
+
+    public void Return()
+    {
+        IsOpen = false;
+        ReturnRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>Lists missions (CampaignSelector.LoadMissionsWithFilter).</summary>
     public void LoadMissionsWithFilter(ISet<string> selectedTags, bool disableCustomMissions = true, bool disableOfficialMissions = false)
     {

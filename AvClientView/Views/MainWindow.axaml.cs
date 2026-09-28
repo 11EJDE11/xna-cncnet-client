@@ -66,6 +66,7 @@ public partial class MainWindow : Window
             if (topBar == null)
             {
                 Root.Children.Add(new CampaignView(viewModel.Campaign) { ZIndex = 8500 });
+                Root.Children.Add(new CampaignTagSelectorView(viewModel.CampaignTagSelector) { ZIndex = 8500 });
                 Root.Children.Add(new LoadGameView(viewModel.LoadGame) { ZIndex = 8500 });
                 Root.Children.Add(new ExtrasView(viewModel.Extras) { ZIndex = 8500 });
                 Root.Children.Add(new StatisticsView(viewModel.Statistics) { ZIndex = 8500 });

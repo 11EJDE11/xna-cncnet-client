@@ -46,7 +46,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         menu.CnCNetRequested += (_, _) => OpenCnCNet();
         menu.OptionsRequested += (_, _) => OpenOptions();
         Campaign = services.GetRequiredService<CampaignViewModel>();
-        menu.CampaignRequested += (_, _) => Campaign.Open();
+        CampaignTagSelector = new CampaignTagSelectorViewModel(Campaign);
+        menu.CampaignRequested += (_, _) => CampaignTagSelector.Open();
         LoadGame = services.GetRequiredService<LoadGameViewModel>();
         menu.LoadGameRequested += (_, _) => LoadGame.Open();
         Extras = services.GetRequiredService<ExtrasViewModel>();
@@ -109,6 +110,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public OptionsWindowViewModel Options { get; }
 
     public CampaignViewModel Campaign { get; }
+
+    public CampaignTagSelectorViewModel CampaignTagSelector { get; }
 
     public LoadGameViewModel LoadGame { get; }
 
@@ -195,7 +198,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public bool HandleMainMenuHotkey(Avalonia.Input.Key key)
     {
         if (CurrentPage != Menu || UserINISettings.Instance.DisableMainMenuHotkeys || Menu.UpdateStatus.IsUpdateInProgress ||
-            Updater.IsQueryOpen || Updater.IsManualOpen || Updater.IsUpdateOpen || Options.IsOpen || Campaign.IsOpen || LoadGame.IsOpen || Extras.IsOpen || Statistics.IsOpen || PrivateMessages.IsOpen)
+            Updater.IsQueryOpen || Updater.IsManualOpen || Updater.IsUpdateOpen || Options.IsOpen || Campaign.IsOpen || CampaignTagSelector.IsOpen || LoadGame.IsOpen || Extras.IsOpen || Statistics.IsOpen || PrivateMessages.IsOpen)
             return false;
 
         string button = key switch
