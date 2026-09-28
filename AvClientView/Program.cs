@@ -83,7 +83,9 @@ internal static class Program
         ClientUpdater.Updater.Initialize(ProgramConstants.GamePath, ProgramConstants.GetBaseResourcePath(),
             ClientConfiguration.Instance.SettingsIniName, ClientConfiguration.Instance.LocalGame,
             SafePath.GetFile(ProgramConstants.StartupExecutable).Name);
-        LocalFileCheck = System.Threading.Tasks.Task.Run(ClientUpdater.Updater.CheckLocalFileVersions);
+        // Not in ModMode, which disables the updater (the XNA LoadingScreen's initUpdater)
+        if (!ClientConfiguration.Instance.ModMode)
+            LocalFileCheck = System.Threading.Tasks.Task.Run(ClientUpdater.Updater.CheckLocalFileVersions);
 
         // Custom mission files, as the XNA client's PreStartup: leftovers of the last mission are removed
         DTAClient.Domain.CustomMissionHelper.Initialize();

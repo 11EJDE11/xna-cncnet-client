@@ -193,7 +193,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (UserINISettings.Instance.AutomaticCnCNetLogin &&
             DTAClient.Domain.Multiplayer.CnCNet.NameValidator.IsNameValid(ProgramConstants.PLAYERNAME, out _) == DTAClient.Domain.Multiplayer.CnCNet.NameValidationError.None)
         {
-            EnsureCnCNetLobby().InitializeLobby();
+            CnCNetLobbyViewModel lobby = EnsureCnCNetLobby();
+            lobby.InitializeLobby();
+            lobby.StartUpdates();
             services.GetRequiredService<DTAClient.Online.CnCNetManager>().Connect();
         }
     }

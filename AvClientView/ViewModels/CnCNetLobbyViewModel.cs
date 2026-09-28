@@ -295,11 +295,23 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         RefreshGames();
         RefreshConnection();
 
-        stopwatch.Restart();
-        timer.Start();
+        StartUpdates();
 
         if (!lobby.IsConnected && !lobby.IsAttemptingConnection && UserINISettings.Instance.SkipConnectDialog)
             Connect();
+    }
+
+    /// <summary>
+    /// Runs the lobby's updates (tunnels, game list expiry, rooms), also while connected without the lobby shown
+    /// (the start-up auto-connect), as the XNA lobby's Update always runs.
+    /// </summary>
+    public void StartUpdates()
+    {
+        if (timer.IsEnabled)
+            return;
+
+        stopwatch.Restart();
+        timer.Start();
     }
 
     private void Tick()
