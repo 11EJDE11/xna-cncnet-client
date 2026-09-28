@@ -73,6 +73,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Updater = services.GetRequiredService<UpdaterViewModel>();
         menu.UpdateStatus.Changed += (_, _) => UpdateTopBarLock();
         Updater.VersionChanged += (_, _) => menu.RefreshVersion();
+        options.ForceUpdateRequested += (_, _) => Updater.ForceUpdate();
         Updater.RestartRequested += (_, _) => UpdaterRestartRequested?.Invoke(this, EventArgs.Empty);
 
         topBar.MainRequested += (_, _) => CurrentPage = primaryPage;
@@ -191,8 +192,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void OpenOptions()
     {
+        // TopBar: the main-menu-only options while the main menu is the only primary screen, outside LAN mode
         if (!Options.IsOpen)
-            Options.Open();
+            Options.Open(primaryPage == Menu && !TopBar.LanMode);
     }
 
     /// <summary>

@@ -117,6 +117,7 @@ public sealed class OptionsWindowView : Panel
             (BuildGamePanel(window), viewModel.Game),
             (BuildCnCNetPanel(window), viewModel.CnCNet),
             (BuildStoragePanel(window), viewModel.Storage),
+            (BuildUpdaterPanel(window), viewModel.Updater),
         };
 
         for (int i = 0; i < panels.Length; i++)
@@ -211,6 +212,16 @@ public sealed class OptionsWindowView : Panel
             case "btnConfigureHotkeys":
                 viewModel.Hotkeys.Open();
                 break;
+            case "btnMoveUp":
+                viewModel.Updater.MoveUp();
+                break;
+            case "btnMoveDown":
+                viewModel.Updater.MoveDown();
+                break;
+            case "btnForceUpdate":
+                if (viewModel.Updater.CanForceUpdate)
+                    viewModel.ConfirmForceUpdate();
+                break;
             default:
                 if (!string.IsNullOrEmpty(layout?.Url))
                     ThemeAssets.OpenUrl(layout.Url);
@@ -234,7 +245,7 @@ public sealed class OptionsWindowView : Panel
     {
         var tabs = new ThemedTabControl { DataContext = viewModel };
         for (int i = 0; i < OptionsWindowViewModel.TabNames.Count; i++)
-            tabs.AddTab(OptionsWindowViewModel.TabNames[i], 92, OptionsWindowViewModel.IsTabSelectable(i));
+            tabs.AddTab(OptionsWindowViewModel.TabNames[i], 92, viewModel.IsTabSelectable(i));
 
         tabs.Bind(ThemedTabControl.SelectedTabProperty, new Binding(nameof(OptionsWindowViewModel.SelectedTab)) { Mode = BindingMode.TwoWay });
         return tabs;
@@ -494,6 +505,37 @@ public sealed class OptionsWindowView : Panel
         overlays["trbScrollRate"] = layout => BoundTrackbar(layout, model, nameof(GameOptionsModel.ScrollRate), 0, GameOptionsModel.MAX_SCROLL_RATE);
         overlays["lblScrollRateValue"] = layout => BoundValueLabel(layout, model, nameof(GameOptionsModel.ScrollRate));
         overlays["tbPlayerName"] = layout => BoundTextBox(layout, model, nameof(GameOptionsModel.PlayerName), model.MaxNameLength);
+        return panel;
+    }
+
+    /// <summary>DXMainClient's UpdaterOptionsPanel: the mirror list with Move Up / Down, auto check, Force Update.</summary>
+    private LayoutControl BuildUpdaterPanel(LayoutControl window)
+    {
+        UpdaterOptionsModel model = viewModel.Updater;
+        LayoutControl panel = Panel(window, model.Name);
+
+        LayoutControl lblDescription = Label(panel, "lblDescription", 12, 12,
+            ("To change download server priority, select a server from the list and\nuse the Move Up / Down buttons to change its priority.").L10N("Client:DTAConfig:ServerPriorityTip"));
+        LayoutControl lbUpdateServerList = ThemedWindow.Add(panel, "lblUpdateServerList", "XNAListBox", lblDescription.X,
+            Bottom(lblDescription) + 12, panel.Width - 24, 100);
+        lbUpdateServerList.SolidBackground = new ClientLogic.UI.ChatColor(0, 0, 0, 128);
+        LayoutControl btnMoveUp = ThemedWindow.Add(panel, "btnMoveUp", "XNAClientButton", lbUpdateServerList.X, Bottom(lbUpdateServerList) + 12,
+            133, 23, "Move Up".L10N("Client:DTAConfig:MoveUp"));
+        LayoutControl btnMoveDown = ThemedWindow.Add(panel, "btnMoveDown", "XNAClientButton", Right(lbUpdateServerList) - 133, btnMoveUp.Y,
+            133, 23, "Move Down".L10N("Client:DTAConfig:MoveDown"));
+        CheckBox(panel, "chkAutoCheck", lblDescription.X, Bottom(btnMoveUp) + 24,
+            "Check for updates automatically".L10N("Client:DTAConfig:AutoCheckUpdate"), added: true);
+        ThemedWindow.Add(panel, "btnForceUpdate", "XNAClientButton", btnMoveDown.X, Bottom(btnMoveDown) + 24,
+            133, 23, "Force Update".L10N("Client:DTAConfig:ForceUpdate"));
+
+        // The list keeps its XNA name (lblUpdateServerList) so a theme's section still applies
+        overlays["lblUpdateServerList"] = layout =>
+        {
+            ListBox list = ThemedWindow.List(layout, model, nameof(UpdaterOptionsModel.Mirrors));
+            list.Bind(Avalonia.Controls.Primitives.SelectingItemsControl.SelectedIndexProperty, new Binding(nameof(UpdaterOptionsModel.SelectedMirrorIndex)) { Mode = BindingMode.TwoWay });
+            return list;
+        };
+        overlays["chkAutoCheck"] = layout => BoundCheckBox(layout, model, nameof(UpdaterOptionsModel.AutoCheck));
         return panel;
     }
 

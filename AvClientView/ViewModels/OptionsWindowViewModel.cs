@@ -21,9 +21,8 @@ using Rampastring.Tools;
 namespace AvClientView.ViewModels;
 
 /// <summary>
-/// The options window, as DXMainClient's OptionsWindow: the Display, Audio, Game, CnCNet and Storage tabs (Updater
-/// and Components can't be selected, as in XNA when there are no update mirrors: the Avalonia client has no updater
-/// yet). Opening loads every tab; Save refreshes the file settings (and stops with a notice if one changed), saves
+/// The options window, as DXMainClient's OptionsWindow: the Display, Audio, Game, CnCNet, Storage and Updater tabs
+/// (Components can't be selected yet). Opening loads every tab; Save refreshes the file settings (and stops with a notice if one changed), saves
 /// every tab and the settings INI, and offers a restart when a change needs one.
 /// </summary>
 public sealed partial class OptionsWindowViewModel : ObservableObject
@@ -37,11 +36,14 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
     public const int COMPONENTS_INDEX = 6;
 
     private readonly IDialogService dialogs;
+    private readonly ClientLogic.Updates.IUpdater updater;
 
     public OptionsWindowViewModel(DirectDrawWrapperManager directDrawWrapperManager, GameCollection gameCollection,
-        TunnelHandler tunnelHandler, GameProcessService gameProcess, IDialogService dialogs, HotkeyWindowViewModel hotkeys)
+        TunnelHandler tunnelHandler, GameProcessService gameProcess, IDialogService dialogs, HotkeyWindowViewModel hotkeys,
+        ClientLogic.Updates.IUpdater updater)
     {
         this.dialogs = dialogs;
+        this.updater = updater;
         Hotkeys = hotkeys;
 
         Display = new DisplayOptionsModel(directDrawWrapperManager, new ScreenResolutions(new Services.WindowsDisplayModeSource()));
@@ -49,7 +51,8 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
         Game = new GameOptionsModel();
         CnCNet = new CnCNetOptionsModel(gameCollection, tunnelHandler);
         Storage = new StorageOptionsModel();
-        Panels = [Display, Audio, Game, CnCNet, Storage];
+        Updater = new UpdaterOptionsModel(updater);
+        Panels = [Display, Audio, Game, CnCNet, Storage, Updater];
 
         Audio.PropertyChanged += Audio_PropertyChanged;
         CnCNet.PropertyChanged += CnCNet_PropertyChanged;
@@ -74,6 +77,21 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
 
     public StorageOptionsModel Storage { get; }
 
+    public UpdaterOptionsModel Updater { get; }
+
+    /// <summary>The user confirmed Force Update: the window closed and the main menu updates (OnForceUpdate).</summary>
+    public event EventHandler ForceUpdateRequested;
+
+    /// <summary>The Force Update button: asks first (UpdaterOptionsPanel).</summary>
+    public void ConfirmForceUpdate() =>
+        dialogs.Confirm("Force Update Confirmation".L10N("Client:DTAConfig:ForceUpdateConfirmTitle"), UpdaterOptionsModel.ForceUpdateConfirmText, () =>
+        {
+            Updater.PrepareForceUpdate();
+            PreviewClientVolume = null;
+            IsOpen = false;
+            ForceUpdateRequested?.Invoke(this, EventArgs.Empty);
+        });
+
     public IReadOnlyList<OptionsPanelModel> Panels { get; }
 
     /// <summary>The tab names, in the XNA tab control's order.</summary>
@@ -88,7 +106,16 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
         "Components".L10N("Client:DTAConfig:TabComponents"),
     ];
 
-    public static bool IsTabSelectable(int index) => index < UPDATER_INDEX;
+    /// <summary>
+    /// The tabs that can be selected: Updater only with update mirrors (not in ModMode); Components isn't in the
+    /// Avalonia client yet.
+    /// </summary>
+    public bool IsTabSelectable(int index) => index switch
+    {
+        UPDATER_INDEX => !ClientConfiguration.Instance.ModMode && updater.HasUpdateMirrors,
+        COMPONENTS_INDEX => false,
+        _ => true,
+    };
 
     [ObservableProperty]
     private bool isOpen;
@@ -140,11 +167,16 @@ public sealed partial class OptionsWindowViewModel : ObservableObject
         suppressP2PWarning = false;
     }
 
-    public void Open()
+    /// <param name="mainMenuOnlyOptions">Opened with only the main menu open (not in LAN mode or a game room): Force
+    /// Update can be used.</param>
+    public void Open(bool mainMenuOnlyOptions = true)
     {
         suppressP2PWarning = true;
         foreach (OptionsPanelModel panel in Panels)
+        {
             panel.Load();
+            panel.ToggleMainMenuOnlyOptions(mainMenuOnlyOptions);
+        }
         suppressP2PWarning = false;
 
         RefreshOptionPanels();

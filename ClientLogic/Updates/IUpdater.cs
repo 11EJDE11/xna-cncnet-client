@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using ClientUpdater;
 
@@ -23,6 +24,19 @@ public interface IUpdater
     int UpdateSizeInKb { get; }
 
     bool HasUpdateMirrors { get; }
+
+    /// <summary>The download mirrors, in priority order.</summary>
+    IReadOnlyList<UpdateMirror> UpdateMirrors { get; }
+
+    /// <summary>The optional components exist (the Components tab can be used).</summary>
+    bool HasCustomComponents { get; }
+
+    void MoveMirrorUp(int mirrorIndex);
+
+    void MoveMirrorDown(int mirrorIndex);
+
+    /// <summary>Forgets the local file versions, so the next update re-downloads everything (force update).</summary>
+    void ClearVersionInfo();
 
     void CheckForUpdates();
 
@@ -80,6 +94,16 @@ public sealed class ClientUpdaterService : IUpdater
     public int UpdateSizeInKb => Updater.UpdateSizeInKb;
 
     public bool HasUpdateMirrors => Updater.UpdateMirrors?.Count > 0;
+
+    public IReadOnlyList<UpdateMirror> UpdateMirrors => (IReadOnlyList<UpdateMirror>)Updater.UpdateMirrors ?? [];
+
+    public bool HasCustomComponents => Updater.CustomComponents?.Count > 0;
+
+    public void MoveMirrorUp(int mirrorIndex) => Updater.MoveMirrorUp(mirrorIndex);
+
+    public void MoveMirrorDown(int mirrorIndex) => Updater.MoveMirrorDown(mirrorIndex);
+
+    public void ClearVersionInfo() => Updater.ClearVersionInfo();
 
     public void CheckForUpdates() => Updater.CheckForUpdates();
 

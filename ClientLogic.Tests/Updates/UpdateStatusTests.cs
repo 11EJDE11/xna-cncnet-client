@@ -23,6 +23,24 @@ public class UpdateStatusTests
         public string ServerGameVersion { get; set; } = "N/A";
         public int UpdateSizeInKb { get; set; }
         public bool HasUpdateMirrors { get; set; } = true;
+        public List<UpdateMirror> Mirrors { get; } = [];
+        public IReadOnlyList<UpdateMirror> UpdateMirrors => Mirrors;
+        public bool HasCustomComponents => false;
+        public bool VersionInfoCleared { get; private set; }
+
+        public void MoveMirrorUp(int mirrorIndex)
+        {
+            if (mirrorIndex >= 1 && mirrorIndex < Mirrors.Count)
+                (Mirrors[mirrorIndex - 1], Mirrors[mirrorIndex]) = (Mirrors[mirrorIndex], Mirrors[mirrorIndex - 1]);
+        }
+
+        public void MoveMirrorDown(int mirrorIndex)
+        {
+            if (mirrorIndex >= 0 && mirrorIndex < Mirrors.Count - 1)
+                (Mirrors[mirrorIndex + 1], Mirrors[mirrorIndex]) = (Mirrors[mirrorIndex], Mirrors[mirrorIndex + 1]);
+        }
+
+        public void ClearVersionInfo() => VersionInfoCleared = true;
         public int Checks { get; private set; }
         public int Starts { get; private set; }
         public int Stops { get; private set; }
