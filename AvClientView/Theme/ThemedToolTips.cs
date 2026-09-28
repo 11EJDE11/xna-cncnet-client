@@ -56,10 +56,32 @@ public static class ThemedToolTips
             Setters = { new Setter(Visual.EffectProperty, null) },
         });
 
-        // The tooltips appear after the delay and near the cursor (ToolTipOffsetX/Y)
-        ToolTip.SetShowDelay(window, (int)Math.Round(config.ToolTipDelay * 1000));
-        ToolTip.SetPlacement(window, PlacementMode.Pointer);
-        ToolTip.SetHorizontalOffset(window, config.ToolTipOffsetX);
-        ToolTip.SetVerticalOffset(window, config.ToolTipOffsetY);
+        // The tooltips appear after the delay, above and right of the cursor (ToolTip.DisplayAtLocation: the cursor
+        // plus ToolTipOffsetX/Y, then moved up by its height); set on each control that gets a tooltip
+        int showDelay = (int)Math.Round(config.ToolTipDelay * 1000);
+        var offset = new Point(config.ToolTipOffsetX, config.ToolTipOffsetY);
+        void AboveCursor(Avalonia.Controls.Primitives.PopupPositioning.CustomPopupPlacement placement)
+        {
+            Point? cursor = window.TranslatePoint(LastPointer, placement.Target);
+            if (cursor == null)
+                return;
+
+            placement.AnchorRectangle = new Rect(cursor.Value, new Size(1, 1));
+            placement.Anchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft;
+            placement.Gravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.TopRight;
+            placement.Offset = offset;
+        }
+
+        ToolTip.TipProperty.Changed.AddClassHandler<Control>((control, _) =>
+        {
+            ToolTip.SetShowDelay(control, showDelay);
+            ToolTip.SetPlacement(control, PlacementMode.Custom);
+            ToolTip.SetCustomPopupPlacementCallback(control, AboveCursor);
+        });
+        window.AddHandler(Avalonia.Input.InputElement.PointerMovedEvent, (_, e) => LastPointer = e.GetPosition(window),
+            Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
     }
+
+    /// <summary>The pointer's last position in the main window.</summary>
+    private static Point LastPointer { get; set; }
 }
