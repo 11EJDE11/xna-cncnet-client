@@ -11,12 +11,14 @@ using Rampastring.Tools;
 
 namespace AvClientView.Theme;
 
-/// <summary>The theme's TrueType fonts, loaded from disk.</summary>
-public sealed class ThemeFontCollection : FontCollectionBase
+/// <summary>
+/// One of the theme's TrueType fonts, loaded from disk. Each font index has its own collection: with several faces of
+/// one family in a collection (Roboto SemiCondensed Medium and Roboto SemiBold), Avalonia's matching returned the
+/// SemiBold face for the Medium font.
+/// </summary>
+public sealed class ThemeFontCollection(Uri key) : FontCollectionBase
 {
-    public static readonly Uri CollectionKey = new("fonts:ClientTheme");
-
-    public override Uri Key => CollectionKey;
+    public override Uri Key { get; } = key;
 
     /// <summary>Adds a font file; returns its family name, or null.</summary>
     public string AddFile(string path)
@@ -82,8 +84,6 @@ public static class ThemeFonts
         }
 
         var ini = new IniFile(iniPath);
-        var collection = new ThemeFontCollection();
-        FontManager.Current.AddFontCollection(collection);
 
         int count = ini.GetIntValue("Fonts", "Count", 0);
         for (int i = 0; i < count; i++)
@@ -93,13 +93,19 @@ public static class ThemeFonts
             string type = ini.GetStringValue(section, "Type", string.Empty);
             string file = ThemeAssets.FindFile(ini.GetStringValue(section, "Path", string.Empty));
 
-            string familyName = type.Equals("TrueType", StringComparison.OrdinalIgnoreCase) && file != null
-                ? collection.AddFile(file)
-                : null;
+            string familyName = null;
+            var collectionKey = new Uri("fonts:ClientTheme" + i);
+            if (type.Equals("TrueType", StringComparison.OrdinalIgnoreCase) && file != null)
+            {
+                var collection = new ThemeFontCollection(collectionKey);
+                familyName = collection.AddFile(file);
+                if (familyName != null)
+                    FontManager.Current.AddFontCollection(collection);
+            }
 
             fonts.Add(familyName == null
                 ? (FontFamily.Default, size)
-                : (new FontFamily(ThemeFontCollection.CollectionKey + "#" + familyName), size));
+                : (new FontFamily(collectionKey + "#" + familyName), size));
 
             Logger.Log($"ThemeFonts: font {i} = {familyName ?? "default"} {size}");
         }

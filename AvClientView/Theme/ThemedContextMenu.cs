@@ -30,7 +30,6 @@ public static class ThemedContextMenu
 
         (FontFamily family, double size) = ThemeFonts.Get(0);
         var list = new StackPanel { Width = width };
-        ThemedAppStyles.ApplyTextRendering(list);
         var popup = new Popup
         {
             PlacementTarget = target,
