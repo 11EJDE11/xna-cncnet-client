@@ -121,6 +121,12 @@ public static class ThemedScrollBars
         {
             Setters = { new Setter(ScrollViewer.AllowAutoHideProperty, false) },
         });
+
+        // The content beside the bar, not under it (XNA lists narrow their text while the bar is shown)
+        application.Styles.Add(new Style(selector => selector.OfType<ScrollViewer>().Template().OfType<ScrollContentPresenter>())
+        {
+            Setters = { new Setter(Grid.ColumnSpanProperty, 1) },
+        });
     }
 
     private static Image Stretched(Bitmap bitmap, int row)
