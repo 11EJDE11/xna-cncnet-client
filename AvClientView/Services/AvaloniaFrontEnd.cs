@@ -29,7 +29,9 @@ public sealed class AvaloniaDialogService(Window owner) : IDialogService
 
     public void Confirm(string title, string text, Action onYes) => Show(title, text, onYes);
 
-    private void Show(string title, string text, Action onYes, Action onOk = null)
+    public void Confirm(string title, string text, Action onYes, Action onNo) => Show(title, text, onYes, onNo: onNo);
+
+    private void Show(string title, string text, Action onYes, Action onOk = null, Action onNo = null)
     {
         var dialog = new Window
         {
@@ -61,7 +63,11 @@ public sealed class AvaloniaDialogService(Window owner) : IDialogService
                 dialog.Close();
                 onYes();
             };
-            no.Click += (_, _) => dialog.Close();
+            no.Click += (_, _) =>
+            {
+                dialog.Close();
+                onNo?.Invoke();
+            };
             buttons.Children.Add(yes);
             buttons.Children.Add(no);
         }

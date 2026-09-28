@@ -283,6 +283,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             cncnetLobby = services.GetRequiredService<CnCNetLobbyViewModel>();
             cncnetLobby.BackRequested += (_, _) => CurrentPage = Menu;
+            cncnetLobby.UpdateCheckRequested += (_, _) =>
+            {
+                Menu.UpdateStatus.CheckForUpdates();
+                CurrentPage = primaryPage;
+            };
             cncnetLobby.ShowRequested += (_, _) => CurrentPage = cncnetLobby;
             cncnetLobby.RoomEntered += (_, _) =>
             {

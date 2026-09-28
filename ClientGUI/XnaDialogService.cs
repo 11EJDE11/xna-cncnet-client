@@ -32,5 +32,12 @@ namespace ClientGUI
             var messageBox = XNAMessageBox.ShowYesNoDialog(windowManager, title, text);
             messageBox.YesClickedAction = _ => onYes();
         }
+
+        public void Confirm(string title, string text, Action onYes, Action onNo)
+        {
+            var messageBox = XNAMessageBox.ShowYesNoDialog(windowManager, title, text);
+            messageBox.YesClickedAction = _ => onYes();
+            messageBox.NoClickedAction = _ => onNo();
+        }
     }
 }

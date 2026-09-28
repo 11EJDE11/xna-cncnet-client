@@ -44,6 +44,7 @@ public class MultiplayerLobbySessionTests
         public void ShowMessage(string title, string text) => Shown.Add(text);
         public void ShowMessage(string title, string text, Action onOk) => ShowMessage(title, text);
         public void Confirm(string title, string text, Action onYes) { }
+        public void Confirm(string title, string text, Action onYes, Action onNo) { }
     }
 
     private sealed class NullSounds : ISoundService

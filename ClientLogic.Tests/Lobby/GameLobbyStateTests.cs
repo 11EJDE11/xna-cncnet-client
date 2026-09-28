@@ -40,6 +40,13 @@ public class GameLobbyStateTests
             if (answerYes)
                 onYes();
         }
+
+        public void Confirm(string title, string text, Action onYes, Action onNo)
+        {
+            Confirm(title, text, onYes);
+            if (!answerYes)
+                onNo();
+        }
     }
 
     private static GameLobbyState Create(List<PlayerInfo> players = null)

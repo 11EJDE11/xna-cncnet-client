@@ -54,6 +54,7 @@ public class GameLoadingSessionTests : IDisposable
         public void ShowMessage(string title, string text) { }
         public void ShowMessage(string title, string text, Action onOk) { }
         public void Confirm(string title, string text, Action onYes) { }
+        public void Confirm(string title, string text, Action onYes, Action onNo) { }
     }
 
     private sealed class TestRoom : GameLoadingSession

@@ -40,6 +40,7 @@ public sealed class CnCNetLobbyService
 
     private CancellationTokenSource gameCheckCancellation;
     private bool ctcpInvalidGameMessageShown;
+    private bool updateDenied;
     private bool ctcpNoTunnelMessageShown;
     private bool ctcpNoTunnelForGamesMessageShown;
     private bool channelsInitialized;
@@ -129,6 +130,15 @@ public sealed class CnCNetLobbyService
 
     /// <summary>The connection state changed.</summary>
     public event EventHandler ConnectionChanged;
+
+    /// <summary>
+    /// An admin announced a newer version (the XNA lobby asks whether to update now: yes checks for updates on the main
+    /// menu, no stops asking until the client restarts, <see cref="DeclineUpdate"/>).
+    /// </summary>
+    public event EventHandler UpdateAvailable;
+
+    /// <summary>The user doesn't want to update now: announcements are ignored from now on.</summary>
+    public void DeclineUpdate() => updateDenied = true;
 
     /// <summary>The local player entered the game room.</summary>
     public event EventHandler RoomEntered;
@@ -498,6 +508,18 @@ public sealed class CnCNetLobbyService
 
         if (channelUser == null)
             return;
+
+        // An admin's "UPDATE version" in the local game's channel: a newer version is out
+        if (channel.ChannelName == localGame?.GameBroadcastChannel &&
+            !updateDenied &&
+            channelUser.IsAdmin &&
+            !State.IsInGameRoom &&
+            e.Message.StartsWith("UPDATE ") &&
+            e.Message.Length > 7 &&
+            e.Message.Substring(7) != ProgramConstants.GAME_VERSION)
+        {
+            UpdateAvailable?.Invoke(this, EventArgs.Empty);
+        }
 
         if (!e.Message.StartsWith("GAME "))
             return;

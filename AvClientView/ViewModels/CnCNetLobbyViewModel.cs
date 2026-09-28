@@ -66,6 +66,11 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
         lobby.MessagesReset += (_, _) => ResetMessages();
         lobby.UsersChanged += (_, _) => RefreshUsers();
         lobby.GamesChanged += (_, _) => RefreshGames();
+
+        // An admin announced a new version: update now (the main menu checks), or stop asking
+        lobby.UpdateAvailable += (_, _) => dialogs.Confirm("Update available".L10N("Client:Main:UpdateAvailableTitle"),
+            "An update is available. Do you want to perform the update now?".L10N("Client:Main:UpdateAvailableText"),
+            () => UpdateCheckRequested?.Invoke(this, EventArgs.Empty), lobby.DeclineUpdate);
         AvClientView.Theme.ThemeSound gameCreatedSound = AvClientView.Theme.ThemeSound.Load("gamecreated.wav");
         lobby.GameHostedNotification += (_, _) => gameCreatedSound.Play();
         lobby.ConnectionChanged += (_, _) => RefreshConnection();
@@ -246,6 +251,9 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     public event EventHandler RoomLeft;
 
     public event EventHandler BackRequested;
+
+    /// <summary>The user wants the announced update: the main menu checks for updates (UpdateCheck).</summary>
+    public event EventHandler UpdateCheckRequested;
 
     /// <summary>The lobby page must be shown (an accepted invitation needs the password prompt).</summary>
     public event EventHandler ShowRequested;

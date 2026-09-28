@@ -13,4 +13,7 @@ public interface IDialogService
 
     /// <summary>Asks a yes/no question and runs <paramref name="onYes"/> if the user answers yes.</summary>
     void Confirm(string title, string text, Action onYes);
+
+    /// <summary>Asks a yes/no question and runs <paramref name="onYes"/> or <paramref name="onNo"/> for the answer.</summary>
+    void Confirm(string title, string text, Action onYes, Action onNo);
 }
