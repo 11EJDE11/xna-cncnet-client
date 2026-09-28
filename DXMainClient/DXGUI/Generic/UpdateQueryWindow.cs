@@ -1,5 +1,6 @@
 ﻿using ClientCore;
 using ClientGUI;
+using ClientLogic.Updates;
 using ClientCore.Extensions;
 using Microsoft.Xna.Framework;
 using Rampastring.XNAUI;
@@ -91,11 +92,8 @@ namespace DTAClient.DXGUI.Generic
 
         public void SetInfo(string version, int updateSize)
         {
-            lblDescription.Text = string.Format(("Version {0} is available for download.\nDo you wish to install it?").L10N("Client:Main:VersionAvailable"), version);
-            if (updateSize >= 1000)
-                lblUpdateSize.Text = string.Format("The size of the update is {0} MB.".L10N("Client:Main:UpdateSizeMB"), updateSize / 1000);
-            else
-                lblUpdateSize.Text = string.Format("The size of the update is {0} KB.".L10N("Client:Main:UpdateSizeKB"), updateSize);
+            lblDescription.Text = UpdateProgress.QueryText(version);
+            lblUpdateSize.Text = UpdateProgress.SizeText(updateSize);
         }
     }
 }

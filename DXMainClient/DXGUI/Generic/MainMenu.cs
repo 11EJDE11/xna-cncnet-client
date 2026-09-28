@@ -4,6 +4,7 @@ using ClientCore.I18N;
 using ClientGUI;
 using ClientLogic.Launch;
 using ClientLogic.UI;
+using ClientLogic.Updates;
 using DTAClient.Domain;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using DTAClient.DXGUI.Multiplayer;
@@ -36,7 +37,6 @@ namespace DTAClient.DXGUI.Generic
     {
         private const float MEDIA_PLAYER_VOLUME_FADE_STEP = 0.01f;
         private const float MEDIA_PLAYER_VOLUME_EXIT_FADE_STEP = 0.025f;
-        private const double UPDATE_RE_CHECK_THRESHOLD = 30.0;
 
         /// <summary>
         /// Creates a new instance of the main menu.
@@ -62,6 +62,7 @@ namespace DTAClient.DXGUI.Generic
             UpdateQueryWindow updateQueryWindow,
             ManualUpdateQueryWindow manualUpdateQueryWindow,
             UpdateWindow updateWindow,
+            UpdateStatus updateStatus,
             ExtrasWindow extrasWindow,
             DirectDrawWrapperManager directDrawWrapperManager
         ) : base(windowManager)
@@ -85,6 +86,7 @@ namespace DTAClient.DXGUI.Generic
             this.updateQueryWindow = updateQueryWindow;
             this.manualUpdateQueryWindow = manualUpdateQueryWindow;
             this.updateWindow = updateWindow;
+            this.updateStatus = updateStatus;
             this.extrasWindow = extrasWindow;
             this.directDrawWrapperManager = directDrawWrapperManager;
 
@@ -121,6 +123,7 @@ namespace DTAClient.DXGUI.Generic
         private readonly UpdateQueryWindow updateQueryWindow;
         private readonly ManualUpdateQueryWindow manualUpdateQueryWindow;
         private readonly UpdateWindow updateWindow;
+        private readonly UpdateStatus updateStatus;
         private readonly ExtrasWindow extrasWindow;
         private readonly DirectDrawWrapperManager directDrawWrapperManager;
 
@@ -141,7 +144,6 @@ namespace DTAClient.DXGUI.Generic
 
         private bool customComponentDialogQueued = false;
 
-        private DateTime lastUpdateCheckTime;
 
         private Song themeSong;
 
@@ -295,7 +297,9 @@ namespace DTAClient.DXGUI.Generic
                 AddChild(lblVersion);
                 AddChild(lblUpdateStatus);
 
-                Updater.FileIdentifiersUpdated += Updater_FileIdentifiersUpdated;
+                updateStatus.Changed += (_, _) => RefreshUpdateStatus();
+                updateStatus.UpdateAvailable += UpdateStatus_UpdateAvailable;
+                updateStatus.ManualUpdateAvailable += UpdateStatus_ManualUpdateAvailable;
                 Updater.OnCustomComponentsOutdated += Updater_OnCustomComponentsOutdated;
             }
 
@@ -518,8 +522,6 @@ namespace DTAClient.DXGUI.Generic
         /// </summary>
         private void Clean()
         {
-            Updater.FileIdentifiersUpdated -= Updater_FileIdentifiersUpdated;
-
             if (cncnetPlayerCountCancellationSource != null) cncnetPlayerCountCancellationSource.Cancel();
             topBar.Clean();
             if (UpdateInProgress)
@@ -593,22 +595,7 @@ namespace DTAClient.DXGUI.Generic
 
             PlayMusic();
 
-            if (!ClientConfiguration.Instance.ModMode)
-            {
-                if (Updater.UpdateMirrors.Count < 1)
-                {
-                    lblUpdateStatus.Text = "No update download mirrors available.".L10N("Client:Main:NoUpdateMirrorsAvailable");
-                    lblUpdateStatus.DrawUnderline = false;
-                }
-                else if (UserINISettings.Instance.CheckForUpdates)
-                {
-                    CheckForUpdates();
-                }
-                else
-                {
-                    lblUpdateStatus.Text = "Click to check for updates.".L10N("Client:Main:ClickToCheckUpdate");
-                }
-            }
+            updateStatus.Start();
 
             CheckRequiredFiles();
             CheckForbiddenFiles();
@@ -685,43 +672,34 @@ namespace DTAClient.DXGUI.Generic
 
         #region Updating / versioning system
 
+        private void RefreshUpdateStatus()
+        {
+            lblUpdateStatus.Text = updateStatus.Text;
+            lblUpdateStatus.Enabled = updateStatus.IsClickable;
+            lblUpdateStatus.DrawUnderline = updateStatus.IsUnderlined;
+
+            if (UpdateInProgress != updateStatus.IsUpdateInProgress)
+                UpdateInProgress = updateStatus.IsUpdateInProgress;
+        }
+
         private void UpdateWindow_UpdateFailed(object sender, UpdateFailureEventArgs e)
         {
             updateWindow.Disable();
-            lblUpdateStatus.Text = "Updating failed! Click to retry.".L10N("Client:Main:UpdateFailedClickToRetry");
-            lblUpdateStatus.DrawUnderline = true;
-            lblUpdateStatus.Enabled = true;
-            UpdateInProgress = false;
-
-            // TODO Enable a dummy Window from DarkeningPanel -- seems not needed. This message box works well.
-            XNAMessageBox msgBox = new XNAMessageBox(WindowManager, "Update failed".L10N("Client:Main:UpdateFailedTitle"),
-                string.Format(("An error occured while updating. Returned error was: {0}\n\nIf you are connected to the Internet and your firewall isn't blocking\n{1}, and the issue is reproducible, contact us at\n{2} for support.").L10N("Client:Main:UpdateFailedText"),
-                e.Reason, Path.GetFileName(ProgramConstants.StartupExecutable), MainClientConstants.SUPPORT_URL_SHORT), XNAMessageBoxButtons.OK);
-            msgBox.OKClickedAction = (XNAMessageBox messageBox) =>
-            {
-                // TODO Disable the dummy Window from DarkeningPanel -- seems not needed. This message box works well.
-            };
-            msgBox.Show();
+            StartupMessage message = updateStatus.UpdateFailed(e.Reason);
+            XNAMessageBox.Show(WindowManager, message.Title, message.Text);
         }
 
         private void UpdateWindow_UpdateCancelled(object sender, EventArgs e)
         {
             updateWindow.Disable();
-            lblUpdateStatus.Text = "The update was cancelled. Click to retry.".L10N("Client:Main:UpdateCancelledClickToRetry");
-            lblUpdateStatus.DrawUnderline = true;
-            lblUpdateStatus.Enabled = true;
-            UpdateInProgress = false;
+            updateStatus.UpdateCancelled();
         }
 
         private void UpdateWindow_UpdateCompleted(object sender, EventArgs e)
         {
             updateWindow.Disable();
-            lblUpdateStatus.Text = string.Format("{0} was succesfully updated to v.{1}".L10N("Client:Main:UpdateSuccess"),
-                MainClientConstants.GAME_NAME_SHORT, Updater.GameVersion);
+            updateStatus.UpdateCompleted();
             lblVersion.Text = Updater.GameVersion;
-            UpdateInProgress = false;
-            lblUpdateStatus.Enabled = true;
-            lblUpdateStatus.DrawUnderline = false;
 
             // The update completed without requiring a client restart, so apply
             // translation game files immediately for the new game version.
@@ -733,14 +711,7 @@ namespace DTAClient.DXGUI.Generic
         private void LblUpdateStatus_LeftClick(object sender, EventArgs e)
         {
             Logger.Log(Updater.VersionState.ToString());
-
-            if (Updater.VersionState == VersionState.OUTDATED ||
-                Updater.VersionState == VersionState.MISMATCHED ||
-                Updater.VersionState == VersionState.UNKNOWN ||
-                Updater.VersionState == VersionState.UPTODATE)
-            {
-                CheckForUpdates();
-            }
+            updateStatus.Click();
         }
 
         private void LblVersion_LeftClick(object sender, EventArgs e)
@@ -750,69 +721,22 @@ namespace DTAClient.DXGUI.Generic
 
         private void ForceUpdate()
         {
-            UpdateInProgress = true;
+            updateStatus.ForceUpdate();
             optionsWindow.Disable();
             updateWindow.ForceUpdate();
             updateWindow.Enable();
-            lblUpdateStatus.Text = "Force updating...".L10N("Client:Main:ForceUpdating");
         }
 
-        /// <summary>
-        /// Starts a check for updates.
-        /// </summary>
-        private void CheckForUpdates()
+        private void UpdateStatus_UpdateAvailable(object sender, UpdateAvailableEventArgs e)
         {
-            if (Updater.UpdateMirrors.Count < 1)
-                return;
-
-            Updater.CheckForUpdates();
-            lblUpdateStatus.Enabled = false;
-            lblUpdateStatus.Text = "Checking for updates..."
-                .L10N("Client:Main:CheckingForUpdates");
-            lastUpdateCheckTime = DateTime.Now;
+            updateQueryWindow.SetInfo(e.Version, e.SizeInKb);
+            updateQueryWindow.Enable();
         }
 
-        private void Updater_FileIdentifiersUpdated()
-            => WindowManager.AddCallback(new Action(HandleFileIdentifierUpdate), null);
-
-        /// <summary>
-        /// Used for displaying the result of an update check in the UI.
-        /// </summary>
-        private void HandleFileIdentifierUpdate()
+        private void UpdateStatus_ManualUpdateAvailable(object sender, ManualUpdateEventArgs e)
         {
-            if (UpdateInProgress)
-            {
-                return;
-            }
-
-            if (Updater.VersionState == VersionState.UPTODATE)
-            {
-                lblUpdateStatus.Text = string.Format("{0} is up to date.".L10N("Client:Main:GameUpToDate"), MainClientConstants.GAME_NAME_SHORT);
-                lblUpdateStatus.Enabled = true;
-                lblUpdateStatus.DrawUnderline = false;
-            }
-            else if (Updater.VersionState == VersionState.OUTDATED && Updater.ManualUpdateRequired)
-            {
-                lblUpdateStatus.Text = "An update is available. Manual download & installation required.".L10N("Client:Main:UpdateAvailableManualDownloadRequired");
-                lblUpdateStatus.Enabled = true;
-                lblUpdateStatus.DrawUnderline = false;
-                manualUpdateQueryWindow.SetInfo(Updater.ServerGameVersion, Updater.ManualDownloadURL);
-
-                if (!string.IsNullOrEmpty(Updater.ManualDownloadURL))
-                    manualUpdateQueryWindow.Enable();
-            }
-            else if (Updater.VersionState == VersionState.OUTDATED)
-            {
-                lblUpdateStatus.Text = "An update is available.".L10N("Client:Main:UpdateAvailable");
-                updateQueryWindow.SetInfo(Updater.ServerGameVersion, Updater.UpdateSizeInKb);
-                updateQueryWindow.Enable();
-            }
-            else if (Updater.VersionState == VersionState.UNKNOWN)
-            {
-                lblUpdateStatus.Text = "Checking for updates failed! Click to retry.".L10N("Client:Main:CheckUpdateFailedClickToRetry");
-                lblUpdateStatus.Enabled = true;
-                lblUpdateStatus.DrawUnderline = true;
-            }
+            manualUpdateQueryWindow.SetInfo(e.Version, e.DownloadUrl);
+            manualUpdateQueryWindow.Enable();
         }
 
         /// <summary>
@@ -856,9 +780,7 @@ namespace DTAClient.DXGUI.Generic
         private void UpdateQueryWindow_UpdateDeclined(object sender, EventArgs e)
         {
             updateQueryWindow.Disable();
-            lblUpdateStatus.Text = "An update is available, click to install.".L10N("Client:Main:UpdateAvailableClickToInstall");
-            lblUpdateStatus.Enabled = true;
-            lblUpdateStatus.DrawUnderline = true;
+            updateStatus.DeclineUpdate();
         }
 
         /// <summary>
@@ -869,9 +791,7 @@ namespace DTAClient.DXGUI.Generic
             updateQueryWindow.Disable();
             updateWindow.SetData(Updater.ServerGameVersion);
             updateWindow.Enable();
-            lblUpdateStatus.Text = "Updating...".L10N("Client:Main:Updating");
-            UpdateInProgress = true;
-            Updater.StartUpdate();
+            updateStatus.AcceptUpdate();
         }
 
         private void ManualUpdateQueryWindow_Closed(object sender, EventArgs e)
@@ -956,7 +876,7 @@ namespace DTAClient.DXGUI.Generic
         /// </summary>
         private void CncnetLobby_UpdateCheck(object sender, EventArgs e)
         {
-            CheckForUpdates();
+            updateStatus.CheckForUpdates();
             topBar.SwitchToPrimary();
         }
 
@@ -1074,13 +994,8 @@ namespace DTAClient.DXGUI.Generic
             if (UserINISettings.Instance.StopMusicOnMenu)
                 PlayMusic();
 
-            if (!ClientConfiguration.Instance.ModMode && UserINISettings.Instance.CheckForUpdates)
-            {
-                // Re-check for updates
-
-                if ((DateTime.Now - lastUpdateCheckTime) > TimeSpan.FromSeconds(UPDATE_RE_CHECK_THRESHOLD))
-                    CheckForUpdates();
-            }
+            // Re-check for updates
+            updateStatus.SwitchedOn();
         }
 
         public void SwitchOff()

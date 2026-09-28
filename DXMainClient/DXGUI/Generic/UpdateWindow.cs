@@ -8,7 +8,7 @@ using System;
 #if WINFORMS
 using System.Runtime.InteropServices;
 #endif
-using ClientUpdater;
+using ClientLogic.Updates;
 
 namespace DTAClient.DXGUI.Generic
 {
@@ -26,15 +26,14 @@ namespace DTAClient.DXGUI.Generic
         public delegate void UpdateFailureEventHandler(object sender, UpdateFailureEventArgs e);
         public event UpdateFailureEventHandler UpdateFailed;
 
-        delegate void UpdateProgressChangedDelegate(string fileName, int filePercentage, int totalPercentage);
-        delegate void FileDownloadCompletedDelegate(string archiveName);
-
         private const double DOT_TIME = 0.66;
         private const int MAX_DOTS = 5;
 
-        public UpdateWindow(WindowManager windowManager) : base(windowManager)
-        {
+        private readonly UpdateProgress progress;
 
+        public UpdateWindow(WindowManager windowManager, UpdateProgress progress) : base(windowManager)
+        {
+            this.progress = progress;
         }
 
         private XNALabel lblDescription;
@@ -49,17 +48,8 @@ namespace DTAClient.DXGUI.Generic
         private TaskbarProgress tbp;
 #endif
 
-        private bool isStartingForceUpdate;
-
-        bool infoUpdated = false;
-
-        string currFileName = string.Empty;
-        int currFilePercentage = 0;
-        int totalPercentage = 0;
         int dotCount = 0;
         double currentDotTime = 0.0;
-
-        private static readonly object locker = new object();
 
         public override void Initialize()
         {
@@ -135,85 +125,27 @@ namespace DTAClient.DXGUI.Generic
 
             CenterOnParent();
 
-            Updater.FileIdentifiersUpdated += Updater_FileIdentifiersUpdated;
-            Updater.OnUpdateCompleted += Updater_OnUpdateCompleted;
-            Updater.OnUpdateFailed += Updater_OnUpdateFailed;
-            Updater.UpdateProgressChanged += Updater_UpdateProgressChanged;
-            Updater.LocalFileCheckProgressChanged += Updater_LocalFileCheckProgressChanged;
-            Updater.OnFileDownloadCompleted += Updater_OnFileDownloadCompleted;
+            progress.Changed += (_, _) => RefreshProgress();
+            progress.Completed += Progress_Completed;
+            progress.Failed += Progress_Failed;
+            progress.Cancelled += Progress_Cancelled;
+            progress.ForceUpdateCheckFailed += (_, _) => XNAMessageBox.Show(WindowManager,
+                "Force Update Failure".L10N("Client:Main:ForceUpdateFailureTitle"), "Checking for updates failed.".L10N("Client:Main:ForceUpdateFailureText"));
 #if WINFORMS
 
             tbp = new TaskbarProgress();
 #endif
         }
 
-        private void Updater_FileIdentifiersUpdated()
+        private void RefreshProgress()
         {
-            if (!isStartingForceUpdate)
-                return;
-
-            if (Updater.VersionState == VersionState.UNKNOWN)
-            {
-                XNAMessageBox.Show(WindowManager, "Force Update Failure".L10N("Client:Main:ForceUpdateFailureTitle"), "Checking for updates failed.".L10N("Client:Main:ForceUpdateFailureText"));
-                AddCallback(new Action(CloseWindow), null);
-                return;
-            }
-            else if (Updater.VersionState == VersionState.OUTDATED && Updater.ManualUpdateRequired)
-            {
-                UpdateCancelled?.Invoke(this, EventArgs.Empty);
-                AddCallback(new Action(CloseWindow), null);
-                return;
-            }
-
-            SetData(Updater.ServerGameVersion);
-            Updater.StartUpdate();
-            isStartingForceUpdate = false;
-        }
-
-        private void Updater_LocalFileCheckProgressChanged(int checkedFileCount, int totalFileCount)
-        {
-            AddCallback(new Action<int>(UpdateFileProgress),
-                (checkedFileCount * 100 / totalFileCount));
-        }
-
-        private void UpdateFileProgress(int value)
-        {
-            prgCurrentFile.Value = value;
-            lblCurrentFileProgressPercentageValue.Text = value + "%";
-        }
-
-        private void Updater_UpdateProgressChanged(string currFileName, int currFilePercentage, int totalPercentage)
-        {
-            lock (locker)
-            {
-                infoUpdated = true;
-                this.currFileName = currFileName;
-                this.currFilePercentage = currFilePercentage;
-                this.totalPercentage = totalPercentage;
-            }
-        }
-
-        private void HandleUpdateProgressChange()
-        {
-            if (!infoUpdated)
-                return;
-
-            infoUpdated = false;
-
-            if (currFilePercentage < 0 || currFilePercentage > prgCurrentFile.Maximum)
-                prgCurrentFile.Value = 0;
-            else
-                prgCurrentFile.Value = currFilePercentage;
-
-            if (totalPercentage < 0 || totalPercentage > prgTotal.Maximum)
-                prgTotal.Value = 0;
-            else
-                prgTotal.Value = totalPercentage;
-
-            lblCurrentFileProgressPercentageValue.Text = prgCurrentFile.Value.ToString() + "%";
-            lblTotalProgressPercentageValue.Text = prgTotal.Value.ToString() + "%";
-            lblCurrentFile.Text = "Current file:".L10N("Client:Main:CurrentFile") + " " + currFileName;
-            lblUpdaterStatus.Text = "Downloading files".L10N("Client:Main:DownloadingFiles");
+            lblDescription.Text = progress.Description;
+            lblUpdaterStatus.Text = progress.Status;
+            lblCurrentFile.Text = progress.CurrentFile;
+            prgCurrentFile.Value = progress.FilePercentage;
+            prgTotal.Value = progress.TotalPercentage;
+            lblCurrentFileProgressPercentageValue.Text = progress.FilePercentage + "%";
+            lblTotalProgressPercentageValue.Text = progress.TotalPercentage + "%";
 #if WINFORMS
 
             /*/ TODO Improve the updater
@@ -228,8 +160,11 @@ namespace DTAClient.DXGUI.Generic
              * /*/
             try
             {
-                tbp.SetState(WindowManager.GetWindowHandle(), TaskbarProgress.TaskbarStates.Normal);
-                tbp.SetValue(WindowManager.GetWindowHandle(), prgTotal.Value, prgTotal.Maximum);
+                if (progress.TotalPercentage > 0)
+                {
+                    tbp.SetState(WindowManager.GetWindowHandle(), TaskbarProgress.TaskbarStates.Normal);
+                    tbp.SetValue(WindowManager.GetWindowHandle(), prgTotal.Value, prgTotal.Maximum);
+                }
             }
             catch
             {
@@ -237,82 +172,40 @@ namespace DTAClient.DXGUI.Generic
 #endif
         }
 
-        private void Updater_OnFileDownloadCompleted(string archiveName)
+        private void Progress_Completed(object sender, EventArgs e)
         {
-            AddCallback(new FileDownloadCompletedDelegate(HandleFileDownloadCompleted), archiveName);
-        }
-
-        private void HandleFileDownloadCompleted(string archiveName)
-        {
-            lblUpdaterStatus.Text = "Unpacking archive".L10N("Client:Main:UnpackingArchive");
-        }
-
-        private void Updater_OnUpdateCompleted()
-        {
-            AddCallback(new Action(HandleUpdateCompleted), null);
-        }
-
-        private void HandleUpdateCompleted()
-        {
-#if WINFORMS
-            tbp.SetState(WindowManager.GetWindowHandle(), TaskbarProgress.TaskbarStates.NoProgress);
-#endif
+            ClearTaskbarProgress();
             UpdateCompleted?.Invoke(this, EventArgs.Empty);
         }
 
-        private void Updater_OnUpdateFailed(Exception ex)
+        private void Progress_Failed(object sender, string reason)
         {
-            AddCallback(new Action<string>(HandleUpdateFailed), ex.Message);
+            ClearTaskbarProgress();
+            UpdateFailed?.Invoke(this, new UpdateFailureEventArgs(reason));
         }
 
-        private void HandleUpdateFailed(string updateFailureErrorMessage)
+        private void Progress_Cancelled(object sender, EventArgs e)
         {
-#if WINFORMS
-            tbp.SetState(WindowManager.GetWindowHandle(), TaskbarProgress.TaskbarStates.NoProgress);
-#endif
-            UpdateFailed?.Invoke(this, new UpdateFailureEventArgs(updateFailureErrorMessage));
-        }
-
-        private void BtnCancel_LeftClick(object sender, EventArgs e)
-        {
-            if (!isStartingForceUpdate)
-                Updater.StopUpdate();
-
-            CloseWindow();
-        }
-
-        private void CloseWindow()
-        {
-            isStartingForceUpdate = false;
-
-#if WINFORMS
-            tbp.SetState(WindowManager.GetWindowHandle(), TaskbarProgress.TaskbarStates.NoProgress);
-#endif
+            ClearTaskbarProgress();
             UpdateCancelled?.Invoke(this, EventArgs.Empty);
         }
 
-        public void SetData(string newGameVersion)
+        private void ClearTaskbarProgress()
         {
-            lblDescription.Text = string.Format(("Please wait while {0} is updated to version {1}.\nThis window will automatically close once the update is complete.\n\nThe client may also restart after the update has been downloaded.").L10N("Client:Main:UpdateVersionPleaseWait"), MainClientConstants.GAME_NAME_SHORT, newGameVersion);
-            lblUpdaterStatus.Text = "Preparing".L10N("Client:Main:StatusPreparing");
+#if WINFORMS
+            tbp.SetState(WindowManager.GetWindowHandle(), TaskbarProgress.TaskbarStates.NoProgress);
+#endif
         }
 
-        public void ForceUpdate()
-        {
-            isStartingForceUpdate = true;
-            lblDescription.Text = string.Format("Force updating {0} to latest version...".L10N("Client:Main:ForceUpdateToLatest"), MainClientConstants.GAME_NAME_SHORT);
-            lblUpdaterStatus.Text = "Connecting".L10N("Client:Main:UpdateStatusConnecting");
-            Updater.CheckForUpdates();
-        }
+        private void BtnCancel_LeftClick(object sender, EventArgs e) => progress.Cancel();
+
+        public void SetData(string newGameVersion) => progress.Start(newGameVersion);
+
+        public void ForceUpdate() => progress.ForceUpdate();
 
         public override void Update(GameTime gameTime)
         {
             base.Update(gameTime);
-
-            lock (locker)
-            {
-                HandleUpdateProgressChange();
-            }
 
             currentDotTime += gameTime.ElapsedGameTime.TotalSeconds;
             if (currentDotTime > DOT_TIME)
