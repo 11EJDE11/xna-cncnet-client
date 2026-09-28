@@ -69,6 +69,7 @@ public partial class MainWindow : Window
                 Root.Children.Add(new LoadGameView(viewModel.LoadGame) { ZIndex = 8500 });
                 Root.Children.Add(new ExtrasView(viewModel.Extras) { ZIndex = 8500 });
                 Root.Children.Add(new StatisticsView(viewModel.Statistics) { ZIndex = 8500 });
+                Root.Children.Add(new UpdaterView(viewModel.Updater) { ZIndex = 8700 });
                 Root.Children.Add(new GameOptionPresetsView(App.Services.GetRequiredService<GameOptionPresetsViewModel>()) { ZIndex = 8600 });
                 Root.Children.Add(new OptionsWindowView(viewModel.Options) { ZIndex = 9000 });
                 Root.Children.Add(new HotkeyWindowView(viewModel.Options.Hotkeys) { ZIndex = 11000 });
@@ -88,6 +89,9 @@ public partial class MainWindow : Window
                         topBar.IsVisible = !viewModel.Options.Hotkeys.IsOpen;
                 };
                 viewModel.RestartRequested += (_, _) => Restart();
+
+                // Updater_Restart: the second-stage updater restarts the client once it has replaced its files
+                viewModel.UpdaterRestartRequested += (_, _) => Close();
             }
         }
     }

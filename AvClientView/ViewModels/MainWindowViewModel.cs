@@ -61,16 +61,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
         };
         options.RestartRequested += (_, _) => RestartRequested?.Invoke(this, EventArgs.Empty);
 
-        // While the options window is open, the top bar's switch and options buttons can't be used (XNA)
+        // While the options window is open or an update runs, the top bar's switch and options buttons can't be
+        // used (XNA)
         options.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName != nameof(OptionsWindowViewModel.IsOpen))
-                return;
-
-            topBar.CanOpenOptions = !options.IsOpen;
-            if (!topBar.LanMode)
-                topBar.CanSwitch = !options.IsOpen;
+            if (e.PropertyName == nameof(OptionsWindowViewModel.IsOpen))
+                UpdateTopBarLock();
         };
+
+        // The updater (the XNA main menu's update windows)
+        Updater = services.GetRequiredService<UpdaterViewModel>();
+        menu.UpdateStatus.Changed += (_, _) => UpdateTopBarLock();
+        Updater.VersionChanged += (_, _) => menu.RefreshVersion();
+        Updater.RestartRequested += (_, _) => UpdaterRestartRequested?.Invoke(this, EventArgs.Empty);
 
         topBar.MainRequested += (_, _) => CurrentPage = primaryPage;
         topBar.CnCNetLobbyRequested += (_, _) => OpenCnCNet();
@@ -108,6 +111,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public PrivateMessagesViewModel PrivateMessages { get; }
 
+    public UpdaterViewModel Updater { get; }
+
+    /// <summary>The updater started its second stage, which replaces the client's files: the client exits.</summary>
+    public event EventHandler UpdaterRestartRequested;
+
+    private void UpdateTopBarLock()
+    {
+        bool locked = Options.IsOpen || Menu.UpdateStatus.IsUpdateInProgress;
+        TopBar.CanOpenOptions = !locked;
+        if (!TopBar.LanMode)
+            TopBar.CanSwitch = !locked;
+    }
+
     /// <summary>The options were saved and the user chose to restart the client.</summary>
     public event EventHandler RestartRequested;
 
@@ -125,6 +141,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
 
         startupChecksRun = true;
+
+        // The update check (PostInit), unless the user checks by hand
+        Menu.UpdateStatus.Start();
+
         var dialogs = services.GetRequiredService<ClientLogic.UI.IDialogService>();
 
         if (ClientLogic.UI.StartupChecks.MissingRequiredFiles() is { } missing)
@@ -143,8 +163,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>The main menu buttons' hotkeys (SetButtonHotkeys), while the main menu is shown without a window over it.</summary>
     public bool HandleMainMenuHotkey(Avalonia.Input.Key key)
     {
-        if (CurrentPage != Menu || UserINISettings.Instance.DisableMainMenuHotkeys ||
-            Options.IsOpen || Campaign.IsOpen || LoadGame.IsOpen || Extras.IsOpen || Statistics.IsOpen || PrivateMessages.IsOpen)
+        if (CurrentPage != Menu || UserINISettings.Instance.DisableMainMenuHotkeys || Menu.UpdateStatus.IsUpdateInProgress ||
+            Updater.IsQueryOpen || Updater.IsManualOpen || Updater.IsUpdateOpen || Options.IsOpen || Campaign.IsOpen || LoadGame.IsOpen || Extras.IsOpen || Statistics.IsOpen || PrivateMessages.IsOpen)
             return false;
 
         string button = key switch
@@ -198,6 +218,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         // The top bar's switches close the private messages window (XNA's tertiary switch)
         PrivateMessages.Close();
+
+        // The main menu's SwitchOn: check for updates again
+        if (newValue == Menu && oldValue != newValue)
+            Menu.UpdateStatus.SwitchedOn();
 
         // The main menu's SwitchOn / SwitchOff
         if (UserINISettings.Instance.StopMusicOnMenu && oldValue != newValue)

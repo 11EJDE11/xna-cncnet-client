@@ -2,11 +2,13 @@ using System;
 using System.Diagnostics;
 
 using Avalonia.Controls;
+using Avalonia.Media;
 
 using AvClientView.Theme;
 using AvClientView.ViewModels;
 
 using ClientLogic.Layout;
+using ClientLogic.Updates;
 
 using Rampastring.Tools;
 
@@ -56,13 +58,19 @@ public partial class MainMenuView : UserControl
 
             if (LayoutView.FindNamed<TextBlock>(canvas, "lblVersion") is TextBlock version)
             {
-                version.Text = ViewModel.Version;
+                // ModMode disables version tracking and the updater, and the XNA menu doesn't add the labels
+                version.IsVisible = UpdateStatus.IsEnabled;
+                version.DataContext = ViewModel;
+                version.Bind(TextBlock.TextProperty, new Avalonia.Data.Binding(nameof(MainMenuViewModel.Version)));
 
                 // LblVersion_LeftClick: the changelog
                 version.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
                 version.IsHitTestVisible = true;
                 version.PointerPressed += (_, _) => ClientCore.ProcessLauncher.StartShellProcess(ClientCore.ClientConfiguration.Instance.ChangelogURL);
             }
+
+            if (LayoutView.FindNamed<TextBlock>(canvas, "lblUpdateStatus") is TextBlock updateStatus)
+                BindUpdateStatus(updateStatus, ViewModel.UpdateStatus);
 
             if (LayoutView.FindNamed<TextBlock>(canvas, "lblCnCNetPlayerCount") is TextBlock playerCount)
             {
@@ -79,6 +87,47 @@ public partial class MainMenuView : UserControl
             Logger.Log("MainMenuView: building the themed main menu failed: " + ex);
             MenuHost.Content = new TextBlock { Text = "The theme's main menu could not be loaded: " + ex.Message };
         }
+    }
+
+    /// <summary>
+    /// lblUpdateStatus, an XNALinkLabel: the status text, underlined while it can be clicked and DrawUnderline is set,
+    /// the hover colour under the mouse (then the idle colour, not the INI's RemapColor, as XNALinkLabel does).
+    /// </summary>
+    private static void BindUpdateStatus(TextBlock label, UpdateStatus status)
+    {
+        label.IsVisible = UpdateStatus.IsEnabled;
+        label.IsHitTestVisible = true;
+
+        var hover = new SolidColorBrush(ThemeAssets.ButtonTextColor);
+        var idle = new SolidColorBrush(ThemeAssets.LabelColor);
+
+        void Refresh()
+        {
+            label.Text = status.Text;
+            label.TextDecorations = status.IsClickable && status.IsUnderlined ? TextDecorations.Underline : null;
+            label.Cursor = status.IsClickable ? new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) : null;
+        }
+
+        void Changed(object sender, EventArgs e) => Refresh();
+        label.AttachedToVisualTree += (_, _) => { status.Changed += Changed; Refresh(); };
+        label.DetachedFromVisualTree += (_, _) => status.Changed -= Changed;
+
+        label.PointerEntered += (_, _) =>
+        {
+            if (status.IsClickable)
+                label.Foreground = hover;
+        };
+        label.PointerExited += (_, _) =>
+        {
+            if (status.IsClickable)
+                label.Foreground = idle;
+        };
+        label.PointerPressed += (_, e) =>
+        {
+            if (status.IsClickable && e.GetCurrentPoint(label).Properties.IsLeftButtonPressed)
+                status.Click();
+        };
+        Refresh();
     }
 
     private static LayoutControl CreateLayout()

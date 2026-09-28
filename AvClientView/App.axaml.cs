@@ -70,6 +70,7 @@ public sealed class App : Application
                 .AddSingleton<GameInvitationsViewModel>()
                 .AddSingleton<ExtrasViewModel>()
                 .AddSingleton<StatisticsViewModel>()
+                .AddSingleton<UpdaterViewModel>()
                 .AddSingleton<GameOptionPresetsViewModel>()
                 .BuildServiceProvider();
 

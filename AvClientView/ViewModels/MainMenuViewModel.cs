@@ -5,6 +5,7 @@ using ClientCore;
 using ClientCore.Extensions;
 
 using ClientLogic.UI;
+using ClientLogic.Updates;
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,10 +23,11 @@ public sealed partial class MainMenuViewModel : ObservableObject
     private readonly MapLoader mapLoader;
     private readonly IDialogService dialogs;
 
-    public MainMenuViewModel(MapLoader mapLoader, IDialogService dialogs, IUiDispatcher uiDispatcher)
+    public MainMenuViewModel(MapLoader mapLoader, IDialogService dialogs, IUiDispatcher uiDispatcher, UpdateStatus updateStatus)
     {
         this.mapLoader = mapLoader;
         this.dialogs = dialogs;
+        UpdateStatus = updateStatus;
 
         // The online player count, as the XNA main menu shows it (the first query blocks, so not on the UI thread)
         CnCNetPlayerCountTask.CnCNetGameCountUpdated += (_, e) => uiDispatcher.Post(() =>
@@ -97,8 +99,15 @@ public sealed partial class MainMenuViewModel : ObservableObject
     [RelayCommand]
     private void Exit() => ExitRequested?.Invoke(this, EventArgs.Empty);
 
-    /// <summary>The game version, as the XNA main menu shows it.</summary>
-    public string Version => ProgramConstants.GAME_VERSION;
+    /// <summary>The game version, as the XNA main menu shows it; an update changes it.</summary>
+    [ObservableProperty]
+    private string version = ProgramConstants.GAME_VERSION;
+
+    /// <summary>The update status link (lblUpdateStatus) and whether an update is running.</summary>
+    public UpdateStatus UpdateStatus { get; }
+
+    /// <summary>An update finished without a restart: the version label shows the new version.</summary>
+    public void RefreshVersion() => Version = UpdateStatus.GameVersion;
 
     /// <summary>
     /// A themed main menu button was clicked (the XNA button names). Buttons for screens the preview doesn't have
