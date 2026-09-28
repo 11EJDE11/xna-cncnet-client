@@ -35,7 +35,7 @@ public sealed class HotkeyWindowView : Panel
     public HotkeyWindowView(HotkeyWindowViewModel viewModel)
     {
         this.viewModel = viewModel;
-        Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
+        ThemedStyle.Darken(this);
         IsVisible = false;
         Focusable = true;
 

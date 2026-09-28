@@ -28,10 +28,11 @@ public static class ThemedMessageBox
         var previousFocus = TopLevel.GetTopLevel(host)?.FocusManager?.GetFocusedElement();
         var panel = new Panel
         {
-            Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)),
             ZIndex = 20000,
             Focusable = true,
         };
+
+        ThemedStyle.Darken(panel);
 
         void Close(Action then)
         {

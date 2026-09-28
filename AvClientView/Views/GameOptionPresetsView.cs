@@ -29,7 +29,7 @@ public sealed class GameOptionPresetsView : Panel
     public GameOptionPresetsView(GameOptionPresetsViewModel viewModel)
     {
         this.viewModel = viewModel;
-        Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
+        ThemedStyle.Darken(this);
         DataContext = viewModel;
         this.Bind(IsVisibleProperty, new Binding(nameof(GameOptionPresetsViewModel.IsOpen)));
 

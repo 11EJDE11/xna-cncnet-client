@@ -45,7 +45,8 @@ public sealed class UpdaterView : Panel
 
     private Panel Darkened(Func<Canvas> build, string isOpenPath)
     {
-        var panel = new Panel { Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)), DataContext = viewModel };
+        var panel = new Panel { DataContext = viewModel };
+        ThemedStyle.Darken(panel);
         panel.Bind(IsVisibleProperty, new Binding(isOpenPath));
 
         try

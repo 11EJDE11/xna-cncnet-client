@@ -94,6 +94,39 @@ public static class ThemedStyle
 {
     public static IBrush PanelBackground { get; } = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0));
 
+    /// <summary>
+    /// ClientGUI's DarkeningPanel: black at alpha 128 behind a window, fading in (ALPHA_RATE 0.6 per 100 ms) whenever
+    /// it's shown. The window itself appears at once, as in XNA.
+    /// </summary>
+    public static void Darken(Panel panel)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
+        panel.Background = brush;
+        var fade = new Avalonia.Animation.Transitions
+        {
+            new Avalonia.Animation.DoubleTransition { Property = Brush.OpacityProperty, Duration = TimeSpan.FromMilliseconds(165) },
+        };
+
+        void FadeIn()
+        {
+            brush.Transitions = null;
+            brush.Opacity = 0.01;
+            brush.Transitions = fade;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => brush.Opacity = 1, Avalonia.Threading.DispatcherPriority.Render);
+        }
+
+        panel.AttachedToVisualTree += (_, _) =>
+        {
+            if (panel.IsVisible)
+                FadeIn();
+        };
+        panel.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Visual.IsVisibleProperty && panel.IsVisible && TopLevel.GetTopLevel(panel) != null)
+                FadeIn();
+        };
+    }
+
     public static T Apply<T>(T control, int fontIndex = 0) where T : TemplatedControl
     {
         (FontFamily family, double size) = ThemeFonts.Get(fontIndex);

@@ -51,7 +51,7 @@ public sealed class TunnelSelectionView : Panel
     public TunnelSelectionView(TunnelSelectionViewModel viewModel)
     {
         this.viewModel = viewModel;
-        Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
+        ThemedStyle.Darken(this);
         DataContext = viewModel;
         this.Bind(IsVisibleProperty, new Binding(nameof(TunnelSelectionViewModel.IsOpen)));
 

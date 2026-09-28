@@ -127,6 +127,8 @@ public sealed class ThemedDropDown : Border
 
             if (popup.IsOpen && list.SelectedIndex >= 0)
             {
+                // XNADropDown plays its click sound when an item is chosen too
+                ThemeSounds.DropDown.Play();
                 SelectedIndex = list.SelectedIndex;
                 popup.IsOpen = false;
             }

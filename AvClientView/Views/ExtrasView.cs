@@ -27,7 +27,7 @@ public sealed class ExtrasView : Panel
     public ExtrasView(ExtrasViewModel viewModel)
     {
         this.viewModel = viewModel;
-        Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
+        ThemedStyle.Darken(this);
         IsVisible = false;
 
         viewModel.PropertyChanged += (_, e) =>

@@ -14,7 +14,7 @@ public sealed class PrivateMessagesOverlay : Panel
 {
     public PrivateMessagesOverlay(PrivateMessagesViewModel viewModel)
     {
-        Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
+        AvClientView.Theme.ThemedStyle.Darken(this);
         IsVisible = viewModel.IsOpen;
 
         Children.Add(new PrivateMessagesView

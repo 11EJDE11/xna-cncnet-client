@@ -31,7 +31,7 @@ public sealed class CampaignTagSelectorView : Panel
     public CampaignTagSelectorView(CampaignTagSelectorViewModel viewModel)
     {
         this.viewModel = viewModel;
-        Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
+        ThemedStyle.Darken(this);
         DataContext = viewModel;
         this.Bind(IsVisibleProperty, new Binding(nameof(CampaignTagSelectorViewModel.IsOpen)));
 
