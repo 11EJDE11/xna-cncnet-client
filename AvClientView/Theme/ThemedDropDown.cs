@@ -109,6 +109,17 @@ public sealed class ThemedDropDown : Border
             }),
         };
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
+
+        // XNADropDown fills the hovered item with the focus colour (ListBoxFocusColor) and nothing else
+        var focus = new SolidColorBrush(ThemeAssets.ListFocusColor);
+        list.Resources["ListBoxItemBackgroundPointerOver"] = focus;
+        list.Resources["ListBoxItemBackgroundPressed"] = focus;
+        list.Resources["ListBoxItemBackgroundSelected"] = Brushes.Transparent;
+        list.Resources["ListBoxItemBackgroundSelectedPointerOver"] = focus;
+        list.Resources["ListBoxItemBackgroundSelectedPressed"] = focus;
+        foreach (string key in new[] { "ListBoxItemForegroundPointerOver", "ListBoxItemForegroundPressed", "ListBoxItemForegroundSelected",
+            "ListBoxItemForegroundSelectedPointerOver", "ListBoxItemForegroundSelectedPressed" })
+            list.Resources[key] = foreground;
         list.SelectionChanged += (_, _) =>
         {
             if (updatingItems)
