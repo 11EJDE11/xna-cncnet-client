@@ -281,7 +281,12 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
             return;
 
         initialized = true;
-        lobby.Initialize(Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? string.Empty);
+        // The client version as the XNA lobby shows it (GitVersion; the commit in development builds)
+        string clientVersion = GitVersionInformation.AssemblySemVer;
+#if DEVELOPMENT_BUILD
+        clientVersion = $"{GitVersionInformation.CommitDate} {GitVersionInformation.BranchName}@{GitVersionInformation.ShortSha}";
+#endif
+        lobby.Initialize(clientVersion);
         OnPropertyChanged(nameof(ChatChannels));
     }
 
