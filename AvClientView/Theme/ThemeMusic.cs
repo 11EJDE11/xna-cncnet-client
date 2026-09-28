@@ -23,6 +23,7 @@ public sealed class ThemeMusic : IDisposable
     private MediaFoundationReader reader;
     private VolumeSampleProvider volume;
     private bool loadFailed;
+    private Action exitAction;
 
     public ThemeMusic()
     {
@@ -63,6 +64,25 @@ public sealed class ThemeMusic : IDisposable
             fadeTimer.Start();
     }
 
+    /// <summary>
+    /// Fades the music out quickly and then exits (FadeMusicExit: 0.025 of the client volume per frame); exits at once
+    /// when no music is playing.
+    /// </summary>
+    public void FadeOutAndExit(Action exit)
+    {
+        if (exitAction != null)
+            return;
+
+        if (!IsPlaying)
+        {
+            exit();
+            return;
+        }
+
+        exitAction = exit;
+        fadeTimer.Start();
+    }
+
     /// <summary>The settings were saved (SettingsSaved): music turned off fades; turned on plays if the menu is shown.</summary>
     public void SettingsSaved(bool mainMenuShown)
     {
@@ -84,6 +104,10 @@ public sealed class ThemeMusic : IDisposable
         // Fade during 1 second, as the XNA menu's step of the volume times the elapsed time
         float step = (float)UserINISettings.Instance.ClientVolume * (float)fadeTimer.Interval.TotalSeconds;
 
+        // On exit, quicker: MEDIA_PLAYER_VOLUME_EXIT_FADE_STEP of the volume each frame
+        if (exitAction != null)
+            step = (float)UserINISettings.Instance.ClientVolume * 0.025f;
+
         if (volume.Volume > step)
         {
             volume.Volume -= step;
@@ -92,6 +116,10 @@ public sealed class ThemeMusic : IDisposable
 
         fadeTimer.Stop();
         output?.Stop();
+
+        Action exit = exitAction;
+        exitAction = null;
+        exit?.Invoke();
     }
 
     private bool Load()

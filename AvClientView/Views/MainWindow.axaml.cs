@@ -56,7 +56,7 @@ public partial class MainWindow : Window
 
         if (DataContext is MainWindowViewModel viewModel)
         {
-            viewModel.ExitRequested += (_, _) => Close();
+            viewModel.ExitRequested += (_, _) => viewModel.Music.FadeOutAndExit(Close);
 
             if (topBar == null)
             {
