@@ -21,6 +21,9 @@ namespace AvClientView;
 /// </summary>
 internal static class Program
 {
+    /// <summary>The updater's local file check (the loading screen waits for it, as the XNA one does).</summary>
+    public static System.Threading.Tasks.Task LocalFileCheck { get; private set; } = System.Threading.Tasks.Task.CompletedTask;
+
     [STAThread]
     public static void Main(string[] args)
     {
@@ -80,7 +83,7 @@ internal static class Program
         ClientUpdater.Updater.Initialize(ProgramConstants.GamePath, ProgramConstants.GetBaseResourcePath(),
             ClientConfiguration.Instance.SettingsIniName, ClientConfiguration.Instance.LocalGame,
             SafePath.GetFile(ProgramConstants.StartupExecutable).Name);
-        System.Threading.Tasks.Task.Run(ClientUpdater.Updater.CheckLocalFileVersions);
+        LocalFileCheck = System.Threading.Tasks.Task.Run(ClientUpdater.Updater.CheckLocalFileVersions);
 
         // Custom mission files, as the XNA client's PreStartup: leftovers of the last mission are removed
         DTAClient.Domain.CustomMissionHelper.Initialize();

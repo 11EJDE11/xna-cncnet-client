@@ -35,10 +35,13 @@ public sealed partial class MainMenuViewModel : ObservableObject
         Task.Run(() => CnCNetPlayerCountTask.InitializeService(new System.Threading.CancellationTokenSource()));
         string windowTitle = ClientConfiguration.Instance.WindowTitle;
         Title = string.IsNullOrEmpty(windowTitle) ? string.Format("{0} Client", ClientConfiguration.Instance.LocalGame) : windowTitle;
-        _ = LoadMapsAsync();
+        Loading = LoadMapsAsync();
     }
 
     public string Title { get; }
+
+    /// <summary>The maps are loading (the loading screen waits for them).</summary>
+    public Task Loading { get; }
 
     [ObservableProperty]
     private string status = "Loading maps...";

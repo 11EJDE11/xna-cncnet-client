@@ -26,7 +26,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Options = options;
         PrivateMessages = services.GetRequiredService<PrivateMessagesViewModel>();
         Title = menu.Title;
-        currentPage = menu;
+        currentPage = Loading;
         primaryPage = menu;
 
         // The main menu music (XNA MainMenu): played on start, faded while a game runs or, with StopMusicOnMenu,
@@ -39,7 +39,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 Music.Play();
         });
         UserINISettings.Instance.SettingsSaved += (_, _) => Dispatcher.UIThread.Post(() => Music.SettingsSaved(CurrentPage == Menu));
-        Dispatcher.UIThread.Post(Music.Play);
+        _ = FinishLoadingAsync();
 
         menu.SkirmishRequested += (_, _) => OpenSkirmish();
         menu.LanRequested += (_, _) => OpenLan();
@@ -163,6 +163,41 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void OpenStatistics() => Statistics.Open();
 
+    /// <summary>The loading screen, the first page.</summary>
+    public LoadingScreenViewModel Loading { get; } = new();
+
+    [ObservableProperty]
+    private bool isLoading = true;
+
+    /// <summary>
+    /// The loading screen's Finish: once the maps are loaded and the updater has checked the local files, the main
+    /// menu is shown with its music, start-up checks and update check, and CnCNet connects if set to.
+    /// </summary>
+    private async System.Threading.Tasks.Task FinishLoadingAsync()
+    {
+        try
+        {
+            await System.Threading.Tasks.Task.WhenAll(Menu.Loading, Program.LocalFileCheck);
+        }
+        catch (Exception ex)
+        {
+            Rampastring.Tools.Logger.Log("Loading failed: " + ex);
+        }
+
+        Rampastring.Tools.Logger.Log("LoadingScreen: maps loaded and local files checked. Proceeding to main menu.");
+        IsLoading = false;
+        CurrentPage = Menu;
+        Music.Play();
+        RunStartupChecks();
+
+        if (UserINISettings.Instance.AutomaticCnCNetLogin &&
+            DTAClient.Domain.Multiplayer.CnCNet.NameValidator.IsNameValid(ProgramConstants.PLAYERNAME, out _) == DTAClient.Domain.Multiplayer.CnCNet.NameValidationError.None)
+        {
+            EnsureCnCNetLobby().InitializeLobby();
+            services.GetRequiredService<DTAClient.Online.CnCNetManager>().Connect();
+        }
+    }
+
     private bool startupChecksRun;
 
     /// <summary>
@@ -254,8 +289,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // The top bar's switches close the private messages window (XNA's tertiary switch)
         PrivateMessages.Close();
 
-        // The main menu's SwitchOn: check for updates again
-        if (newValue == Menu && oldValue != newValue)
+        // The main menu's SwitchOn: check for updates again (not when the loading screen hands over: PostInit checks)
+        if (newValue == Menu && oldValue != newValue && oldValue is not LoadingScreenViewModel)
             Menu.UpdateStatus.SwitchedOn();
 
         // The main menu's SwitchOn / SwitchOff
@@ -314,6 +349,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void OpenCnCNet()
     {
+        EnsureCnCNetLobby().Open();
+        CurrentPage = cncnetLobby;
+    }
+
+    /// <summary>The CnCNet lobby, created and wired the first time it's needed.</summary>
+    private CnCNetLobbyViewModel EnsureCnCNetLobby()
+    {
         if (cncnetLobby == null)
         {
             cncnetLobby = services.GetRequiredService<CnCNetLobbyViewModel>();
@@ -348,8 +390,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             };
         }
 
-        cncnetLobby.Open();
-        CurrentPage = cncnetLobby;
+        return cncnetLobby;
     }
 
     /// <summary>The client is closing: leave the multiplayer rooms and lobbies that were opened.</summary>

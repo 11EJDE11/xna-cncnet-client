@@ -8,6 +8,9 @@
         Width="1280" Height="768"
         WindowStartupLocation="CenterScreen">
   <Window.DataTemplates>
+    <DataTemplate DataType="vm:LoadingScreenViewModel">
+      <views:LoadingScreenView />
+    </DataTemplate>
     <DataTemplate DataType="vm:MainMenuViewModel">
       <views:MainMenuView />
     </DataTemplate>

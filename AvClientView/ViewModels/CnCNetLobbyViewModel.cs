@@ -274,14 +274,20 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     }
 
     /// <summary>Opens the lobby (from the main menu); connects at once if the player chose "remember me".</summary>
+    /// <summary>Sets the lobby up the first time (the XNA lobby is set up at start-up, so it can connect in the background).</summary>
+    public void InitializeLobby()
+    {
+        if (initialized)
+            return;
+
+        initialized = true;
+        lobby.Initialize(Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? string.Empty);
+        OnPropertyChanged(nameof(ChatChannels));
+    }
+
     public void Open()
     {
-        if (!initialized)
-        {
-            initialized = true;
-            lobby.Initialize(Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? string.Empty);
-            OnPropertyChanged(nameof(ChatChannels));
-        }
+        InitializeLobby();
 
         SelectedChannelIndex = lobby.CurrentChannelIndex;
         ResetMessages();

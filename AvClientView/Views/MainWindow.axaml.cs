@@ -61,7 +61,6 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.ExitRequested += (_, _) => viewModel.Music.FadeOutAndExit(Close);
-            Opened += (_, _) => viewModel.RunStartupChecks();
 
             if (topBar == null)
             {
@@ -79,7 +78,20 @@ public partial class MainWindow : Window
 
                 Root.Children.Add(new PrivateMessagesOverlay(viewModel.PrivateMessages) { ZIndex = 9500 });
                 Root.Children.Add(new PrivateMessageNotificationView(viewModel.PrivateMessages) { ZIndex = 12000 });
-                Root.Children.Add(new PrivacyNotificationView { ZIndex = 11500 });
+                // The loading screen shows neither the top bar nor the privacy notice (XNA adds them afterwards)
+                var privacy = new PrivacyNotificationView { ZIndex = 11500 };
+                bool privacyPending = privacy.IsVisible;
+                privacy.IsVisible = false;
+                Root.Children.Add(privacy);
+                topBar.IsVisible = !viewModel.IsLoading;
+                viewModel.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName != nameof(MainWindowViewModel.IsLoading) || viewModel.IsLoading)
+                        return;
+
+                    topBar.IsVisible = !viewModel.Options.Hotkeys.IsOpen;
+                    privacy.IsVisible = privacyPending;
+                };
                 Root.Children.Add(new GameInProgressView(App.Services.GetRequiredService<ClientLogic.Launch.GameInProgressTracker>()) { ZIndex = 13000 });
                 Root.Children.Add(new GameInvitationsView(App.Services.GetRequiredService<GameInvitationsViewModel>()) { ZIndex = 12000 });
 
