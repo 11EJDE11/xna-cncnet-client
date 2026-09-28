@@ -1,13 +1,16 @@
 using System;
+using System.Linq;
 
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.VisualTree;
 
 namespace AvClientView.Theme;
 
@@ -214,7 +217,42 @@ public static class ThemedStyle
         var listBox = Apply(new ListBox { Width = width, Height = height }, fontIndex);
         listBox.Background = PanelBackground;
         listBox.Padding = new Thickness(0);
+
+        // XNAListBox: Ctrl+C copies the selected item's text
+        listBox.KeyDown += async (_, e) =>
+        {
+            if (e.Key != Key.C || !e.KeyModifiers.HasFlag(KeyModifiers.Control) || listBox.SelectedItem == null)
+                return;
+
+            string text = ItemText(listBox);
+            if (string.IsNullOrEmpty(text) || TopLevel.GetTopLevel(listBox)?.Clipboard is not { } clipboard)
+                return;
+
+            e.Handled = true;
+            try
+            {
+                await clipboard.SetTextAsync(text);
+            }
+            catch (Exception ex)
+            {
+                Rampastring.Tools.Logger.Log("Unable to copy a list item: " + ex.Message);
+            }
+        };
         return listBox;
+    }
+
+    /// <summary>The selected item's text as the list shows it: the text blocks of its row, in order.</summary>
+    private static string ItemText(ListBox listBox)
+    {
+        if (listBox.SelectedItem is AvClientView.ViewModels.ChatLineViewModel line)
+            return line.Text;
+
+        if (listBox.ContainerFromItem(listBox.SelectedItem) is not Control container)
+            return listBox.SelectedItem.ToString();
+
+        return string.Join(" ", container.GetVisualDescendants().OfType<TextBlock>()
+            .Where(block => block.IsEffectivelyVisible && !string.IsNullOrWhiteSpace(block.Text))
+            .Select(block => block.Text));
     }
 
     public static TextBox TextBox(double width, double height, string watermark, int fontIndex = 0)
