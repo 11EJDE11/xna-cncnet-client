@@ -240,7 +240,10 @@ public sealed class XnaLayoutReader
             }
         }
 
-        RefreshSize(control);
+        // XNALabel sizes itself when its text is set, before subsequent INI Height/Size keys. Initialize must
+        // not measure it again: getBottom(label) in later controls needs the explicitly overridden height.
+        if (control.Kind != LayoutControlKind.Label || !control.TextSizeInitialized)
+            RefreshSize(control);
     }
 
     /// <summary>
@@ -255,6 +258,7 @@ public sealed class XnaLayoutReader
                 return;
 
             (int width, int height) = MeasureText(control.Text, control.FontIndex);
+            control.TextSizeInitialized = true;
             control.Width = width;
             control.Height = height;
 

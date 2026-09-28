@@ -49,6 +49,8 @@ public sealed class LayoutControl(string name, string typeName, LayoutControlKin
 
     public int Height { get; set; }
 
+    internal bool TextSizeInitialized { get; set; }
+
     public string Text { get; set; } = string.Empty;
 
     public string ToolTip { get; set; }

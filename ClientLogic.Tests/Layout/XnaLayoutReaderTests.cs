@@ -27,6 +27,41 @@ public class XnaLayoutReaderTests
     }
 
     [Fact]
+    public void ExplicitLabelHeightIsKeptWhenFollowingRowsUseItsBottom()
+    {
+        var window = new LayoutControl("Lobby", "INItializableWindow", LayoutControlKind.Panel);
+        var reader = Reader();
+        reader.MeasureText = (_, _) => (100, 17);
+        reader.ReadInitializableWindow(Ini("""
+            [Lobby]
+            $CC0=lblFirst:XNALabel
+            $CC1=ddFirst:GameLobbyDropDown
+            $CC2=lblNext:XNALabel
+            [lblFirst]
+            Text=Starting Units:
+            $Height=12
+            $Y=10
+            [ddFirst]
+            $Height=21
+            $Y=getBottom(lblFirst) + 6
+            [lblNext]
+            Text=Super Weapons:
+            $Height=12
+            $Y=getBottom(ddFirst) + 9
+            """), window, new());
+
+        Assert.Equal(12, window.Find("lblFirst").Height);
+        Assert.Equal(28, window.Find("ddFirst").Y);
+        Assert.Equal(58, window.Find("lblNext").Y);
+        reader.Initialize(window.Find("lblFirst"));
+        Assert.Equal(12, window.Find("lblFirst").Height);
+
+        // A later Text assignment really does resize XNALabel, so the explicit height is not permanent.
+        reader.Apply(window.Find("lblFirst"), "Text", "Changed");
+        Assert.Equal(17, window.Find("lblFirst").Height);
+    }
+
+    [Fact]
     public void AWindowAndItsCodeControlsReadTheirSections()
     {
         var window = Window(("btnSkirmish", "XNAClientButton"));
