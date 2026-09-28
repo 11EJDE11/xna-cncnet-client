@@ -25,6 +25,7 @@ public static class ThemedMessageBox
     /// <param name="onYes">Null for an OK box.</param>
     public static void Show(Panel host, string caption, string description, Action onOk, Action onYes, Action onNo)
     {
+        var previousFocus = TopLevel.GetTopLevel(host)?.FocusManager?.GetFocusedElement();
         var panel = new Panel
         {
             Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)),
@@ -35,6 +36,9 @@ public static class ThemedMessageBox
         void Close(Action then)
         {
             host.Children.Remove(panel);
+            // Another message box may be underneath this one. Return keyboard input to it (or the prior field).
+            if (previousFocus is Control control && TopLevel.GetTopLevel(control) != null)
+                control.Focus();
             then?.Invoke();
         }
 
@@ -73,8 +77,8 @@ public static class ThemedMessageBox
             e.Handled = true;
         };
 
-        host.Children.Add(panel);
         panel.AttachedToVisualTree += (_, _) => panel.Focus();
+        host.Children.Add(panel);
     }
 
     private static Canvas Build(string caption, string description, bool yesNo, Action<string> onClick)

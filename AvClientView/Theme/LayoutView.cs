@@ -312,6 +312,8 @@ public sealed class ThemedButton : Border
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        if (e.InitialPressMouseButton != MouseButton.Left)
+            return;
         if (pressed && IsEffectivelyEnabled)
         {
             pressed = false;

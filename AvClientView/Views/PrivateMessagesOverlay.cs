@@ -32,7 +32,7 @@ public sealed class PrivateMessagesOverlay : Panel
 
         PointerPressed += (_, e) =>
         {
-            if (e.Source == this)
+            if (e.Source == this && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             {
                 viewModel.Close();
                 e.Handled = true;

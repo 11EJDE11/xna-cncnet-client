@@ -82,15 +82,25 @@ public sealed class ThemedTrackbar : Canvas
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
-        if (isHeldDown)
+        if (isHeldDown && IsEffectivelyEnabled && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             Scroll(e.GetPosition(this).X);
+        else
+            isHeldDown = false;
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        if (e.InitialPressMouseButton != MouseButton.Left)
+            return;
         isHeldDown = false;
         e.Pointer.Capture(null);
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        isHeldDown = false;
     }
 
     private void SetValueFromScroll(int value)

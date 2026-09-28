@@ -1,3 +1,6 @@
+using System.Collections.Specialized;
+using System.Linq;
+
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -31,15 +34,32 @@ public sealed class GameInvitationsView : StackPanel
         HorizontalAlignment = HorizontalAlignment.Left;
         VerticalAlignment = VerticalAlignment.Top;
 
-        viewModel.Items.CollectionChanged += (_, _) => Rebuild();
+        void ItemsChanged(object sender, NotifyCollectionChangedEventArgs e) => Rebuild();
+        AttachedToVisualTree += (_, _) => { viewModel.Items.CollectionChanged += ItemsChanged; Rebuild(); };
+        DetachedFromVisualTree += (_, _) => viewModel.Items.CollectionChanged -= ItemsChanged;
         Rebuild();
     }
 
     private void Rebuild()
     {
-        Children.Clear();
-        foreach (GameInvitationItemViewModel item in viewModel.Items)
-            Children.Add(Box(item));
+        // Keep the existing cards and their pressed buttons while unrelated invitations arrive or expire.
+        for (int i = Children.Count - 1; i >= 0; i--)
+            if (!viewModel.Items.Any(item => ReferenceEquals(item, Children[i].DataContext)))
+                Children.RemoveAt(i);
+
+        for (int i = 0; i < viewModel.Items.Count; i++)
+        {
+            GameInvitationItemViewModel item = viewModel.Items[i];
+            Control card = Children.FirstOrDefault(child => ReferenceEquals(child.DataContext, item));
+            if (card == null)
+            {
+                card = Box(item);
+                card.DataContext = item;
+                Children.Insert(i, card);
+            }
+            else if (Children.IndexOf(card) != i)
+                Children.Move(Children.IndexOf(card), i);
+        }
 
         IsVisible = Children.Count > 0;
     }

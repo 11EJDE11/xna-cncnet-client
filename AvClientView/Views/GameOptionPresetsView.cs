@@ -30,13 +30,8 @@ public sealed class GameOptionPresetsView : Panel
     {
         this.viewModel = viewModel;
         Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
-        IsVisible = false;
-
-        viewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(GameOptionPresetsViewModel.IsOpen))
-                IsVisible = viewModel.IsOpen;
-        };
+        DataContext = viewModel;
+        this.Bind(IsVisibleProperty, new Binding(nameof(GameOptionPresetsViewModel.IsOpen)));
 
         try
         {
@@ -92,6 +87,7 @@ public sealed class GameOptionPresetsView : Panel
             ["ddPresetSelect"] = layout =>
             {
                 var dropDown = new ThemedDropDown(layout.Width, layout.Height, layout.FontIndex) { DataContext = viewModel };
+                dropDown.ItemSelectable = index => index != 0 || !viewModel.IsLoad;
                 dropDown.Bind(ThemedDropDown.ItemsSourceProperty, new Binding(nameof(GameOptionPresetsViewModel.Items)));
                 dropDown.Bind(ThemedDropDown.SelectedIndexProperty, new Binding(nameof(GameOptionPresetsViewModel.SelectedIndex)) { Mode = BindingMode.TwoWay });
                 return dropDown;
@@ -116,11 +112,18 @@ public sealed class GameOptionPresetsView : Panel
         {
             loadSave.DataContext = viewModel;
             loadSave.Bind(IsEnabledProperty, new Binding(nameof(GameOptionPresetsViewModel.CanLoadOrSave)));
-            viewModel.PropertyChanged += (_, e) =>
+            void UpdateText(object sender, System.ComponentModel.PropertyChangedEventArgs e)
             {
                 if (e.PropertyName == nameof(GameOptionPresetsViewModel.LoadSaveText))
                     loadSave.Text = viewModel.LoadSaveText;
+            }
+            loadSave.AttachedToVisualTree += (_, _) =>
+            {
+                viewModel.PropertyChanged += UpdateText;
+                loadSave.Text = viewModel.LoadSaveText;
             };
+            loadSave.DetachedFromVisualTree += (_, _) => viewModel.PropertyChanged -= UpdateText;
+            loadSave.Text = viewModel.LoadSaveText;
         }
 
         if (LayoutView.FindNamed<ThemedButton>(canvas, "btnDelete") is ThemedButton delete)

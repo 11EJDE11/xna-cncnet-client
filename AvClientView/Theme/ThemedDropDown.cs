@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 
 using Avalonia;
@@ -38,6 +39,8 @@ public sealed class ThemedDropDown : Border
     private readonly Popup popup;
     private readonly ListBox list;
     private readonly int fontIndex;
+    private INotifyCollectionChanged observedItems;
+    private bool updatingItems;
 
     public ThemedDropDown(double width, double height, int fontIndex = 0)
     {
@@ -108,6 +111,8 @@ public sealed class ThemedDropDown : Border
         list.Resources["ListBoxItemPadding"] = new Thickness(0);
         list.SelectionChanged += (_, _) =>
         {
+            if (updatingItems)
+                return;
             if (!CanChange || !IsEffectivelyEnabled)
             {
                 popup.IsOpen = false;
@@ -136,6 +141,14 @@ public sealed class ThemedDropDown : Border
         };
 
         Child = new Grid { Children = { decoration, text, arrow, popup } };
+        AttachedToVisualTree += (_, _) => { ObserveItems(); RefreshItems(); };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            if (observedItems != null)
+                observedItems.CollectionChanged -= ItemsChanged;
+            observedItems = null;
+            popup.IsOpen = false;
+        };
         UpdateView();
     }
 
@@ -172,11 +185,44 @@ public sealed class ThemedDropDown : Border
     {
         base.OnPropertyChanged(change);
 
+        if (change.Property == ItemsSourceProperty && list != null)
+        {
+            ObserveItems();
+            RefreshItems();
+            return;
+        }
+
         if (change.Property == ItemsSourceProperty || change.Property == SelectedIndexProperty ||
             change.Property == CanChangeProperty || change.Property == IsEffectivelyEnabledProperty)
         {
             UpdateView();
         }
+    }
+
+    private void ObserveItems()
+    {
+        if (observedItems != null)
+            observedItems.CollectionChanged -= ItemsChanged;
+        observedItems = TopLevel.GetTopLevel(this) != null ? ItemsSource as INotifyCollectionChanged : null;
+        if (observedItems != null)
+            observedItems.CollectionChanged += ItemsChanged;
+    }
+
+    private void ItemsChanged(object sender, NotifyCollectionChangedEventArgs e) => RefreshItems();
+
+    private void RefreshItems()
+    {
+        updatingItems = true;
+        try
+        {
+            list.SelectedIndex = -1;
+            list.ItemsSource = ItemsSource?.Cast<object>().Select((item, i) => new DropDownItem(i, item?.ToString())).ToList();
+        }
+        finally
+        {
+            updatingItems = false;
+        }
+        UpdateView();
     }
 
     private void UpdateView()
@@ -216,12 +262,30 @@ public sealed class ThemedDropDown : Border
         if (!CanChange || !IsEffectivelyEnabled || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
 
-        list.ItemsSource = ItemsSource?.Cast<object>().Select((item, i) => new DropDownItem(i, item?.ToString())).ToList();
-        list.SelectedIndex = -1;
+        RefreshItems();
+        if (list.ItemCount == 0)
+            return;
         if (!popup.IsOpen)
             ThemeSounds.DropDown.Play();
 
         popup.IsOpen = !popup.IsOpen;
         e.Handled = true;
+    }
+
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        base.OnPointerWheelChanged(e);
+        if (!CanChange || !IsEffectivelyEnabled || e.Delta.Y == 0 || !new Rect(Bounds.Size).Contains(e.GetPosition(this)))
+            return;
+
+        int count = ItemsSource?.Cast<object>().Count() ?? 0;
+        int next = SelectedIndex + (e.Delta.Y < 0 ? 1 : -1);
+        if (next < 0 || next >= count)
+            return;
+
+        // XNA tries the adjacent item only: it does not skip disabled choices.
+        e.Handled = true;
+        if (ItemSelectable?.Invoke(next) != false)
+            SetCurrentValue(SelectedIndexProperty, next);
     }
 }

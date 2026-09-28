@@ -73,7 +73,7 @@ public sealed class ThemedCheckBox : StackPanel
 
         bool enabled = IsEffectivelyEnabled;
         box.Source = IsChecked ? (enabled ? Checked : CheckedDisabled) : (enabled ? Clear : ClearDisabled);
-        label.Opacity = enabled ? 1 : 0.6;
+        label.Foreground = new SolidColorBrush(enabled ? ThemeAssets.LabelColor : Colors.Gray);
     }
 
     protected override void OnPointerReleased(Avalonia.Input.PointerReleasedEventArgs e)
