@@ -258,14 +258,22 @@ public sealed class StatisticsView : Panel
         return grid;
     }
 
-    private static TextBlock Cell(string text, IBrush brush = null) => new()
+    private static TextBlock Cell(string text, IBrush brush = null)
     {
-        Text = text,
-        Foreground = brush,
-        Margin = new Thickness(3, 1),
-        TextTrimming = TextTrimming.None,
-        ClipToBounds = true,
-    };
+        var cell = new TextBlock
+        {
+            Text = text,
+            Margin = new Thickness(3, 1),
+            TextTrimming = TextTrimming.None,
+            ClipToBounds = true,
+        };
+
+        // Only a given colour: a null Foreground would hide the text instead of inheriting the list's colour
+        if (brush != null)
+            cell.Foreground = brush;
+
+        return cell;
+    }
 
     private Control GameList(LayoutControl layout)
     {
