@@ -32,6 +32,20 @@ public partial class MainWindow : Window
         Width = mode?.WindowWidth ?? renderWidth;
         Height = mode?.WindowHeight ?? renderHeight;
 
+        // The game's icon (wm.SetIcon: Resources\clienticon.ico)
+        string iconPath = Rampastring.Tools.SafePath.CombineFilePath(ClientCore.ProgramConstants.GetBaseResourcePath(), "clienticon.ico");
+        if (System.IO.File.Exists(iconPath))
+        {
+            try
+            {
+                Icon = new WindowIcon(iconPath);
+            }
+            catch (Exception ex)
+            {
+                Rampastring.Tools.Logger.Log("Loading the window icon failed: " + ex.Message);
+            }
+        }
+
         Grid root = Root;
         Content = null;
         root.Width = renderWidth;
