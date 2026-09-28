@@ -7,7 +7,5 @@
   <Panel>
     <!-- The theme's main menu (MainMenu.ini), centred as the XNA client centres it; built in code-behind -->
     <ContentControl x:Name="MenuHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
-    <TextBlock Text="{Binding Status}" Margin="12,6" Opacity="0.7" Foreground="Silver"
-               HorizontalAlignment="Left" VerticalAlignment="Bottom" />
   </Panel>
 </UserControl>

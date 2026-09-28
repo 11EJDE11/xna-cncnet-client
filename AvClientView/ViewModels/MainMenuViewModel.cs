@@ -71,6 +71,9 @@ public sealed partial class MainMenuViewModel : ObservableObject
         {
             Logger.Log("Loading maps failed: " + ex);
             Status = "Loading maps failed: " + ex.Message;
+
+            // The XNA loading screen stops the client with the error; say so instead of silently listing no maps
+            dialogs.ShowMessage("Loading maps failed", ex.Message);
         }
     }
 
