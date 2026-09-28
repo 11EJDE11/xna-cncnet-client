@@ -156,9 +156,32 @@ public static class ThemedStyle
         };
         panel.PropertyChanged += (_, e) =>
         {
-            if (e.Property == Visual.IsVisibleProperty && panel.IsVisible && TopLevel.GetTopLevel(panel) != null)
+            if (e.Property != Visual.IsVisibleProperty || TopLevel.GetTopLevel(panel) == null)
+                return;
+
+            if (panel.IsVisible)
                 FadeIn();
+            else if (panel.Parent is Panel parent)
+                FadeOutDarkening(parent, panel.ZIndex, brush.Opacity);
         };
+    }
+
+    /// <summary>
+    /// DarkeningPanel.Hide: the window goes at once and the darkening fades out (ALPHA_RATE), drawn by a short-lived
+    /// layer where the panel was.
+    /// </summary>
+    public static void FadeOutDarkening(Panel host, int zIndex, double fromOpacity = 1)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)) { Opacity = fromOpacity };
+        var layer = new Border { Background = brush, IsHitTestVisible = false, ZIndex = zIndex };
+        host.Children.Add(layer);
+
+        brush.Transitions =
+        [
+            new Avalonia.Animation.DoubleTransition { Property = Brush.OpacityProperty, Duration = TimeSpan.FromMilliseconds(165) },
+        ];
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => brush.Opacity = 0, Avalonia.Threading.DispatcherPriority.Render);
+        Avalonia.Threading.DispatcherTimer.RunOnce(() => host.Children.Remove(layer), TimeSpan.FromMilliseconds(250));
     }
 
     public static T Apply<T>(T control, int fontIndex = 0) where T : TemplatedControl

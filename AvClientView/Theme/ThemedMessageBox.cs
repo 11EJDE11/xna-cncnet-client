@@ -37,6 +37,7 @@ public static class ThemedMessageBox
         void Close(Action then)
         {
             host.Children.Remove(panel);
+            ThemedStyle.FadeOutDarkening(host, panel.ZIndex);
             // Another message box may be underneath this one. Return keyboard input to it (or the prior field).
             if (previousFocus is Control control && TopLevel.GetTopLevel(control) != null)
                 control.Focus();
