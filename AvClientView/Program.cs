@@ -30,6 +30,13 @@ internal static class Program
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         InitializeClient();
 
+        // A crash on any other thread is logged and reported as the XNA client does
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+                Services.CrashHandler.HandleException(ex);
+        };
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
@@ -56,8 +63,8 @@ internal static class Program
 
         FileInfo logFile = SafePath.GetFile(clientUserFilesDirectory.FullName, "avclient.log");
         ProgramConstants.LogFileName = logFile.FullName;
-        if (logFile.Exists)
-            logFile.Delete();
+        // The previous log is kept as avclient_{time}.log (the XNA client's RotateLogFiles)
+        Services.CrashHandler.RotateLogFiles(clientUserFilesDirectory, logFile);
 
         Logger.Initialize(clientUserFilesDirectory.FullName, logFile.Name);
         Logger.WriteLogFile = true;

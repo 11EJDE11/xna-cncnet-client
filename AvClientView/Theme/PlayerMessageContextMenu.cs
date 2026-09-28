@@ -22,7 +22,8 @@ public static class PlayerMessageContextMenu
         var items = new List<ThemedMenuItem>();
         if (!string.IsNullOrEmpty(message.SenderName) && connection.UserList.Any(u => u.Name == message.SenderName))
             items.AddRange(model.PlayerMenu(message.SenderName));
-        foreach (string link in message.Message.GetLinks().Distinct())
+        // GetLinks returns null when the message has no links
+        foreach (string link in (message.Message.GetLinks() ?? []).Distinct())
         {
             string display = link.Length > 40 ? link[..30] + "..." + link[^5..] : link;
             items.Add(new("Open Link".L10N("Client:Main:OpenLink") + " " + display, () => LinkOpener.OpenLink(link, App.Services.GetRequiredService<IDialogService>())));

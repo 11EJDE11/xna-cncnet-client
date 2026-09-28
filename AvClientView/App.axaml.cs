@@ -31,9 +31,10 @@ public sealed class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        // A crash on the UI thread is written to the client log first
+        // A crash on the UI thread: logged, the log copied to ClientCrashLogs and reported, then the client closes
+        // (the XNA client's PreStartup.HandleException)
         Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, e) =>
-            Rampastring.Tools.Logger.Log("Unhandled exception on the UI thread: " + e.Exception);
+            AvClientView.Services.CrashHandler.HandleException(e.Exception);
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
