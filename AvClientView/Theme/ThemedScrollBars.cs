@@ -92,6 +92,12 @@ public static class ThemedScrollBars
             Grid.SetRow(track, 1);
 
             var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto"), Width = width };
+
+            // XNAScrollBar draws nothing (and disables its arrows) while there's nothing to scroll
+            root.Bind(Visual.IsVisibleProperty, new TemplateBinding(RangeBase.MaximumProperty)
+            {
+                Converter = new Avalonia.Data.Converters.FuncValueConverter<double, bool>(maximum => maximum > 0),
+            });
             if (background != null)
             {
                 var trackBackground = Stretched(background, 1);
