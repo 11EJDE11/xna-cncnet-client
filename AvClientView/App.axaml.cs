@@ -40,6 +40,7 @@ public sealed class App : Application
             AvClientView.Theme.ThemeFonts.Initialize();
 
             var mainWindow = new MainWindow();
+            AvClientView.Theme.ThemedToolTips.Apply(this, mainWindow);
 
             Services = new ServiceCollection()
                 .AddAvaloniaFrontEnd(mainWindow)
