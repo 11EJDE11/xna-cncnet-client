@@ -252,6 +252,9 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
 
     public event EventHandler BackRequested;
 
+    /// <summary>Create Game while in a room: the room is shown instead.</summary>
+    public event EventHandler RoomShowRequested;
+
     /// <summary>The user wants the announced update: the main menu checks for updates (UpdateCheck).</summary>
     public event EventHandler UpdateCheckRequested;
 
@@ -455,8 +458,12 @@ public sealed partial class CnCNetLobbyViewModel : ObservableObject
     [RelayCommand]
     private void OpenCreateGame()
     {
-        if (lobby.State.IsInGameRoom)
+        // Already in a room: show it (BtnNewGame_LeftClick's topBar.SwitchToPrimary)
+        if (lobby.State.IsInGameRoom || lobby.LoadingRoom.IsActive)
+        {
+            RoomShowRequested?.Invoke(this, EventArgs.Empty);
             return;
+        }
 
         NewRoomName = CnCNetLobbyService.DefaultRoomName;
         NewRoomPassword = string.Empty;

@@ -168,7 +168,10 @@ public sealed class PrivateMessagesView : UserControl
             label.DataContext = model;
             label.Bind(IsVisibleProperty, new Binding("!ShowRecentPlayers"));
         }
-        return new Viewbox { Stretch = Stretch.Uniform, Child = root, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        // At its own size, centred (the XNA window's CenterOnParent); it isn't stretched to the screen
+        root.HorizontalAlignment = HorizontalAlignment.Center;
+        root.VerticalAlignment = VerticalAlignment.Center;
+        return root;
     }
 
     private static void AddCell(Grid row, string text, int column)
