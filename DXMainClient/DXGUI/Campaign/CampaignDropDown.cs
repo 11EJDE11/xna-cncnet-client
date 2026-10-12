@@ -39,12 +39,12 @@ public class CampaignDropDown : GameSessionDropDown
 
     protected override void ParseControlINIAttribute(IniFile iniFile, string key, string value)
     {
-        if (key == "DataWriteMode" && value.ToUpper() == "MAPCODE" && !ClientConfiguration.Instance.CopyMissionsToSpawnmapINI)
+        base.ParseControlINIAttribute(iniFile, key, value);
+
+        if (AffectsMapCode && !ClientConfiguration.Instance.CopyMissionsToSpawnmapINI)
         {
             throw new Exception($"Campaign settings can't affect map code if {nameof(ClientConfiguration.Instance.CopyMissionsToSpawnmapINI)} is disabled!\n\n"
                 + $"Offending setting control: {Name}");
         }
-        
-        base.ParseControlINIAttribute(iniFile, key, value);
     }
 }

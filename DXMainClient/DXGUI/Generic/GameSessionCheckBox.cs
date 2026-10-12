@@ -3,7 +3,6 @@
 using ClientGUI;
 
 using DTAClient.Domain.Multiplayer;
-using DTAClient.DXGUI.Multiplayer.GameLobby;
 
 using Rampastring.Tools;
 using Rampastring.XNAUI;
@@ -40,8 +39,8 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
 
     public bool AllowChanges { get; set; } = true;
 
-    public bool AffectsSpawnIni => !string.IsNullOrWhiteSpace(spawnIniOption);
-    public bool AffectsMapCode => !string.IsNullOrWhiteSpace(customIniPath);
+    public bool AffectsSpawnIni => !string.IsNullOrWhiteSpace(spawnIniOption) || checkedEffects.AffectsSpawnIni || uncheckedEffects.AffectsSpawnIni;
+    public bool AffectsMapCode => !string.IsNullOrWhiteSpace(customIniPath) || checkedEffects.AffectsMapCode || uncheckedEffects.AffectsMapCode;
 
     public bool AllowScoring
         => !((mapScoringMode == CheckBoxMapScoringMode.DenyWhenChecked && Checked)
@@ -57,6 +56,16 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
 
     private string enabledSpawnIniValue = "True";
     private string disabledSpawnIniValue = "False";
+
+    /// <summary>
+    /// Effects applied while the check box is checked, defined with CheckedEffects.
+    /// </summary>
+    private GameOptionEffects checkedEffects = new();
+
+    /// <summary>
+    /// Effects applied while the check box is unchecked, defined with UncheckedEffects.
+    /// </summary>
+    private GameOptionEffects uncheckedEffects = new();
 
     private bool DefaultChecked { get; set; }
 
@@ -129,6 +138,12 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
             case "CustomIniPath":
                 customIniPath = value;
                 return;
+            case "CheckedEffects":
+                checkedEffects = GameOptionEffects.FromIniSection(iniFile, value, Name);
+                return;
+            case "UncheckedEffects":
+                uncheckedEffects = GameOptionEffects.FromIniSection(iniFile, value, Name);
+                return;
             case "Reversed":
                 reversed = Conversions.BooleanFromString(value, false);
                 return;
@@ -180,26 +195,38 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
         set => Checked = value != 0;  // 0 = unchecked/off, 1 = checked/on
     }
 
+    /// <summary>
+    /// Gets the effects of the current checked state. Effects defined by SpawnIniOption
+    /// and CustomIniPath come first, followed by CheckedEffects or UncheckedEffects.
+    /// </summary>
+    private GameOptionEffects GetCurrentEffects()
+    {
+        var effects = new GameOptionEffects();
+        bool enabled = Checked != reversed;
+
+        if (!string.IsNullOrWhiteSpace(spawnIniOption))
+            effects.AddSpawnIniOption(spawnIniOption, enabled ? enabledSpawnIniValue : disabledSpawnIniValue);
+
+        if (enabled && !string.IsNullOrWhiteSpace(customIniPath))
+            effects.AddMapCode(customIniPath);
+
+        return effects.Add(Checked ? checkedEffects : uncheckedEffects);
+    }
+
     public void ApplySpawnIniCode(IniFile spawnIni)
     {
         if (!AffectsSpawnIni)
             return;
 
-        string value = disabledSpawnIniValue;
-        if (Checked != reversed)
-        {
-            value = enabledSpawnIniValue;
-        }
-
-        spawnIni.SetStringValue("Settings", spawnIniOption, value);
+        GetCurrentEffects().ApplySpawnIniCode(spawnIni);
     }
-        
+
     public void ApplyMapCode(IniFile mapIni, GameMode gameMode)
     {
-        if (!AffectsMapCode || Checked == reversed)
+        if (!AffectsMapCode)
             return;
 
-        MapCodeHelper.ApplyMapCode(mapIni, customIniPath, gameMode);
+        GetCurrentEffects().ApplyMapCode(mapIni, gameMode);
     }
 
     public override void OnLeftClick(InputEventArgs inputEventArgs)

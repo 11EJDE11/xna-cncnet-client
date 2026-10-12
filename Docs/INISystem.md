@@ -382,7 +382,12 @@ SpawnIniOption=                            ; string,  spawn INI option to set wh
 EnabledSpawnIniValue=True                  ; string,  spawn INI value when checkbox is checked. Defaults to `True`.
 DisabledSpawnIniValue=False                ; string,  spawn INI value when checkbox is unchecked. Defaults to `False`.
 CustomIniPath=                             ; string,  custom INI path for map-specific settings.
-Reversed=false                             ; boolean, reverse the checkbox behavior.
+CheckedEffects=                            ; string,  name of a game option effects section applied while checked.
+                                           ;          See [Game Option Effects](#game-option-effects).
+UncheckedEffects=                          ; string,  name of a game option effects section applied while unchecked.
+                                           ;          See [Game Option Effects](#game-option-effects).
+Reversed=false                             ; boolean, reverse the checkbox behavior. Does not affect `CheckedEffects`
+                                           ;          and `UncheckedEffects`.
 Checked=false                              ; boolean, initial checked state.
 MapScoringMode=Irrelevant                  ; enum (Irrelevant | DenyWhenChecked | DenyWhenUnchecked),
                                            ;          controls whether the setting affects map scoring.
@@ -434,6 +439,10 @@ SpawnIniOption=                            ; string,  spawn INI option to set ba
 DefaultIndex=0                             ; integer, default selected item index.
 DataWriteMode=STRING                       ; enum (STRING | INDEX | BOOLEAN | MAPCODE),
                                            ;          determines how the value is written to spawn INI.
+ItemEffects=                               ; comma-separated strings,
+                                           ;          names of game option effects sections, one per item, applied
+                                           ;          while that item is selected. Leave an entry empty for an item
+                                           ;          without effects. See [Game Option Effects](#game-option-effects).
 OptionName=                                ; string,  display name for this option.
 BroadcastToLobby=false                     ; boolean, include this dropdown in the GAME broadcast to CnCNet lobby.
 ShowInGameList=false                       ; boolean, show icon/text in the game list.
@@ -462,6 +471,47 @@ Use this control type for campaign dropdowns in `CampaignSelector.ini`. Inherits
 _(inherits [GameSessionDropDown](#GameSessionDropDown))_
 
 Use this control type for game lobby dropdowns in `GameLobbyBase.ini`. Inherits all properties from `GameSessionDropDown`.
+
+##### Game Option Effects
+
+Game option effects let a single checkbox state or dropdown item make any number of changes to the game session, such as writing several `spawn.ini` keys and applying map code at the same time. Each state points to an effects section in the same INI file as the control:
+
+- Checkboxes use `CheckedEffects` and `UncheckedEffects`.
+- Dropdowns use `ItemEffects`, which lists one section per item in item order. When `ItemEffects` is used, `Items` only defines the dropdown entries (and their labels if `ItemLabels` isn't set).
+
+```ini
+[SOMEEFFECTSSECTION]
+SpawnIni.<Key>=                            ; string,  writes `<Key>=<value>` into the `[Settings]` section of spawn.ini.
+                                           ;          Can be specified any number of times with different keys.
+MapCode=                                   ; comma-separated strings,
+                                           ;          map code INI files to apply to the map, in order.
+```
+
+Effects are applied after the legacy `SpawnIniOption`, `DataWriteMode` and `CustomIniPath` behavior of the same control, so both can be combined. The global, game mode and map `ForcedSpawnIniOptions` are still written after all controls (see [ForcedSpawnIniOptions](#forcedspawninioptions)). If two controls write the same `spawn.ini` key, the one that is applied last wins. As with `DataWriteMode=MAPCODE`, map code INI files should be placed under `INI\Game Options` so that they are included in the file integrity check.
+
+For example, a single crates dropdown that can also disable crates:
+
+```ini
+[cmbCrates]
+OptionName=Crates:
+Items=None,Minimal,Normal,Extreme
+DefaultIndex=0
+ItemEffects=Crates.None,Crates.Minimal,Crates.Normal,Crates.Extreme
+
+[Crates.None]
+SpawnIni.Crates=False
+
+[Crates.Minimal]
+SpawnIni.Crates=True
+MapCode=INI\Game Options\Crates\Minimal.ini
+
+[Crates.Normal]
+SpawnIni.Crates=True
+
+[Crates.Extreme]
+SpawnIni.Crates=True
+MapCode=INI\Game Options\Crates\Extreme.ini
+```
 
 #### XNAOptionsPanel Controls
 
