@@ -7,7 +7,7 @@ namespace ClientGUI.Options;
 /// <summary>
 /// Writes a key into spawn.ini.
 /// </summary>
-public class SpawnIniEffect : OptionEffect, ISpawnIniEffect
+public class SpawnIniEffect : OptionEffect
 {
     public const string TYPE_NAME = "SpawnIni";
 
@@ -31,7 +31,7 @@ public class SpawnIniEffect : OptionEffect, ISpawnIniEffect
 
     public string Value { get; }
 
-    public void ApplyToSpawnIni(IniFile spawnIni) => spawnIni.SetStringValue(Section, Key, Value);
+    public override void ApplyToSpawnIni(IniFile spawnIni) => spawnIni.SetStringValue(Section, Key, Value);
 
     public static SpawnIniEffect FromIniSection(IniSection section)
         => new(section.GetStringValue("Section", DEFAULT_SECTION),

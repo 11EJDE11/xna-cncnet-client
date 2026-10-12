@@ -16,12 +16,45 @@ namespace ClientGUI.Options;
 /// <remarks>
 /// Each effect is defined in its own INI section and reads its own properties
 /// from it. The section's <c>Type</c> key selects the kind of effect.
-/// What an effect does is defined by the effect interfaces it implements, for example
-/// <see cref="ISpawnIniEffect"/> or <see cref="IPersistentEffect"/>.
+/// Each kind of effect overrides only the methods for what it changes; the rest do nothing.
 /// </remarks>
 public abstract class OptionEffect
 {
     private const string TYPE_KEY = "Type";
+
+    /// <summary>
+    /// Changes spawn.ini when a game is launched.
+    /// </summary>
+    public virtual void ApplyToSpawnIni(IniFile spawnIni) { }
+
+    /// <summary>
+    /// Changes the map (spawnmap.ini) when a game is launched.
+    /// </summary>
+    /// <param name="mapIni">The map INI file.</param>
+    /// <param name="gameModeName">Name of the selected game mode, if there is one.</param>
+    public virtual void ApplyToMap(IniFile mapIni, string? gameModeName) { }
+
+    /// <summary>
+    /// Gets the command line argument added to the game executable when a game is launched, if any.
+    /// </summary>
+    public virtual string? LaunchArgument => null;
+
+    /// <summary>
+    /// Whether everything the effect needs to be committed, such as a source file, exists.
+    /// </summary>
+    public virtual bool IsAvailable => true;
+
+    /// <summary>
+    /// Makes a lasting change, such as copying a file, which stays in place until the option
+    /// switches to another state and <see cref="Revert"/> is called. Called when the option's
+    /// state is committed: when user settings are saved, or when a game is launched for game options.
+    /// </summary>
+    public virtual void Commit() { }
+
+    /// <summary>
+    /// Undoes the lasting change made by <see cref="Commit"/>.
+    /// </summary>
+    public virtual void Revert() { }
 
     /// <summary>
     /// Reads an effect from the INI section with the given name.

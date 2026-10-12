@@ -43,7 +43,7 @@ public class CampaignDropDown : GameSessionDropDown
     {
         base.ParseControlINIAttribute(iniFile, key, value);
 
-        if (this.HasEffect<IMapCodeEffect>() && !ClientConfiguration.Instance.CopyMissionsToSpawnmapINI)
+        if (this.HasEffect<MapCodeEffect>() && !ClientConfiguration.Instance.CopyMissionsToSpawnmapINI)
         {
             throw new Exception($"Campaign settings can't affect map code if {nameof(ClientConfiguration.Instance.CopyMissionsToSpawnmapINI)} is disabled!\n\n"
                 + $"Offending setting control: {Name}");

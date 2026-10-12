@@ -18,18 +18,17 @@ public static class OptionExtensions
     /// <summary>
     /// Checks whether any state of the option has an effect of the given kind.
     /// </summary>
-    public static bool HasEffect<TEffect>(this IOption option)
+    public static bool HasEffect<TEffect>(this IOption option) where TEffect : OptionEffect
         => Enumerable.Range(0, option.StateCount).Any(state => option.GetStateEffects(state).OfType<TEffect>().Any());
 
     /// <summary>
-    /// Checks whether all persistent effects of the given state can be applied.
+    /// Checks whether all effects of the given state can be committed.
     /// </summary>
     public static bool IsStateAvailable(this IOption option, int state)
-        => option.GetStateEffects(state).OfType<IPersistentEffect>().All(effect => effect.IsAvailable);
+        => option.GetStateEffects(state).All(effect => effect.IsAvailable);
 
     /// <summary>
-    /// Applies the persistent effects of the given state, after reverting
-    /// the persistent effects of all other states.
+    /// Commits the effects of the given state, after reverting the effects of all other states.
     /// </summary>
     public static void CommitPersistentEffects(this IOption option, int state)
     {
@@ -38,26 +37,26 @@ public static class OptionExtensions
             if (i == state)
                 continue;
 
-            foreach (IPersistentEffect effect in option.GetStateEffects(i).OfType<IPersistentEffect>())
+            foreach (OptionEffect effect in option.GetStateEffects(i))
                 effect.Revert();
         }
 
-        foreach (IPersistentEffect effect in option.GetStateEffects(state).OfType<IPersistentEffect>())
-            effect.Apply();
+        foreach (OptionEffect effect in option.GetStateEffects(state))
+            effect.Commit();
     }
 
     public static void ApplyToSpawnIni(this IEnumerable<OptionEffect> effects, IniFile spawnIni)
     {
-        foreach (ISpawnIniEffect effect in effects.OfType<ISpawnIniEffect>())
+        foreach (OptionEffect effect in effects)
             effect.ApplyToSpawnIni(spawnIni);
     }
 
     public static void ApplyToMap(this IEnumerable<OptionEffect> effects, IniFile mapIni, string? gameModeName)
     {
-        foreach (IMapCodeEffect effect in effects.OfType<IMapCodeEffect>())
+        foreach (OptionEffect effect in effects)
             effect.ApplyToMap(mapIni, gameModeName);
     }
 
     public static IEnumerable<string> GetLaunchArguments(this IEnumerable<OptionEffect> effects)
-        => effects.OfType<ILaunchArgumentEffect>().Select(effect => effect.Argument);
+        => effects.Select(effect => effect.LaunchArgument).OfType<string>();
 }

@@ -15,7 +15,7 @@ namespace ClientGUI.Options;
 /// Copies a file into place while the option is in the effect's state,
 /// and removes it again when the option switches to another state.
 /// </summary>
-public class FileEffect : OptionEffect, IPersistentEffect
+public class FileEffect : OptionEffect
 {
     public const string TYPE_NAME = "File";
 
@@ -31,11 +31,11 @@ public class FileEffect : OptionEffect, IPersistentEffect
         this.fileInfo = fileInfo;
     }
 
-    public bool IsAvailable => File.Exists(fileInfo.SourcePath);
+    public override bool IsAvailable => File.Exists(fileInfo.SourcePath);
 
-    public void Apply() => fileInfo.Apply();
+    public override void Commit() => fileInfo.Apply();
 
-    public void Revert() => fileInfo.Revert();
+    public override void Revert() => fileInfo.Revert();
 
     public static FileEffect FromIniSection(IniSection section)
     {
