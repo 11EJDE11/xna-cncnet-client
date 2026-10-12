@@ -1,11 +1,12 @@
 ﻿using ClientCore.I18N;
+using ClientGUI.Options;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 
 namespace ClientGUI.Settings
 {
-    public abstract class SettingDropDownBase : XNAClientDropDown, IUserSetting
+    public abstract class SettingDropDownBase : OptionDropDown, IUserSetting
     {
         public SettingDropDownBase(WindowManager windowManager) : base(windowManager) { }
 
@@ -78,7 +79,18 @@ namespace ClientGUI.Settings
             base.ParseControlINIAttribute(iniFile, key, value);
         }
 
-        public abstract void Load();
+        public int SavedState => ReadSavedValue();
+
+        /// <summary>
+        /// Reads the selected item index stored in the user settings file.
+        /// </summary>
+        protected abstract int ReadSavedValue();
+
+        public void Load()
+        {
+            SelectedIndex = ReadSavedValue();
+            originalState = SelectedIndex;
+        }
 
         public abstract bool Save();
     }

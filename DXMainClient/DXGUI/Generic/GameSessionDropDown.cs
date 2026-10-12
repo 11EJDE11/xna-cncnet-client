@@ -1,12 +1,10 @@
-﻿using System;
+﻿using System.Collections.Generic;
 
 using ClientCore.Extensions;
 using ClientCore.I18N;
 
 using ClientGUI;
-
-using DTAClient.Domain.Multiplayer;
-using DTAClient.DXGUI.Multiplayer.GameLobby;
+using ClientGUI.Options;
 
 using Rampastring.Tools;
 using Rampastring.XNAUI;
@@ -18,7 +16,7 @@ namespace DTAClient.DXGUI.Generic;
 /// A game option drop-down for the game lobby or campaign.
 /// </summary>
 // TODO split the logic between descendants better and clean up
-public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
+public class GameSessionDropDown : OptionDropDown, IGameSessionSetting
 {
 
     private const int DEFAULT_SORT_ORDER = 0;
@@ -26,8 +24,6 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
     public GameSessionDropDown(WindowManager windowManager) : base(windowManager) { }
 
     public string OptionName { get; private set; }
-    public bool AffectsSpawnIni => dataWriteMode != DropDownDataWriteMode.MAPCODE;
-    public bool AffectsMapCode => dataWriteMode == DropDownDataWriteMode.MAPCODE;
     public bool AllowScoring => true;  // TODO
 
     private DropDownDataWriteMode dataWriteMode = DropDownDataWriteMode.BOOLEAN;
@@ -160,40 +156,36 @@ public class GameSessionDropDown : XNAClientDropDown, IGameSessionSetting
         set => SelectedIndex = value;
     }
 
-    public void ApplySpawnIniCode(IniFile spawnIni)
+    public override void Initialize()
     {
-        if (!AffectsSpawnIni || SelectedIndex < 0 || SelectedIndex >= Items.Count)
-            return;
+        base.Initialize();
 
-        if (String.IsNullOrEmpty(spawnIniOption))
-        {
-            Logger.Log("GameLobbyDropDown.WriteSpawnIniCode: " + Name + " has no associated spawn INI option!");
-            return;
-        }
-
-        switch (dataWriteMode)
-        {
-            case DropDownDataWriteMode.BOOLEAN:
-                spawnIni.SetBooleanValue("Settings", spawnIniOption, SelectedIndex > 0);
-                break;
-            case DropDownDataWriteMode.INDEX:
-                spawnIni.SetIntValue("Settings", spawnIniOption, SelectedIndex);
-                break;
-            default:
-            case DropDownDataWriteMode.STRING:
-                spawnIni.SetStringValue("Settings", spawnIniOption, Items[SelectedIndex].Tag.ToString());
-                break;
-        }
+        if (!this.HasEffect<OptionEffect>())
+            Logger.Log($"{nameof(GameSessionDropDown)}: {Name} has no effects, so it doesn't change anything in the game.");
     }
 
-    public void ApplyMapCode(IniFile mapIni, GameMode gameMode)
+    /// <summary>
+    /// Gets the effects defined by SpawnIniOption and DataWriteMode.
+    /// </summary>
+    protected override IEnumerable<OptionEffect> GetBuiltInEffects(int itemIndex)
     {
-        if (!AffectsMapCode || SelectedIndex < 0 || SelectedIndex >= Items.Count) return;
+        if (dataWriteMode == DropDownDataWriteMode.MAPCODE)
+        {
+            yield return new MapCodeEffect(Items[itemIndex].Tag.ToString());
+            yield break;
+        }
 
-        string customIniPath;
-        customIniPath = Items[SelectedIndex].Tag.ToString();
+        if (string.IsNullOrEmpty(spawnIniOption))
+            yield break;
 
-        MapCodeHelper.ApplyMapCode(mapIni, customIniPath, gameMode);
+        string value = dataWriteMode switch
+        {
+            DropDownDataWriteMode.BOOLEAN => Conversions.BooleanToString(itemIndex > 0, BooleanStringStyle.TRUEFALSE),
+            DropDownDataWriteMode.INDEX => itemIndex.ToString(),
+            _ => Items[itemIndex].Tag.ToString(),
+        };
+
+        yield return new SpawnIniEffect(spawnIniOption, value);
     }
 
     public override void OnLeftClick(InputEventArgs inputEventArgs)

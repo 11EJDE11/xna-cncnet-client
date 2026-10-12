@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using ClientCore;
 using Rampastring.Tools;
@@ -8,6 +10,7 @@ using ClientCore.INIProcessing;
 using System.Threading;
 using Rampastring.XNAUI;
 using ClientCore.Extensions;
+using ClientGUI.Options;
 
 namespace ClientGUI
 {
@@ -39,7 +42,10 @@ namespace ClientGUI
         /// <summary>
         /// Starts the main game process.
         /// </summary>
-        public static void StartGameProcess(WindowManager windowManager)
+        /// <param name="windowManager">The window manager.</param>
+        /// <param name="additionalArguments">Command line arguments for the game executable from the
+        /// options of the screen that launches the game. Arguments from user settings are added automatically.</param>
+        public static void StartGameProcess(WindowManager windowManager, IEnumerable<string> additionalArguments = null)
         {
             Logger.Log("About to launch main game executable.");
 
@@ -86,7 +92,11 @@ namespace ClientGUI
                 }
             }
 
-            string extraCommandLine = ClientConfiguration.Instance.ExtraExeCommandLineParameters;
+            string extraCommandLine = string.Join(" ",
+                new[] { ClientConfiguration.Instance.ExtraExeCommandLineParameters }
+                    .Concat(GlobalOptions.GetEffects().GetLaunchArguments())
+                    .Concat(additionalArguments ?? [])
+                    .Where(argument => !string.IsNullOrWhiteSpace(argument)));
 
             SafePath.DeleteFileIfExists(ProgramConstants.GamePath, "DTA.LOG");
             SafePath.DeleteFileIfExists(ProgramConstants.GamePath, "TI.LOG");

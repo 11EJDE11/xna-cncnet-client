@@ -14,6 +14,8 @@ Breaking changes are not covered here; see [Migration.md](Migration.md) instead.
 
 - Replay recording and playback are now available to packages with a compatible spawner. Opt-in through `ReplaySupport=true` in `ClientDefinitions.ini`. Players turn recording on or off in the Game tab of the Options window. See [INISystem.md](INISystem.md) for the replay settings.
 
+- Game options and user settings now share one option system. Each checkbox state (`CheckedEffects`, `UncheckedEffects`) and dropdown item (`ItemXEffects`) can list any number of effects, each defined in its own INI section: writing a `spawn.ini` key, applying map code, adding a game launch argument or copying a file. This allows, for example, a single crates dropdown with a "None" item, or a setting in the options window that writes to `spawn.ini`. Existing keys keep working. See [Option Controls and Effects section of INISystem.md](INISystem.md#option-controls-and-effects).
+
 ## 2.13.4
 
 - The `KeyboardCommands.ini` file now supports `DisableModifierKeys`. It is recommended to set this key for RA2/YR's `PlanningMode` (Waypoint Mode) command. See [INISystem.md](INISystem.md).

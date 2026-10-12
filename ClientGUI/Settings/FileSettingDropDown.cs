@@ -1,8 +1,9 @@
 using ClientCore;
+using ClientGUI.Options;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using System.Collections.Generic;
-using System.IO;
+using System.Linq;
 
 namespace ClientGUI.Settings
 {
@@ -60,17 +61,7 @@ namespace ClientGUI.Settings
             if (CheckAvailability)
             {
                 for (int i = 0; i < Items.Count; i++)
-                {
-                    Items[i].Selectable = true;
-                    foreach (var fileInfo in itemFilesList[i])
-                    {
-                        if (!File.Exists(fileInfo.SourcePath))
-                        {
-                            Items[i].Selectable = false;
-                            break;
-                        }
-                    }
-                }
+                    Items[i].Selectable = this.IsStateAvailable(i);
 
                 if (ResetUnavailableValue && !Items[SelectedIndex].Selectable)
                     SelectedIndex = DefaultValue;
@@ -90,23 +81,21 @@ namespace ClientGUI.Settings
             itemFilesList[itemIndex].Add(new FileSourceDestinationInfo(source, destination, option));
         }
 
-        public override void Load()
+        protected override IEnumerable<OptionEffect> GetBuiltInEffects(int itemIndex)
         {
-            SelectedIndex = UserINISettings.Instance.GetValue(SettingSection, SettingKey, DefaultValue);
-            originalState = SelectedIndex;
+            if (itemIndex >= itemFilesList.Count)
+                return [];
+
+            return itemFilesList[itemIndex].Select(f => new FileEffect(f));
         }
+
+        protected override int ReadSavedValue() => UserINISettings.Instance.GetValue(SettingSection, SettingKey, DefaultValue);
 
         public override bool Save()
         {
             if (Items[SelectedIndex].Selectable)
             {
-                for (int i = 0; i < itemFilesList.Count; i++)
-                {
-                    if (i != SelectedIndex)
-                        itemFilesList[i].ForEach(f => f.Revert());
-                }
-
-                itemFilesList[SelectedIndex].ForEach(f => f.Apply());
+                this.CommitPersistentEffects(SelectedIndex);
             }
             else // selected item is unavailable, don't do anything
             {

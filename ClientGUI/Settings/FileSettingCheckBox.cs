@@ -1,4 +1,5 @@
 using ClientCore;
+using ClientGUI.Options;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using System.Collections.Generic;
@@ -28,8 +29,8 @@ namespace ClientGUI.Settings
         private List<FileSourceDestinationInfo> enabledFiles = new List<FileSourceDestinationInfo>();
         private List<FileSourceDestinationInfo> disabledFiles = new List<FileSourceDestinationInfo>();
 
-        private bool EnabledFilesComplete => enabledFiles.All(f => File.Exists(f.SourcePath));
-        private bool DisabledFilesComplete => disabledFiles.All(f => File.Exists(f.SourcePath));
+        private bool EnabledFilesComplete => this.IsStateAvailable(CHECKED_STATE);
+        private bool DisabledFilesComplete => this.IsStateAvailable(UNCHECKED_STATE);
 
         // Backwards compatibility with old FileSettingCheckBox implementation.
         private bool useLegacyImplementation = false;
@@ -105,40 +106,38 @@ namespace ClientGUI.Settings
         public void AddDisabledFile(string source, string destination, FileOperationOption option)
             => disabledFiles.Add(new FileSourceDestinationInfo(source, destination, option));
 
-        public override void Load()
+        protected override IEnumerable<OptionEffect> GetBuiltInEffects(bool isChecked)
+        {
+            // The legacy implementation only has files for the enabled state, which is the unchecked one when reversed
+            List<FileSourceDestinationInfo> files = useLegacyImplementation
+                ? (isChecked != reversed ? enabledFiles : [])
+                : (isChecked ? enabledFiles : disabledFiles);
+
+            return files.Select(f => new FileEffect(f));
+        }
+
+        protected override bool ReadSavedValue()
         {
             if (useLegacyImplementation)
-                Checked = reversed != File.Exists(enabledFiles[0].DestinationPath);
-            else
-                Checked = UserINISettings.Instance.GetValue(SettingSection, SettingKey, DefaultValue);
+                return reversed != File.Exists(enabledFiles[0].DestinationPath);
 
-            originalState = Checked;
+            return UserINISettings.Instance.GetValue(SettingSection, SettingKey, DefaultValue);
         }
 
         public override bool Save()
         {
             if (useLegacyImplementation)
             {
-                if (reversed != Checked)
-                    enabledFiles.ForEach(f => f.Apply());
-                else
-                    enabledFiles.ForEach(f => f.Revert());
-
+                this.CommitPersistentEffects(CurrentState);
                 return RestartRequired && (Checked != originalState);
             }
 
             bool canBeChecked = !CheckAvailability || EnabledFilesComplete;
             bool canBeUnchecked = !CheckAvailability || DisabledFilesComplete;
 
-            if (Checked && canBeChecked)
+            if ((Checked && canBeChecked) || (!Checked && canBeUnchecked))
             {
-                disabledFiles.ForEach(f => f.Revert());
-                enabledFiles.ForEach(f => f.Apply());
-            }
-            else if (!Checked && canBeUnchecked)
-            {
-                enabledFiles.ForEach(f => f.Revert());
-                disabledFiles.ForEach(f => f.Apply());
+                this.CommitPersistentEffects(CurrentState);
             }
             else // selected state is unavailable, don't do anything
             {

@@ -7,6 +7,7 @@ using ClientCore;
 using ClientCore.Extensions;
 
 using ClientGUI;
+using ClientGUI.Options;
 
 using DTAClient.Domain;
 using DTAClient.DXGUI.Campaign;
@@ -288,6 +289,8 @@ namespace DTAClient.DXGUI.Generic
                 spawnIniSettings.AddKey("CustomMissionID", sg.CustomMissionID.ToString());
                 CampaignSelector.WriteMissionSectionToSpawnIni(spawnIni, mission);
             }
+
+            GlobalOptions.GetEffects().ApplyToSpawnIni(spawnIni);
 
             // Apply forced options from GameOptions.ini
             IniFile gameOptionsIni = new IniFile(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(),

@@ -1,4 +1,5 @@
 ﻿using ClientCore;
+using ClientGUI.Options;
 using ClientGUI.Settings;
 using Microsoft.Xna.Framework;
 using Rampastring.Tools;
@@ -68,7 +69,10 @@ namespace ClientGUI
             base.AddChild(child);
 
             if (child is IUserSetting setting)
+            {
                 userSettings.Add(setting);
+                GlobalOptions.Register(setting);
+            }
         }
 
         protected UserINISettings IniSettings { get; private set; }

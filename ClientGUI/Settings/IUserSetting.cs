@@ -1,6 +1,8 @@
-﻿namespace ClientGUI.Settings
+﻿using ClientGUI.Options;
+
+namespace ClientGUI.Settings
 {
-    public interface IUserSetting
+    public interface IUserSetting : IOption
     {
 
         /// <summary>
@@ -23,6 +25,12 @@
         /// Determines if the setting should reset to its default value where applicable once game process exits.
         /// </summary>
         public bool ResetToDefaultOnGameExit { get; }
+
+        /// <summary>
+        /// Gets the option state stored in the user settings file,
+        /// regardless of any unsaved changes made in the UI.
+        /// </summary>
+        int SavedState { get; }
 
         /// <summary>
         /// Loads the current value for the user setting.

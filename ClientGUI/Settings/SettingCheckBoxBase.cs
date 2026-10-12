@@ -1,13 +1,14 @@
 ﻿using System;
 
 using ClientGUI.Extensions;
+using ClientGUI.Options;
 
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 
 namespace ClientGUI.Settings
 {
-    public abstract class SettingCheckBoxBase : XNAClientCheckBox, IUserSetting
+    public abstract class SettingCheckBoxBase : OptionCheckBox, IUserSetting
     {
         public SettingCheckBoxBase(WindowManager windowManager) : base(windowManager) { }
 
@@ -107,7 +108,18 @@ namespace ClientGUI.Settings
             base.ParseControlINIAttribute(iniFile, key, value);
         }
 
-        public abstract void Load();
+        public int SavedState => ReadSavedValue() ? CHECKED_STATE : UNCHECKED_STATE;
+
+        /// <summary>
+        /// Reads the checked state stored in the user settings file.
+        /// </summary>
+        protected abstract bool ReadSavedValue();
+
+        public void Load()
+        {
+            Checked = ReadSavedValue();
+            originalState = Checked;
+        }
 
         public abstract bool Save();
 

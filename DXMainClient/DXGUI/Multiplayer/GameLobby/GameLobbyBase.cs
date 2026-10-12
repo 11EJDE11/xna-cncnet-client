@@ -1,6 +1,7 @@
 using ClientCore;
 using ClientCore.Statistics;
 using ClientGUI;
+using ClientGUI.Options;
 using DTAClient.Domain;
 using DTAClient.Domain.Multiplayer;
 using Microsoft.Xna.Framework;
@@ -1717,11 +1718,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             spawnIni.AddSection(settings);
             WriteSpawnIniAdditions(spawnIni);
 
-            foreach (GameLobbyCheckBox chkBox in CheckBoxes)
-                chkBox.ApplySpawnIniCode(spawnIni);
-
-            foreach (GameLobbyDropDown dd in DropDowns)
-                dd.ApplySpawnIniCode(spawnIni);
+            GetActiveOptionEffects().ApplyToSpawnIni(spawnIni);
 
             // Apply forced options from GameOptions.ini
 
@@ -1973,11 +1970,7 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 mapIni.SetStringValue("Basic", "OriginalFilename", mapIniFileName);
             }
 
-            foreach (GameLobbyCheckBox checkBox in CheckBoxes)
-                checkBox.ApplyMapCode(mapIni, GameMode);
-
-            foreach (GameLobbyDropDown dropDown in DropDowns)
-                dropDown.ApplyMapCode(mapIni, GameMode);
+            GetActiveOptionEffects().ApplyToMap(mapIni, GameMode.Name);
 
             mapIni.MoveSectionToFirst("MultiplayerDialogSettings"); // Required by YR
 
@@ -2185,11 +2178,30 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             InitializeMatchStatistics(houseInfos);
             WriteMap(houseInfos, pseudoRandom);
 
+            foreach (IOption option in GetGameOptions())
+                option.CommitPersistentEffects(option.CurrentState);
+
             GameProcessLogic.GameProcessExited += GameProcessExited_Callback;
 
-            GameProcessLogic.StartGameProcess(WindowManager);
+            GameProcessLogic.StartGameProcess(WindowManager,
+                GetGameOptions().SelectMany(option => option.GetCurrentEffects()).GetLaunchArguments());
             UpdateDiscordPresence(true);
         }
+
+        /// <summary>
+        /// Gets the game options (check boxes and drop-downs) of the lobby.
+        /// </summary>
+        private IEnumerable<IOption> GetGameOptions() => ((IEnumerable<IOption>)CheckBoxes).Concat(DropDowns);
+
+        /// <summary>
+        /// Gets the effects of the lobby's game options in their current states,
+        /// followed by the effects of the user settings.
+        /// </summary>
+        private List<OptionEffect> GetActiveOptionEffects()
+            => GetGameOptions()
+                .SelectMany(option => option.GetCurrentEffects())
+                .Concat(GlobalOptions.GetEffects())
+                .ToList();
 
         private void GameProcessExited_Callback() => AddCallback(new Action(GameProcessExited), null);
 

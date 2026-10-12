@@ -1,9 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 
-using ClientGUI;
-
-using DTAClient.Domain.Multiplayer;
-using DTAClient.DXGUI.Multiplayer.GameLobby;
+using ClientGUI.Options;
 
 using Rampastring.Tools;
 using Rampastring.XNAUI;
@@ -32,16 +30,13 @@ public enum CheckBoxMapScoringMode
 /// A game option check box for the game lobby or campaign.
 /// </summary>
 // TODO split the logic between descendants better and clean up
-public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
+public class GameSessionCheckBox : OptionCheckBox, IGameSessionSetting
 {
     private const int DEFAULT_SORT_ORDER = 0;
 
     public GameSessionCheckBox(WindowManager windowManager) : base (windowManager) { }
 
     public bool AllowChanges { get; set; } = true;
-
-    public bool AffectsSpawnIni => !string.IsNullOrWhiteSpace(spawnIniOption);
-    public bool AffectsMapCode => !string.IsNullOrWhiteSpace(customIniPath);
 
     public bool AllowScoring
         => !((mapScoringMode == CheckBoxMapScoringMode.DenyWhenChecked && Checked)
@@ -180,26 +175,18 @@ public class GameSessionCheckBox : XNAClientCheckBox, IGameSessionSetting
         set => Checked = value != 0;  // 0 = unchecked/off, 1 = checked/on
     }
 
-    public void ApplySpawnIniCode(IniFile spawnIni)
+    /// <summary>
+    /// Gets the effects defined by SpawnIniOption and CustomIniPath.
+    /// </summary>
+    protected override IEnumerable<OptionEffect> GetBuiltInEffects(bool isChecked)
     {
-        if (!AffectsSpawnIni)
-            return;
+        bool enabled = isChecked != reversed;
 
-        string value = disabledSpawnIniValue;
-        if (Checked != reversed)
-        {
-            value = enabledSpawnIniValue;
-        }
+        if (!string.IsNullOrWhiteSpace(spawnIniOption))
+            yield return new SpawnIniEffect(spawnIniOption, enabled ? enabledSpawnIniValue : disabledSpawnIniValue);
 
-        spawnIni.SetStringValue("Settings", spawnIniOption, value);
-    }
-        
-    public void ApplyMapCode(IniFile mapIni, GameMode gameMode)
-    {
-        if (!AffectsMapCode || Checked == reversed)
-            return;
-
-        MapCodeHelper.ApplyMapCode(mapIni, customIniPath, gameMode);
+        if (enabled && !string.IsNullOrWhiteSpace(customIniPath))
+            yield return new MapCodeEffect(customIniPath);
     }
 
     public override void OnLeftClick(InputEventArgs inputEventArgs)

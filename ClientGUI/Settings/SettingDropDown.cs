@@ -1,4 +1,5 @@
 ﻿using ClientCore;
+using ClientGUI.Options;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 
@@ -43,18 +44,24 @@ namespace ClientGUI.Settings
             base.ParseControlINIAttribute(iniFile, key, value);
         }
 
-        public override void Load()
+        protected override int ReadSavedValue()
         {
             if (WriteItemValue)
-                SelectedIndex = FindItemIndexByValue(UserINISettings.Instance.GetValue(SettingSection, SettingKey, null));
-            else
-                SelectedIndex = UserINISettings.Instance.GetValue(SettingSection, SettingKey, DefaultValue);
+                return FindItemIndexByValue(UserINISettings.Instance.GetValue(SettingSection, SettingKey, null));
 
-            originalState = SelectedIndex;
+            return UserINISettings.Instance.GetValue(SettingSection, SettingKey, DefaultValue);
         }
 
         public override bool Save()
         {
+            if (!this.IsStateAvailable(CurrentState))
+            {
+                Logger.Log($"{nameof(SettingDropDown)}: The selected item \"{SelectedItem?.Text}\" is unavailable in {Name}.");
+                return false;
+            }
+
+            this.CommitPersistentEffects(CurrentState);
+
             if (WriteItemValue)
                 UserINISettings.Instance.SetValue(SettingSection, SettingKey, (string)SelectedItem.Tag);
             else

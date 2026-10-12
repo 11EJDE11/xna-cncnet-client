@@ -366,13 +366,115 @@ Some controls are only available under specific circumstances.
 FontIndex=0
 ```
 
+#### Option Controls and Effects
+
+Game option controls (`GameLobbyCheckBox`, `GameLobbyDropDown`, `CampaignCheckBox`, `CampaignDropDown`) and user setting controls (`SettingCheckBox`, `FileSettingCheckBox`, `SettingDropDown`, `FileSettingDropDown`) are all options built on the same system. An option is always in one of its states: a checkbox has an unchecked and a checked state, and a dropdown has one state per item. Each state has a list of **effects**, which define what the option changes while it is in that state. The control itself only decides how its states are presented and switched.
+
+The difference between the controls is where they are placed and whether they are synchronized: game lobby options are set by the host and shared with all players, while user settings are local to each player and saved in the user settings INI.
+
+##### [OptionCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/Options/OptionCheckBox.cs)
+
+_(inherits [XNAClientCheckBox](#XNAClientCheckBox))_
+
+Base of all option checkboxes.
+
+```ini
+[SOMEOPTIONCHECKBOX]                       ; OptionCheckBox
+CheckedEffects=                            ; comma-separated strings, names of effect sections applied while checked.
+UncheckedEffects=                          ; comma-separated strings, names of effect sections applied while unchecked.
+```
+
+##### [OptionDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/Options/OptionDropDown.cs)
+
+_(inherits [XNAClientDropDown](#XNAClientDropDown))_
+
+Base of all option dropdowns.
+
+```ini
+[SOMEOPTIONDROPDOWN]                       ; OptionDropDown
+ItemXEffects=                              ; comma-separated strings, names of effect sections applied while the
+                                           ;          item with index `X` (starting from 0) is selected.
+```
+
+##### Effects
+
+Each effect is defined in its own INI section, in the same INI file as the control that uses it. The `Type` key selects the kind of effect. The same effect section can be used by any number of states and controls.
+
+```ini
+[SOMESPAWNINIEFFECT]
+Type=SpawnIni                              ; writes a key into spawn.ini when a game is launched.
+Section=Settings                           ; string,  spawn.ini section to write to. Defaults to `Settings`.
+Key=                                       ; string,  spawn.ini key to write. Required.
+Value=                                     ; string,  value to write.
+
+[SOMEMAPCODEEFFECT]
+Type=MapCode                               ; applies a map code INI file to the map when a game is launched.
+Path=                                      ; string,  path of the map code INI file, relative to the game folder.
+                                           ;          Required. Supports `[GameModeIncludes]` like other map code.
+
+[SOMELAUNCHARGUMENTEFFECT]
+Type=LaunchArgument                        ; adds a command line argument to the game executable when a game is launched.
+Argument=                                  ; string,  the argument. Required. Quote it yourself if it contains spaces.
+
+[SOMEFILEEFFECT]
+Type=File                                  ; copies a file into place while the option is in this state,
+                                           ;          and removes it when the option switches to another state.
+Source=                                    ; string,  source path relative to the game folder. Required.
+Destination=                               ; string,  destination path relative to the game folder. Required.
+Operation=AlwaysOverwrite                  ; enum,    file operation, see [File Operation Options](#appendix-file-operation-options).
+```
+
+When effects are applied:
+
+- `SpawnIni`, `MapCode` and `LaunchArgument` effects are applied every time a game is launched.
+  - Game options apply their current state to games launched from their lobby or the campaign selector.
+  - User settings in the options window apply their **saved** state to every game the client launches, so unsaved changes in the options window are ignored. `MapCode` effects only apply where the client generates the map (game lobbies and the campaign selector), and only `LaunchArgument` effects apply to replays.
+  - User settings placed in the campaign selector apply their saved state to campaign missions.
+- `File` effects are persistent. When an option's state is committed, the files of all other states are removed and the files of the current state are copied. User settings commit their state when they are saved, and game options commit theirs when a game is launched. `SettingCheckBox` and `SettingDropDown` aren't saved in a state whose source files are missing; `FileSettingCheckBox` and `FileSettingDropDown` keep following their `CheckAvailability` setting.
+
+The built-in keys of each control, such as `SpawnIniOption`, `DataWriteMode`, `CustomIniPath`, `EnabledFileN` or `ItemXFileN`, still work. They are added to the effects of the matching state before the effects listed in `CheckedEffects`, `UncheckedEffects` or `ItemXEffects`. When several effects write the same `spawn.ini` key, the one applied last wins. Effects are applied in the order: checkboxes, dropdowns, then user settings; forced spawn options are written after all of them (see [ForcedSpawnIniOptions](#forcedspawninioptions)).
+
+> [!WARNING]
+> User settings are local to each player. In multiplayer games, their `SpawnIni` and `MapCode` effects must not change anything that affects the game simulation, or players will desync.
+
+Example of a single crates dropdown that can also disable crates:
+
+```ini
+[cmbCrates]                                ; GameLobbyDropDown
+OptionName=Crates:
+Items=None,Minimal,Normal,Extreme
+DefaultIndex=0
+Item0Effects=CratesOff
+Item1Effects=CratesOn,CratesMinimal
+Item2Effects=CratesOn
+Item3Effects=CratesOn,CratesExtreme
+
+[CratesOff]
+Type=SpawnIni
+Key=Crates
+Value=False
+
+[CratesOn]
+Type=SpawnIni
+Key=Crates
+Value=True
+
+[CratesMinimal]
+Type=MapCode
+Path=INI\Game Options\Crates\Minimal.ini
+
+[CratesExtreme]
+Type=MapCode
+Path=INI\Game Options\Crates\Extreme.ini
+```
+
 #### GameLobbyBase Controls
 
 Following controls are only available as children of `GameLobbyBase` and derived controls.
 
 ##### [GameSessionCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Generic/GameSessionCheckBox.cs)
 
-_(inherits [XNAClientCheckBox](#XNAClientCheckBox))_
+_(inherits [OptionCheckBox](#OptionCheckBox))_
 
 Game option checkbox for the game lobby. Supports broadcasting game options to the CnCNet lobby and displaying them in the game list and filters.
 
@@ -420,7 +522,7 @@ Use this control type for game lobby checkboxes in `GameLobbyBase.ini`. Inherits
 
 ##### [GameSessionDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DXMainClient/DXGUI/Generic/GameSessionDropDown.cs)
 
-_(inherits [XNAClientDropDown](#XNAClientDropDown))_
+_(inherits [OptionDropDown](#OptionDropDown))_
 
 Game option dropdown for the game lobby. Supports broadcasting game options to the CnCNet lobby and displaying them in the game list and filters.
 
@@ -465,11 +567,11 @@ Use this control type for game lobby dropdowns in `GameLobbyBase.ini`. Inherits 
 
 #### XNAOptionsPanel Controls
 
-Following controls are only available as children of `XNAOptionsPanel` and derived controls. These currently use basic control properties only.
+Following controls are only available as children of `XNAOptionsPanel` and derived controls. They can also use [option effects](#option-controls-and-effects).
 
-##### [SettingCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DTAConfig/Settings/SettingCheckBox.cs)
+##### [SettingCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/Settings/SettingCheckBox.cs)
 
-_(inherits [XNAClientCheckBox](#XNAClientCheckBox))_
+_(inherits [OptionCheckBox](#OptionCheckBox))_
 
 ```ini
 [SOMESETTINGCHECKBOX]            ; SettingCheckBox
@@ -494,9 +596,9 @@ ParentCheckBoxName=              ; string,  name of a `XNAClientCheckBox` contro
 ParentCheckBoxRequiredValue=true ; boolean, state required from the parent checkbox for this one to be enabled.
 ```
 
-##### [FileSettingCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DTAConfig/Settings/FileSettingCheckBox.cs)
+##### [FileSettingCheckBox](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/Settings/FileSettingCheckBox.cs)
 
-_(inherits [XNAClientCheckBox](#XNAClientCheckBox))_
+_(inherits [OptionCheckBox](#OptionCheckBox))_
 
 ```ini
 [SOMEFILESETTINGCHECKBOX]        ; FileSettingCheckBox
@@ -534,9 +636,9 @@ DisabledFileN=                   ; comma-separated strings,
                                  ;          (see #appendix-file-operation-options).
 ```
 
-##### [SettingDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DTAConfig/Settings/SettingDropDown.cs)
+##### [SettingDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/Settings/SettingDropDown.cs)
 
-_(inherits [XNAClientDropDown](#XNAClientDropDown))_
+_(inherits [OptionDropDown](#OptionDropDown))_
 
 ```ini
 [SOMESETTINGDROPDOWN]  ; SettingDropDown
@@ -551,9 +653,9 @@ WriteItemValue=false   ; boolean, enable to write selected item value to the set
 RestartRequired=true   ; boolean, whether or not this setting requires restarting the client to apply.
 ```
 
-##### [FileSettingDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/DTAConfig/Settings/FileSettingDropDown.cs)
+##### [FileSettingDropDown](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/Settings/FileSettingDropDown.cs)
 
-_(inherits [XNAClientDropDown](#XNAClientDropDown))_
+_(inherits [OptionDropDown](#OptionDropDown))_
 
 ```ini
 [SOMEFILESETTINGDROPDOWN]            ; FileSettingDropDown
@@ -577,7 +679,7 @@ ItemXFileN=                          ; comma-separated strings,
 
 ##### Appendix: File Operation Options
 
-Valid file operation options available for files defined for `FileSettingCheckBox` and `FileSettingDropDown` are as follows:
+Valid file operation options available for files defined for `FileSettingCheckBox`, `FileSettingDropDown` and `File` [option effects](#effects) are as follows:
 
 - `AlwaysOverwrite`: Always overwrites the destination file with source file.
 - `OverwriteOnMismatch`: Overwrites the destination file with source file only if they are different.
@@ -1031,7 +1133,7 @@ Forced spawn options define keys that are always written to `spawn.ini` regardle
 4. **Per map** — maps can specify `ForcedSpawnIniOptions=SectionName` (comma-separated for multiple sections) in `MPMaps.ini`.
 
 Spawn.ini writing order for multiplayer:
-1. Game lobby checkboxes/dropdowns
+1. Game lobby checkboxes/dropdowns, then user settings (see [Option Controls and Effects](#option-controls-and-effects))
 2. Global `[ForcedSpawnIniOptions]` from `GameOptions.ini`
 3. Game mode specific forced options
 4. Map specific forced options

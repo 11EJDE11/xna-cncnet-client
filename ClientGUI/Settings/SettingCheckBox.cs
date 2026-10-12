@@ -1,4 +1,5 @@
 ﻿using ClientCore;
+using ClientGUI.Options;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 
@@ -64,27 +65,32 @@ namespace ClientGUI.Settings
             base.ParseControlINIAttribute(iniFile, key, value);
         }
 
-        public override void Load()
+        protected override bool ReadSavedValue()
         {
             string value = UserINISettings.Instance.GetValue(SettingSection, SettingKey, string.Empty);
 
-            if (WriteSettingValue)
-            {
-                if (value == EnabledSettingValue)
-                    Checked = true;
-                else if (value == DisabledSettingValue)
-                    Checked = false;
-                else
-                    Checked = DefaultValue;
-            }
-            else
-                Checked = Conversions.BooleanFromString(value, DefaultValue);
+            if (!WriteSettingValue)
+                return Conversions.BooleanFromString(value, DefaultValue);
 
-            originalState = Checked;
+            if (value == EnabledSettingValue)
+                return true;
+
+            if (value == DisabledSettingValue)
+                return false;
+
+            return DefaultValue;
         }
 
         public override bool Save()
         {
+            if (!this.IsStateAvailable(CurrentState))
+            {
+                Logger.Log($"{nameof(SettingCheckBox)}: The selected state ({Checked}) is unavailable in {Name}");
+                return false;
+            }
+
+            this.CommitPersistentEffects(CurrentState);
+
             if (WriteSettingValue)
                 UserINISettings.Instance.SetValue(SettingSection, SettingKey, Checked ? EnabledSettingValue : DisabledSettingValue);
             else

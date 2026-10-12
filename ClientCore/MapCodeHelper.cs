@@ -3,15 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-using ClientCore;
 using ClientCore.I18N;
 using ClientCore.Extensions;
 
-using DTAClient.Domain.Multiplayer;
-
 using Rampastring.Tools;
 
-namespace DTAClient.DXGUI.Multiplayer.GameLobby
+namespace ClientCore
 {
     public static class MapCodeHelper
     {
@@ -22,15 +19,15 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         /// <param name="mapIni">The map INI file.</param>
         /// <param name="customIniPath">The custom INI file path.</param>
-        /// <param name="gameMode">Currently selected gamemode, if set.</param>
-        public static void ApplyMapCode(IniFile mapIni, string customIniPath, GameMode gameMode)
+        /// <param name="gameModeName">Name of the currently selected game mode, if set.</param>
+        public static void ApplyMapCode(IniFile mapIni, string customIniPath, string gameModeName)
         {
             string associatedIniPath = SafePath.CombineFilePath(ProgramConstants.GamePath, customIniPath);
             Encoding associatedIniEncoding = GetMapEncoding(associatedIniPath);
             IniFile associatedIni = new IniFile(associatedIniPath, associatedIniEncoding);
             string extraIniName = null;
-            if (gameMode != null)
-                extraIniName = associatedIni.GetStringValue("GameModeIncludes", gameMode.Name, null);
+            if (gameModeName != null)
+                extraIniName = associatedIni.GetStringValue("GameModeIncludes", gameModeName, null);
             associatedIni.EraseSectionKeys("GameModeIncludes");
             ApplyMapCode(mapIni, associatedIni);
             if (!String.IsNullOrEmpty(extraIniName))

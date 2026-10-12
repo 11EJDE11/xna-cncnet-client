@@ -9,6 +9,7 @@ using ClientCore;
 using ClientCore.Extensions;
 
 using ClientGUI;
+using ClientGUI.Options;
 using ClientGUI.Settings;
 
 using ClientUpdater;
@@ -500,11 +501,8 @@ namespace DTAClient.DXGUI.Campaign
             spawnIni.AddSection(spawnIniSettings);
             WriteMissionSectionToSpawnIni(spawnIni, mission);
 
-            foreach (CampaignCheckBox chkBox in CheckBoxes)
-                chkBox.ApplySpawnIniCode(spawnIni);
-
-            foreach (CampaignDropDown dd in DropDowns)
-                dd.ApplySpawnIniCode(spawnIni);
+            List<OptionEffect> optionEffects = GetActiveOptionEffects();
+            optionEffects.ApplyToSpawnIni(spawnIni);
 
             // Apply forced options from GameOptions.ini
             ApplyCampaignForcedSpawnIniOptions(spawnIni, gameOptionsIni);
@@ -522,11 +520,7 @@ namespace DTAClient.DXGUI.Campaign
 
                 IniFile.ConsolidateIniFiles(mapIni, difficultyIni);
 
-                foreach (CampaignCheckBox chkBox in CheckBoxes)
-                    chkBox.ApplyMapCode(mapIni, gameMode: null);
-
-                foreach (CampaignDropDown dd in DropDowns)
-                    dd.ApplyMapCode(mapIni, gameMode: null);
+                optionEffects.ApplyToMap(mapIni, gameModeName: null);
 
                 mapIni.WriteIniFile(SafePath.CombineFilePath(ProgramConstants.GamePath, "spawnmap.ini"));
             }
@@ -539,11 +533,40 @@ namespace DTAClient.DXGUI.Campaign
             else
                 ToggleControls(false);
 
+            foreach (IOption option in GetGameOptions())
+                option.CommitPersistentEffects(option.CurrentState);
+
             discordHandler.UpdatePresence(mission.UntranslatedGUIName, difficultyName, mission.IconPath, true);
             GameProcessLogic.GameProcessExited += GameProcessExited_Callback;
 
-            GameProcessLogic.StartGameProcess(WindowManager);
+            // user settings from the options window add their launch arguments themselves
+            GameProcessLogic.StartGameProcess(WindowManager,
+                GetGameOptions().SelectMany(option => option.GetCurrentEffects())
+                    .Concat(GetUserSettingEffects())
+                    .GetLaunchArguments());
         }
+
+        /// <summary>
+        /// Gets the campaign game options (check boxes and drop-downs).
+        /// </summary>
+        private IEnumerable<IOption> GetGameOptions() => ((IEnumerable<IOption>)CheckBoxes).Concat(DropDowns);
+
+        /// <summary>
+        /// Gets the effects of the user settings placed in the campaign selector, based on their saved values.
+        /// </summary>
+        private IEnumerable<OptionEffect> GetUserSettingEffects()
+            => userSettings.SelectMany(setting => setting.GetStateEffects(setting.SavedState));
+
+        /// <summary>
+        /// Gets the effects of the campaign game options in their current states, followed by
+        /// the effects of the user settings in the campaign selector and in the options window.
+        /// </summary>
+        private List<OptionEffect> GetActiveOptionEffects()
+            => GetGameOptions()
+                .SelectMany(option => option.GetCurrentEffects())
+                .Concat(GetUserSettingEffects())
+                .Concat(GlobalOptions.GetEffects())
+                .ToList();
 
         public static void ApplyCampaignForcedSpawnIniOptions(IniFile spawnIni, IniFile gameOptionsIni)
         {

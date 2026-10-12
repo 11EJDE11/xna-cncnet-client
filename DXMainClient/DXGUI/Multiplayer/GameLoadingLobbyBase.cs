@@ -1,6 +1,7 @@
 ﻿using ClientCore;
 using ClientCore.Statistics;
 using ClientGUI;
+using ClientGUI.Options;
 using DTAClient.Domain;
 using DTAClient.Domain.Multiplayer;
 using ClientCore.Extensions;
@@ -323,6 +324,8 @@ namespace DTAClient.DXGUI.Multiplayer
                 spawnIni.SetStringValue("Other" + i, "Ip", otherPlayer.IPAddress);
                 spawnIni.SetIntValue("Other" + i, "Port", otherPlayer.Port);
             }
+
+            GlobalOptions.GetEffects().ApplyToSpawnIni(spawnIni);
 
             WriteSpawnIniAdditions(spawnIni);
             spawnIni.WriteIniFile();

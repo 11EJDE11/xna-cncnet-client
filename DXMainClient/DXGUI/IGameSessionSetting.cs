@@ -1,21 +1,14 @@
-using DTAClient.Domain.Multiplayer;
-
-using Rampastring.Tools;
+using ClientGUI.Options;
 
 namespace DTAClient.DXGUI;
 
 // TODO split the logic between campaign/mp and clean up
-public interface IGameSessionSetting
+/// <summary>
+/// A game option of a game lobby or the campaign selector. What it changes in the
+/// launched game is defined by the effects of its states (see <see cref="IOption"/>).
+/// </summary>
+public interface IGameSessionSetting : IOption
 {
-    /// <summary>Gets the name of this setting.</summary>
-    string Name { get; }
-
-    /// <summary>Indicates whether this setting can affect spawn.ini.</summary>
-    bool AffectsSpawnIni { get; }
-
-    /// <summary>Indicates whether this setting can affect map code.</summary>
-    bool AffectsMapCode { get; }
-
     /// <summary>Indicates whether this setting in its current state allows the game to be scored.</summary>
     bool AllowScoring { get; }
 
@@ -28,13 +21,4 @@ public interface IGameSessionSetting
     /// For dropdowns: the selected index.
     /// </summary>
     int Value { get; set; }
-
-    /// <summary>Applies the associated code to the spawn.ini file.</summary>
-    /// <param name="spawnIni">The spawn.ini file.</param>
-    void ApplySpawnIniCode(IniFile spawnIni);
-
-    /// <summary>Applies the associated code to the map INI file.</summary>
-    /// <param name="mapIni">The map INI file.</param>
-    /// <param name="gameMode">Currently selected gamemode, if applicable.</param>
-    void ApplyMapCode(IniFile mapIni, GameMode gameMode);
 }
