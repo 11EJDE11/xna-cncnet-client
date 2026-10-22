@@ -265,12 +265,15 @@ namespace DTAClient
                     case "-MULTIPLEINSTANCE":
                         multipleInstanceMode = true;
                         break;
+                    case "-DESIGNER":
+                        ClientCore.ProgramConstants.DesignerMode = true;
+                        break;
                     default:
                         unknownStartupParams.Add(argument);
                         break;
                 }
             }
-
+            ClientCore.ProgramConstants.DesignerMode = true;
             var parameters = new StartupParams(noAudio, multipleInstanceMode, unknownStartupParams);
 
             if (multipleInstanceMode)

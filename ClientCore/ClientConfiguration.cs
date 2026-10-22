@@ -94,7 +94,10 @@ namespace ClientCore
 
         public void RefreshSettings()
         {
-            DTACnCNetClient_ini = new IniFile(SafePath.CombineFilePath(ProgramConstants.GetResourcePath(), CLIENT_SETTINGS));
+            string path = SafePath.CombineFilePath(ProgramConstants.GetResourcePath(), CLIENT_SETTINGS);
+
+            // The designer tools preview unsaved edits of this file through CCIniFile
+            DTACnCNetClient_ini = ProgramConstants.DesignerMode ? new CCIniFile(path) : new IniFile(path);
         }
 
         #region Client settings

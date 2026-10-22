@@ -16,6 +16,7 @@ using System.IO;
 using DTAClient.Domain.Multiplayer;
 using DTAClient.Domain.Multiplayer.CnCNet;
 using DTAClient.DXGUI.Campaign;
+using DTAClient.DXGUI.Designer;
 using DTAClient.DXGUI.Multiplayer;
 using DTAClient.DXGUI.Multiplayer.CnCNet;
 using DTAClient.DXGUI.Multiplayer.GameLobby;
@@ -274,6 +275,9 @@ namespace DTAClient.DXGUI
             wm.AddAndInitializeControl(ls);
             ls.ClientRectangle = new Rectangle((wm.RenderResolutionX - ls.Width) / 2,
                 (wm.RenderResolutionY - ls.Height) / 2, ls.Width, ls.Height);
+
+            if (ProgramConstants.DesignerMode)
+                new DesignerTools(wm, RefreshUISettings).Initialize();
         }
 
         public static bool IsGraphicsDeviceLostException(Exception ex)
@@ -513,6 +517,15 @@ namespace DTAClient.DXGUI
             XNAPlayerSlotIndicator.LoadTextures();
 
             UISettings.ActiveSettings = settings;
+        }
+
+        /// <summary>
+        /// Re-reads the theme's client settings and colors, for the designer tools' reload.
+        /// </summary>
+        private void RefreshUISettings()
+        {
+            ClientConfiguration.Instance.RefreshSettings();
+            InitializeUISettings();
         }
 
         /// <summary>

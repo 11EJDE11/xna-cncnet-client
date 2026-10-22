@@ -19,10 +19,31 @@ namespace ClientGUI
         {
         }
 
-        protected CCIniFile ConfigIni { get; private set; }
+        /// <summary>
+        /// The INI file this window was configured from, or null if it has none.
+        /// </summary>
+        public CCIniFile ConfigIni { get; private set; }
+
+        /// <summary>
+        /// The path of <see cref="ConfigIni"/>, or null if this window has no INI file.
+        /// </summary>
+        public string ConfigIniPath { get; private set; }
+
+        /// <summary>
+        /// The name of the INI file (without extension) this window primarily looks for.
+        /// </summary>
+        public string IniName => string.IsNullOrWhiteSpace(IniNameOverride) ? Name : IniNameOverride;
 
         private bool hasCloseButton = false;
         private bool _initialized = false;
+
+        // Set while ReloadIni re-applies the INI to the existing controls
+        private bool _reloading = false;
+        private readonly HashSet<XNAControl> _reloadedControls = new HashSet<XNAControl>();
+
+        // Designer mode only: each child's rectangle from before its INI section was first read.
+        // Expressions such as getY($Self) depend on it, so a reload restores it to give the same result.
+        private readonly Dictionary<XNAControl, Rectangle> _preIniRectangles = new Dictionary<XNAControl, Rectangle>();
 
         /// <summary>
         /// If not null, the client will read an INI file with this name
@@ -43,11 +64,11 @@ namespace ClientGUI
         /// <returns>The ini config file path</returns>
         protected string GetConfigPath()
         {
-            string iniFileName = string.IsNullOrWhiteSpace(IniNameOverride) ? Name : IniNameOverride;
+            string iniFileName = IniName;
 
             // get theme specific path
             FileInfo configIniPath = SafePath.GetFile(ProgramConstants.GetResourcePath(), FormattableString.Invariant($"{iniFileName}.ini"));
-            if (configIniPath.Exists)
+            if (IniOverlay.FileExists(configIniPath.FullName))
                 return configIniPath.FullName;
 
             // get base path
@@ -62,7 +83,7 @@ namespace ClientGUI
 
             // get theme specific path
             configIniPath = SafePath.GetFile(ProgramConstants.GetResourcePath(), FormattableString.Invariant($"{iniFileName}.ini"));
-            if (configIniPath.Exists)
+            if (IniOverlay.FileExists(configIniPath.FullName))
                 return configIniPath.FullName;
 
             // get base path
@@ -83,6 +104,7 @@ namespace ClientGUI
                 return;
             }
 
+            ConfigIniPath = configIniPath;
             ConfigIni = new CCIniFile(configIniPath);
 
             if (Parser.Instance == null)
@@ -97,6 +119,101 @@ namespace ClientGUI
             base.Initialize();
 
             _initialized = true;
+        }
+
+        /// <summary>
+        /// Re-reads this window's INI file and re-applies it to the existing controls, creating
+        /// any child controls that were added to it. Keys that would duplicate list items or reset
+        /// player choices are skipped; see <see cref="IniReloadPolicy"/>.
+        /// </summary>
+        public void ReloadIni()
+        {
+            string configIniPath = GetConfigPath();
+            if (string.IsNullOrEmpty(configIniPath))
+                return;
+
+            ConfigIniPath = configIniPath;
+            ConfigIni = new CCIniFile(configIniPath);
+
+            if (Parser.Instance == null)
+                _ = new Parser(WindowManager);
+
+            _reloading = true;
+            _reloadedControls.Clear();
+
+            try
+            {
+                Parser.Instance.SetPrimaryControl(this);
+                ReadINIForControl(this);
+
+                // Controls created in code read their sections from code during initialization
+                ReadINIForUnreadDescendants(this);
+                ReadLateAttributesForControl(this);
+                ParseExtraControls();
+            }
+            finally
+            {
+                _reloading = false;
+                _reloadedControls.Clear();
+            }
+
+            OnIniReloaded();
+        }
+
+        /// <summary>
+        /// Re-reads this window's INI file and re-applies only the sections of the given controls.
+        /// Quicker than <see cref="ReloadIni()"/> for previewing a change while other changes depend on it.
+        /// </summary>
+        public void ReloadIni(IEnumerable<XNAControl> controls)
+        {
+            string configIniPath = GetConfigPath();
+            if (string.IsNullOrEmpty(configIniPath))
+                return;
+
+            ConfigIniPath = configIniPath;
+            ConfigIni = new CCIniFile(configIniPath);
+
+            if (Parser.Instance == null)
+                _ = new Parser(WindowManager);
+
+            _reloading = true;
+            _reloadedControls.Clear();
+
+            try
+            {
+                Parser.Instance.SetPrimaryControl(this);
+
+                foreach (XNAControl control in controls)
+                    ReadINIForControl(control);
+            }
+            finally
+            {
+                _reloading = false;
+                _reloadedControls.Clear();
+            }
+        }
+
+        /// <summary>
+        /// Called after <see cref="ReloadIni()"/> has re-applied the INI file, for windows that
+        /// position controls in code based on INI values.
+        /// </summary>
+        protected virtual void OnIniReloaded()
+        {
+        }
+
+        private void ReadINIForUnreadDescendants(XNAControl control)
+        {
+            foreach (XNAControl child in control.Children.ToList())
+            {
+                // Nested windows reload their own INI files
+                if (child is INItializableWindow || child is XNAWindowBase)
+                    continue;
+
+                if (!_reloadedControls.Contains(child) && !string.IsNullOrEmpty(child.Name))
+                    ReadINIForControl(child);
+
+                ReadINIForUnreadDescendants(child);
+            }
         }
 
         private void ParseExtraControls()
@@ -139,6 +256,18 @@ namespace ClientGUI
             if (section == null)
                 return;
 
+            if (_reloading)
+            {
+                _reloadedControls.Add(control);
+
+                if (control != this && _preIniRectangles.TryGetValue(control, out Rectangle preIniRectangle))
+                    control.ClientRectangle = preIniRectangle;
+            }
+            else if (ProgramConstants.DesignerMode && !_preIniRectangles.ContainsKey(control))
+            {
+                _preIniRectangles.Add(control, control.ClientRectangle);
+            }
+
             Parser.Instance.SetPrimaryControl(this);
 
             // shorthand for localization function
@@ -147,8 +276,21 @@ namespace ClientGUI
 
             foreach (var kvp in section.Keys)
             {
+                if (_reloading && IniReloadPolicy.IsUnsafeToReapply(kvp.Key))
+                    continue;
+
                 if (kvp.Key.StartsWith("$CC"))
                 {
+                    if (_reloading)
+                    {
+                        XNAControl existingChild = FindChildControl(control, kvp.Value);
+                        if (existingChild != null)
+                        {
+                            ReadINIForControl(existingChild);
+                            continue;
+                        }
+                    }
+
                     var child = CreateChildControl(control, kvp.Value);
 
                     // A scroll panel only attaches its content panel when initialized, and its children
@@ -255,6 +397,13 @@ namespace ClientGUI
                         ((XNATextBox)child).PreviousControl = otherChild;
                 }
             }
+        }
+
+        private static XNAControl FindChildControl(XNAControl parent, string keyValue)
+        {
+            string childName = keyValue.Split(':')[0];
+            XNAControl container = parent is XNAClientScrollPanel scrollPanel ? scrollPanel.Content : parent;
+            return container.Children.FirstOrDefault(c => c.Name == childName);
         }
 
         private XNAControl CreateChildControl(XNAControl parent, string keyValue)

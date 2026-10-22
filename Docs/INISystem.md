@@ -2,6 +2,9 @@
 > [!NOTE]
 > _TODO work in progress_
 
+> [!TIP]
+> Start the client with `-designer` to see which INI file and section every control reads, reload changes without restarting, and edit layouts from within the client. See [DesignerTools.md](DesignerTools.md).
+
 ## Constants
 The `[ParserConstants]` section of the `GlobalThemeSettings.ini` file contains constants that can be used in other INI files.
 
