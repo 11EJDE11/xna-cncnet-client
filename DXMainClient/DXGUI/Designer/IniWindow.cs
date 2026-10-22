@@ -93,6 +93,34 @@ namespace DTAClient.DXGUI.Designer
         }
 
         /// <summary>
+        /// Finds the INI entry that creates a control: an entry of an ExtraControls section
+        /// (name:type or name:type:parent) or a $CC key (name:type). Returns null if the INI
+        /// doesn't create it, for example because code does.
+        /// </summary>
+        public ControlDeclaration FindDeclaration(string name)
+        {
+            if (Ini == null || string.IsNullOrEmpty(name))
+                return null;
+
+            foreach (string section in Ini.GetSections())
+            {
+                bool extraControls = section.EndsWith("ExtraControls", System.StringComparison.Ordinal);
+
+                foreach (var kvp in Ini.GetSection(section).Keys)
+                {
+                    if (!extraControls && !kvp.Key.StartsWith("$CC", System.StringComparison.Ordinal))
+                        continue;
+
+                    string[] parts = kvp.Value.Split(':');
+                    if (parts.Length >= 2 && parts[0] == name)
+                        return new ControlDeclaration(section, kvp.Key, parts[1], parts.Length > 2 ? parts[2] : null);
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Re-applies the window's INI to the given controls only.
         /// </summary>
         public void Reload(IEnumerable<XNAControl> controls)

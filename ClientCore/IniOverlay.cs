@@ -44,6 +44,20 @@ namespace ClientCore
 
         public static void Clear() => editsByFile.Clear();
 
+        private static readonly string[] AnchorKeys = { "DistanceFromRightBorder", "DistanceFromBottomBorder", "FillWidth", "FillHeight" };
+        private static readonly string[] AnchoredKeys = { "Location", "Size", "X", "Y", "Width", "Height" };
+
+        /// <summary>
+        /// Whether a key is calculated from the control's position and size when it is read, like FillWidth.
+        /// </summary>
+        public static bool IsAnchorKey(string key) => Array.IndexOf(AnchorKeys, key) > -1;
+
+        /// <summary>
+        /// Whether a new key goes before the section's first anchor key rather than to the end of the section,
+        /// because anchors are calculated from it.
+        /// </summary>
+        public static bool GoesBeforeAnchors(string key) => Array.IndexOf(AnchoredKeys, key) > -1;
+
         public static IReadOnlyList<IniOverlayEdit> GetEdits(string filePath)
         {
             if (string.IsNullOrEmpty(filePath) || !editsByFile.TryGetValue(NormalizePath(filePath), out List<IniOverlayEdit> fileEdits))
@@ -61,6 +75,9 @@ namespace ClientCore
         public static string NormalizePath(string filePath) => Path.GetFullPath(filePath);
     }
 
+    /// <summary>
+    /// Sets a key, removes a key (a null <see cref="Value"/>) or removes a whole section (a null <see cref="Key"/>).
+    /// </summary>
     public sealed class IniOverlayEdit
     {
         public IniOverlayEdit(string filePath, string section, string key, string value)
@@ -71,10 +88,20 @@ namespace ClientCore
             Value = value;
         }
 
+        public static IniOverlayEdit RemoveKey(string filePath, string section, string key) =>
+            new IniOverlayEdit(filePath, section, key, null);
+
+        public static IniOverlayEdit RemoveSection(string filePath, string section) =>
+            new IniOverlayEdit(filePath, section, null, null);
+
         public string FilePath { get; }
         public string Section { get; }
         public string Key { get; }
         public string Value { get; }
+
+        public bool RemovesSection => Key == null;
+
+        public bool RemovesKey => Key != null && Value == null;
     }
 
     /// <summary>

@@ -12,16 +12,15 @@ namespace DTAClient.DXGUI.Designer
     /// formatting the author chose are kept. Only the lines of changed keys are touched; new keys go
     /// to the end of their section, except position and size keys, which go before the section's first
     /// anchor (DistanceFrom*, Fill*) because those are calculated from them when the INI is read.
+    /// Removing a key removes its lines; removing a section removes it with everything inside it.
     /// </summary>
     internal static class IniTextWriter
     {
-        private static readonly string[] AnchorKeys = { "DistanceFromRightBorder", "DistanceFromBottomBorder", "FillWidth", "FillHeight" };
-        private static readonly string[] AnchoredKeys = { "Location", "Size", "X", "Y", "Width", "Height" };
-
         public static void Apply(string path, IEnumerable<IniOverlayEdit> edits)
         {
             bool exists = File.Exists(path);
             bool hasBom = false;
+            bool endsWithNewLine = true;
             string newLine = "\r\n";
             var lines = new List<string>();
 
@@ -37,7 +36,8 @@ namespace DTAClient.DXGUI.Designer
                 lines.AddRange(text.Replace("\r\n", "\n").Split('\n'));
 
                 // A trailing newline leaves an empty last element; it is written back below
-                if (lines.Count > 0 && lines[lines.Count - 1].Length == 0)
+                endsWithNewLine = lines.Count > 0 && lines[lines.Count - 1].Length == 0;
+                if (endsWithNewLine)
                     lines.RemoveAt(lines.Count - 1);
             }
             else
@@ -46,9 +46,16 @@ namespace DTAClient.DXGUI.Designer
             }
 
             foreach (IniOverlayEdit edit in edits)
-                SetKey(lines, edit.Section, edit.Key, edit.Value);
+            {
+                if (edit.RemovesSection)
+                    RemoveSection(lines, edit.Section);
+                else if (edit.RemovesKey)
+                    RemoveKey(lines, edit.Section, edit.Key);
+                else
+                    SetKey(lines, edit.Section, edit.Key, edit.Value);
+            }
 
-            string output = string.Join(newLine, lines) + newLine;
+            string output = string.Join(newLine, lines) + (endsWithNewLine ? newLine : string.Empty);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllBytes(path, (hasBom ? new byte[] { 0xEF, 0xBB, 0xBF } : Array.Empty<byte>())
                 .Concat(new UTF8Encoding(false).GetBytes(output)).ToArray());
@@ -95,11 +102,11 @@ namespace DTAClient.DXGUI.Designer
                     insertAt = i + 1;
             }
 
-            if (AnchoredKeys.Contains(key))
+            if (IniOverlay.GoesBeforeAnchors(key))
             {
                 for (int i = lastHeader + 1; i < sectionEnd; i++)
                 {
-                    if (AnchorKeys.Contains(GetKeyName(lines[i])))
+                    if (GetKeyName(lines[i]) is string name && IniOverlay.IsAnchorKey(name))
                     {
                         insertAt = i;
                         break;
@@ -108,6 +115,41 @@ namespace DTAClient.DXGUI.Designer
             }
 
             lines.Insert(insertAt, key + "=" + value);
+        }
+
+        private static void RemoveKey(List<string> lines, string section, string key)
+        {
+            // From the last header back, so removing lines doesn't move the headers still to search
+            List<int> headers = FindSectionHeaders(lines, section);
+            for (int h = headers.Count - 1; h >= 0; h--)
+            {
+                int end = FindSectionEnd(lines, headers[h]);
+                for (int i = end - 1; i > headers[h]; i--)
+                {
+                    if (GetKeyName(lines[i]) == key)
+                        lines.RemoveAt(i);
+                }
+            }
+        }
+
+        private static void RemoveSection(List<string> lines, string section)
+        {
+            List<int> headers = FindSectionHeaders(lines, section);
+            for (int h = headers.Count - 1; h >= 0; h--)
+            {
+                int start = headers[h];
+                int end = FindSectionEnd(lines, start);
+
+                // Keep the blank lines that separate it from the next section
+                while (end > start + 1 && string.IsNullOrWhiteSpace(lines[end - 1]))
+                    end--;
+
+                lines.RemoveRange(start, end - start);
+
+                // Don't leave two blank lines where the section was
+                if (start > 0 && start < lines.Count && string.IsNullOrWhiteSpace(lines[start - 1]) && string.IsNullOrWhiteSpace(lines[start]))
+                    lines.RemoveAt(start);
+            }
         }
 
         private static List<int> FindSectionHeaders(List<string> lines, string section)

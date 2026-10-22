@@ -32,14 +32,19 @@ namespace DTAClient.DXGUI.Designer
         private readonly Action refreshUISettings;
         private readonly List<FileSystemWatcher> watchers = new List<FileSystemWatcher>();
         private readonly Stack<List<PendingEdit>> undoStack = new Stack<List<PendingEdit>>();
+        private readonly Stack<List<PendingEdit>> redoStack = new Stack<List<PendingEdit>>();
         private List<PendingEdit> pendingEdits = new List<PendingEdit>();
 
-        // Each edited control's rectangle from before its first unsaved edit. A reload can only apply what
-        // the INI says, so a control positioned by code would keep an undone size or position without this.
-        private readonly Dictionary<XNAControl, Rectangle> rectanglesBeforeEdits = new Dictionary<XNAControl, Rectangle>();
+        // Each edited control's rectangle and visibility from before its first unsaved edit. A reload can only apply
+        // what the INI says, so a control positioned or shown by code would keep an undone change without this.
+        private readonly Dictionary<XNAControl, ControlState> statesBeforeEdits = new Dictionary<XNAControl, ControlState>();
 
         // Controls added with the designer, by name; removed again when their unsaved definition is undone
-        private readonly Dictionary<string, XNAControl> addedControls = new Dictionary<string, XNAControl>();
+        private readonly Dictionary<string, AddedControl> addedControls = new Dictionary<string, AddedControl>();
+
+        // Controls deleted with the designer. A reload can't remove controls either, so they are hidden while
+        // the INI no longer creates them, and shown again when an undo brings their definition back.
+        private readonly Dictionary<XNAControl, DeletedControl> deletedControls = new Dictionary<XNAControl, DeletedControl>();
         private DesignerOverlay overlay;
         private Timer fileChangeTimer;
         private long ignoreFileChangesUntilTicks;
@@ -53,6 +58,13 @@ namespace DTAClient.DXGUI.Designer
         public IReadOnlyList<PendingEdit> PendingEdits => pendingEdits;
 
         public bool CanUndo => undoStack.Count > 0;
+
+        public bool CanRedo => redoStack.Count > 0;
+
+        /// <summary>
+        /// Whether the control was deleted and the deletion isn't saved yet; it stays hidden until then.
+        /// </summary>
+        public bool IsDeleted(XNAControl control) => deletedControls.TryGetValue(control, out DeletedControl deleted) && deleted.Hidden;
 
         /// <summary>
         /// The controls that have unsaved edits.
@@ -165,7 +177,7 @@ namespace DTAClient.DXGUI.Designer
             List<IniWindow> windows = FindWindows();
             var failed = new List<string>();
 
-            RestoreRectanglesBeforeEdits(control => true);
+            RestoreStatesBeforeEdits(control => true);
 
             foreach (IniWindow window in windows)
             {
@@ -228,7 +240,7 @@ namespace DTAClient.DXGUI.Designer
             if (controlEdits.Count == 0)
                 return null;
 
-            undoStack.Push(new List<PendingEdit>(pendingEdits));
+            PushUndoStep();
 
             foreach (ControlEdit controlEdit in controlEdits)
                 AddControlEdit(controlEdit);
@@ -239,7 +251,7 @@ namespace DTAClient.DXGUI.Designer
 
             try
             {
-                RestoreRectanglesBeforeEdits(c => windows.Contains(IniWindow.OwnerOf(c)?.Control));
+                RestoreStatesBeforeEdits(c => windows.Contains(IniWindow.OwnerOf(c)?.Control));
 
                 foreach (ControlEdit controlEdit in controlEdits.GroupBy(e => e.Window.Control).Select(g => g.First()))
                     controlEdit.Window.Reload();
@@ -266,7 +278,7 @@ namespace DTAClient.DXGUI.Designer
         public string ApplyEditsInOrder(IEnumerable<XNAControl> controls, Func<XNAControl, ControlEdit> planEdit,
             Func<XNAControl, IEnumerable<XNAControl>, bool> dependsOn, List<ControlEdit> appliedEdits)
         {
-            undoStack.Push(new List<PendingEdit>(pendingEdits));
+            PushUndoStep();
             var unpreviewed = new List<ControlEdit>();
 
             // Controls that were edited or re-read, so their position may have changed
@@ -296,7 +308,7 @@ namespace DTAClient.DXGUI.Designer
                 // One full reload so everything else that depends on the edited controls follows too
                 IniOverlay.Set(pendingEdits.Select(p => p.Edit));
                 List<XNAControl> windows = appliedEdits.Select(e => e.Window.Control).Distinct().ToList();
-                RestoreRectanglesBeforeEdits(c => windows.Contains(IniWindow.OwnerOf(c)?.Control));
+                RestoreStatesBeforeEdits(c => windows.Contains(IniWindow.OwnerOf(c)?.Control));
 
                 foreach (ControlEdit controlEdit in appliedEdits.GroupBy(e => e.Window.Control).Select(g => g.First()))
                     controlEdit.Window.Reload();
@@ -324,7 +336,7 @@ namespace DTAClient.DXGUI.Designer
             foreach (var windowEdits in controlEdits.GroupBy(e => e.Window.Control))
             {
                 List<XNAControl> edited = windowEdits.Select(e => e.Control).ToList();
-                RestoreRectanglesBeforeEdits(edited.Contains);
+                RestoreStatesBeforeEdits(edited.Contains);
                 windowEdits.First().Window.Reload(edited);
             }
 
@@ -337,19 +349,18 @@ namespace DTAClient.DXGUI.Designer
             if (window == null)
                 return;
 
-            RestoreRectanglesBeforeEdits(c => c == control);
+            RestoreStatesBeforeEdits(c => c == control);
             window.Reload(new[] { control });
         }
 
         private void AddControlEdit(ControlEdit controlEdit)
         {
-            if (!rectanglesBeforeEdits.ContainsKey(controlEdit.Control))
-                rectanglesBeforeEdits.Add(controlEdit.Control, controlEdit.Control.ClientRectangle);
+            RecordState(controlEdit.Control, controlEdit.Keys.Select(k => k.Key));
 
             foreach (var keyValue in controlEdit.Keys)
             {
                 // Without an earlier value the control can't be told to go back after an undo
-                bool addsKeyWithoutDefault = !IsGeometryKey(keyValue.Key) &&
+                bool addsKeyWithoutDefault = !IsGeometryKey(keyValue.Key) && keyValue.Key != "Visible" && keyValue.Key != "Enabled" &&
                     controlEdit.Window.Ini?.GetSectionKeys(controlEdit.Section)?.Contains(keyValue.Key) != true;
 
                 List<IniOverlayEdit> edits = IniEditTargets.Resolve(controlEdit.Window, controlEdit.Section, keyValue.Key, keyValue.Value);
@@ -358,13 +369,62 @@ namespace DTAClient.DXGUI.Designer
             }
         }
 
+        // Remembers how the control was before its first edit, so undoing can put it back
+        private void RecordState(XNAControl control, IEnumerable<string> editedKeys)
+        {
+            if (!statesBeforeEdits.TryGetValue(control, out ControlState state))
+            {
+                state = new ControlState(control);
+                statesBeforeEdits.Add(control, state);
+            }
+
+            // Only for edits of these keys, as code shows and hides many controls itself
+            if (editedKeys.Any(k => k == "Visible" || k == "Enabled"))
+                state.RecordVisibility(control);
+        }
+
+        /// <summary>
+        /// Removes a key of a control's section from the theme file that defines it, previews it and records an undo step.
+        /// </summary>
+        /// <param name="needsRestart">Whether the control keeps showing the old value until a restart: the key was saved
+        /// before and nothing else sets it, so the window has no value to go back to.</param>
+        /// <returns>Null on success, otherwise why the key wasn't removed.</returns>
+        public string RemoveKey(IniWindow window, XNAControl control, string section, string key, out bool needsRestart)
+        {
+            needsRestart = false;
+
+            string filePath = IniEditTargets.ResolveRemoval(window, section, key);
+            if (filePath == null)
+                return $"{key} comes from a file outside the theme folder, so it can't be removed here; set another value instead.";
+
+            PushUndoStep();
+            RecordState(control, new[] { key });
+            AddPendingEdit(IniOverlayEdit.RemoveKey(filePath, section, key), control, false);
+            bool wasSaved = pendingEdits.Any(p => p.Edit.RemovesKey && p.Edit.Section == section && p.Edit.Key == key &&
+                IsSamePath(p.Edit.FilePath, filePath));
+            DropFilesWithNothingButBasedOn();
+            IniOverlay.Set(pendingEdits.Select(p => p.Edit));
+
+            try
+            {
+                RestoreStatesBeforeEdits(c => IniWindow.OwnerOf(c)?.Control == window.Control);
+                window.Reload();
+            }
+            catch (Exception ex)
+            {
+                return RollBack(ex);
+            }
+
+            needsRestart = wasSaved && window.Ini?.GetKeySource(section, key) == null;
+            return null;
+        }
+
         private string RollBack(Exception ex)
         {
             Logger.Log($"Designer: a window could not read the edited INI: {ex}");
 
             pendingEdits = undoStack.Pop();
             IniOverlay.Set(pendingEdits.Select(p => p.Edit));
-            RemoveUndefinedAddedControls();
             ReloadWindowsAndSettings();
 
             return "Not applied, the window could not read it: " + (ex.InnerException ?? ex).Message;
@@ -372,12 +432,26 @@ namespace DTAClient.DXGUI.Designer
 
         private void AddPendingEdit(IniOverlayEdit edit, XNAControl control, bool addsKeyWithoutDefault)
         {
+            if (edit.RemovesSection)
+            {
+                AddSectionRemoval(edit);
+                return;
+            }
+
             int index = pendingEdits.FindIndex(p => p.Edit.Section == edit.Section && p.Edit.Key == edit.Key &&
-                string.Equals(Path.GetFullPath(p.Edit.FilePath), Path.GetFullPath(edit.FilePath), StringComparison.OrdinalIgnoreCase));
+                IsSamePath(p.Edit.FilePath, edit.FilePath));
 
             if (index > -1)
             {
                 PendingEdit previous = pendingEdits[index];
+
+                // Removing a key that only exists as an unsaved edit leaves nothing to save
+                if (edit.RemovesKey && previous.OldValue == null)
+                {
+                    pendingEdits.RemoveAt(index);
+                    return;
+                }
+
                 pendingEdits[index] = new PendingEdit(edit, previous.OldValue, previous.CreatesFile, previous.Control,
                     previous.AddsKeyWithoutDefault);
                 return;
@@ -385,7 +459,30 @@ namespace DTAClient.DXGUI.Designer
 
             bool exists = File.Exists(edit.FilePath);
             string oldValue = exists ? new IniFile(edit.FilePath, false).GetStringValue(edit.Section, edit.Key, null) : null;
+            if (edit.RemovesKey && oldValue == null)
+                return;
+
             pendingEdits.Add(new PendingEdit(edit, oldValue, !exists, control, addsKeyWithoutDefault));
+        }
+
+        // Removing a section replaces the unsaved edits of its keys; a section that only exists as unsaved edits just goes
+        private void AddSectionRemoval(IniOverlayEdit edit)
+        {
+            pendingEdits.RemoveAll(p => p.Edit.Section == edit.Section && IsSamePath(p.Edit.FilePath, edit.FilePath));
+
+            if (!File.Exists(edit.FilePath) || !new IniFile(edit.FilePath, false).SectionExists(edit.Section))
+                return;
+
+            pendingEdits.Add(new PendingEdit(edit, string.Empty, false, null, false));
+        }
+
+        private static bool IsSamePath(string a, string b) =>
+            string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+
+        private void PushUndoStep()
+        {
+            undoStack.Push(new List<PendingEdit>(pendingEdits));
+            redoStack.Clear();
         }
 
         private void ReloadWindowsAndSettings()
@@ -400,6 +497,8 @@ namespace DTAClient.DXGUI.Designer
             {
                 Logger.Log("Designer: reloading the theme's client settings failed: " + ex);
             }
+
+            UpdateAddedAndDeletedControls();
         }
 
         /// <summary>
@@ -409,7 +508,7 @@ namespace DTAClient.DXGUI.Designer
         /// <returns>Null on success, otherwise why the edit was rolled back.</returns>
         public string ApplyFileEdit(string filePath, string section, string key, string value)
         {
-            undoStack.Push(new List<PendingEdit>(pendingEdits));
+            PushUndoStep();
             AddPendingEdit(new IniOverlayEdit(filePath, section, key, value), null, false);
             IniOverlay.Set(pendingEdits.Select(p => p.Edit));
 
@@ -432,7 +531,7 @@ namespace DTAClient.DXGUI.Designer
         /// <param name="error">Why the control wasn't added, if it wasn't.</param>
         public XNAControl AddControl(IniWindow window, string name, IEnumerable<IniOverlayEdit> sectionEdits, out string error)
         {
-            undoStack.Push(new List<PendingEdit>(pendingEdits));
+            PushUndoStep();
 
             foreach (IniOverlayEdit sectionEdit in sectionEdits)
             {
@@ -462,7 +561,7 @@ namespace DTAClient.DXGUI.Designer
                 return null;
             }
 
-            addedControls[name] = control;
+            addedControls[name] = new AddedControl(window, control);
 
             // Mark the new control's own keys as its edits, for the unsaved changes markers
             for (int i = 0; i < pendingEdits.Count; i++)
@@ -491,26 +590,272 @@ namespace DTAClient.DXGUI.Designer
             return null;
         }
 
-        // A reload can't remove controls, so take out added controls whose section is no longer pending
-        private void RemoveUndefinedAddedControls()
+        /// <summary>
+        /// A reload can't remove controls, so this takes out added controls whose definition is no longer
+        /// pending and picks up the ones a redo created again. Deleted controls are hidden while the INI
+        /// no longer creates them and shown again when it does.
+        /// </summary>
+        private void UpdateAddedAndDeletedControls()
         {
             foreach (var added in addedControls.ToList())
             {
-                if (pendingEdits.Any(p => p.Edit.Section == added.Key))
-                    continue;
+                XNAControl control = added.Value.Control;
+                bool defined = pendingEdits.Any(p => p.Edit.Section == added.Key && !p.Edit.RemovesSection);
 
-                added.Value.Parent?.RemoveChild(added.Value);
-                rectanglesBeforeEdits.Remove(added.Value);
-                addedControls.Remove(added.Key);
+                if (!defined && control.Parent != null)
+                {
+                    control.Parent.RemoveChild(control);
+                    statesBeforeEdits.Remove(control);
+                }
+                else if (defined && control.Parent == null)
+                {
+                    XNAControl recreated = FindDescendant(added.Value.Window.Control, added.Key);
+                    if (recreated != null)
+                        addedControls[added.Key] = new AddedControl(added.Value.Window, recreated);
+                }
+            }
+
+            foreach (var entry in deletedControls)
+            {
+                XNAControl control = entry.Key;
+                DeletedControl deleted = entry.Value;
+                bool isCreated = deleted.Window.FindDeclaration(control.Name) != null;
+
+                if (!isCreated)
+                {
+                    if (!deleted.Hidden)
+                    {
+                        deleted.Visible = control.Visible;
+                        deleted.Enabled = control.Enabled;
+                        deleted.Hidden = true;
+                    }
+
+                    // Also after a reload restored how it was before its edits
+                    control.Visible = false;
+                    control.Enabled = false;
+                }
+                else if (deleted.Hidden)
+                {
+                    deleted.Hidden = false;
+                    control.Visible = deleted.Visible;
+                    control.Enabled = deleted.Enabled;
+                }
             }
         }
 
-        private void RestoreRectanglesBeforeEdits(Func<XNAControl, bool> filter)
+        /// <summary>
+        /// Deletes controls as one undo step. A control the INI creates in the current theme (an ExtraControls
+        /// entry or a $CC key) loses that entry, its own section and those of the controls inside it. A control
+        /// created by code or by a file outside the theme can't be removed from an INI file, so it gets
+        /// Visible=false and Enabled=false instead.
+        /// </summary>
+        /// <returns>A status message.</returns>
+        public string DeleteControls(IReadOnlyList<XNAControl> controls) => DeleteControls(controls, new HashSet<XNAControl>());
+
+        private string DeleteControls(IReadOnlyList<XNAControl> controls, HashSet<XNAControl> hideOnly)
         {
-            foreach (var entry in rectanglesBeforeEdits)
+            var removals = new List<IniOverlayEdit>();
+            var removed = new List<XNAControl>();
+            var hidden = new List<ControlEdit>();
+            var reasons = new List<string>();
+            var refused = new List<string>();
+
+            foreach (XNAControl control in controls)
+            {
+                IniWindow window = IniWindow.OwnerOf(control);
+                if (window == null || window.Control == control || string.IsNullOrEmpty(control.Name))
+                {
+                    refused.Add(string.IsNullOrEmpty(control.Name) ? "(unnamed)" : control.Name);
+                    continue;
+                }
+
+                var controlRemovals = new List<IniOverlayEdit>();
+                string reason = hideOnly.Contains(control) ? "a file outside the theme creates it too" : PlanRemoval(window, control, controlRemovals);
+
+                if (reason == null)
+                {
+                    removals.AddRange(controlRemovals);
+                    removed.Add(control);
+                    continue;
+                }
+
+                reasons.Add($"{control.Name} ({reason})");
+                hidden.Add(new ControlEdit(window, control, window.SectionFor(control), new List<KeyValuePair<string, string>>
+                {
+                    new KeyValuePair<string, string>("Visible", "false"),
+                    new KeyValuePair<string, string>("Enabled", "false"),
+                }));
+            }
+
+            if (removals.Count == 0 && hidden.Count == 0)
+                return refused.Count == 0 ? "Nothing to delete." : $"Windows and unnamed controls can't be deleted: {string.Join(", ", refused)}.";
+
+            PushUndoStep();
+
+            foreach (IniOverlayEdit removal in removals)
+                AddPendingEdit(removal, null, false);
+
+            foreach (ControlEdit controlEdit in hidden)
+                AddControlEdit(controlEdit);
+
+            DropFilesWithNothingButBasedOn();
+            IniOverlay.Set(pendingEdits.Select(p => p.Edit));
+
+            try
+            {
+                ReloadWindows();
+            }
+            catch (Exception ex)
+            {
+                return RollBack(ex);
+            }
+
+            // A stock file the theme's INI is based on may create the control too
+            List<XNAControl> stillCreated = removed.Where(c => IniWindow.OwnerOf(c)?.FindDeclaration(c.Name) != null).ToList();
+            if (stillCreated.Count > 0)
+            {
+                pendingEdits = undoStack.Pop();
+                IniOverlay.Set(pendingEdits.Select(p => p.Edit));
+                ReloadWindows();
+                hideOnly.UnionWith(stillCreated);
+                return DeleteControls(controls, hideOnly);
+            }
+
+            foreach (XNAControl control in removed)
+            {
+                if (!addedControls.ContainsKey(control.Name) && !deletedControls.ContainsKey(control))
+                    deletedControls.Add(control, new DeletedControl(IniWindow.OwnerOf(control)));
+            }
+
+            UpdateAddedAndDeletedControls();
+
+            string message = removed.Count == 0 ? string.Empty : $"Deleted {string.Join(", ", removed.Select(c => c.Name))}. ";
+
+            if (hidden.Count > 0)
+                message += $"Hidden with Visible=false, as the theme can't remove them: {string.Join(", ", reasons)}. ";
+
+            if (refused.Count > 0)
+                message += $"Windows and unnamed controls can't be deleted: {string.Join(", ", refused)}. ";
+
+            return message + "Ctrl+Z undoes this.";
+        }
+
+        // A new file that would only say what it is based on, as its other edits were removed, isn't needed
+        private void DropFilesWithNothingButBasedOn()
+        {
+            foreach (var file in pendingEdits.GroupBy(p => Path.GetFullPath(p.Edit.FilePath), StringComparer.OrdinalIgnoreCase).ToList())
+            {
+                if (file.All(p => p.CreatesFile && p.Edit.Section == "INISystem" && p.Edit.Key == "BasedOn"))
+                    pendingEdits.RemoveAll(p => file.Contains(p));
+            }
+        }
+
+        /// <summary>
+        /// Plans removing the entry that creates a control and the sections of it and the controls inside it.
+        /// </summary>
+        /// <returns>Null if the control can be removed, otherwise why not.</returns>
+        private static string PlanRemoval(IniWindow window, XNAControl control, List<IniOverlayEdit> removals)
+        {
+            string themeDirectory = Path.GetFullPath(ProgramConstants.GetResourcePath());
+
+            string reason = PlanDeclarationRemoval(window, control.Name, themeDirectory, removals);
+            if (reason != null)
+                return reason;
+
+            foreach (XNAControl part in GetNamedDescendants(control).Prepend(control))
+            {
+                // A control inside it with an entry of its own, an ExtraControls entry naming its parent,
+                // would make the window fail to load once its parent is gone
+                if (part != control && window.FindDeclaration(part.Name) is ControlDeclaration declaration &&
+                    declaration.ParentName != null)
+                {
+                    reason = PlanDeclarationRemoval(window, part.Name, themeDirectory, removals);
+                    if (reason != null)
+                        return $"{part.Name} inside it {reason}";
+                }
+
+                foreach (string file in GetFilesDefiningSection(window, part.Name, themeDirectory))
+                    removals.Add(IniOverlayEdit.RemoveSection(file, part.Name));
+            }
+
+            return null;
+        }
+
+        private static string PlanDeclarationRemoval(IniWindow window, string name, string themeDirectory, List<IniOverlayEdit> removals)
+        {
+            ControlDeclaration declaration = window.FindDeclaration(name);
+            if (declaration == null)
+                return "created by code";
+
+            IniKeySource source = window.Ini.GetKeySource(declaration.Section, declaration.Key);
+            if (source == null || source.Section != declaration.Section || !IsInDirectory(source.FilePath, themeDirectory) ||
+                IniWindow.IsGenericWindowIni(source.FilePath))
+            {
+                return $"created by {DisplayPath(source?.FilePath) ?? "another file"}";
+            }
+
+            removals.Add(IniOverlayEdit.RemoveKey(source.FilePath, declaration.Section, declaration.Key));
+            return null;
+        }
+
+        private static IEnumerable<XNAControl> GetNamedDescendants(XNAControl control)
+        {
+            foreach (XNAControl child in control.Children)
+            {
+                if (!string.IsNullOrEmpty(child.Name))
+                    yield return child;
+
+                foreach (XNAControl descendant in GetNamedDescendants(child))
+                    yield return descendant;
+            }
+        }
+
+        // The theme files that define keys of the section itself, rather than inheriting them
+        private static List<string> GetFilesDefiningSection(IniWindow window, string section, string themeDirectory)
+        {
+            List<string> keys = window.Ini?.GetSectionKeys(section);
+            if (keys == null)
+                return new List<string>();
+
+            return keys.Select(k => window.Ini.GetKeySource(section, k))
+                .Where(s => s != null && s.Section == section && IsInDirectory(s.FilePath, themeDirectory))
+                .Select(s => s.FilePath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static bool IsInDirectory(string filePath, string directory) =>
+            string.Equals(Path.GetDirectoryName(Path.GetFullPath(filePath)).TrimEnd(Path.DirectorySeparatorChar),
+                directory.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Joins the last two undo steps, so a change made in two steps is undone at once.
+        /// </summary>
+        public void MergeLastUndoSteps()
+        {
+            if (undoStack.Count >= 2)
+                undoStack.Pop();
+        }
+
+        /// <summary>
+        /// Takes back the last undo step without keeping it for redo, for a change that turned out not to help.
+        /// </summary>
+        public void RevertLastStep()
+        {
+            if (undoStack.Count == 0)
+                return;
+
+            pendingEdits = undoStack.Pop();
+            IniOverlay.Set(pendingEdits.Select(p => p.Edit));
+            ReloadWindowsAndSettings();
+        }
+
+        private void RestoreStatesBeforeEdits(Func<XNAControl, bool> filter)
+        {
+            foreach (var entry in statesBeforeEdits)
             {
                 if (filter(entry.Key))
-                    entry.Key.ClientRectangle = entry.Value;
+                    entry.Value.Restore(entry.Key);
             }
         }
 
@@ -544,11 +889,32 @@ namespace DTAClient.DXGUI.Designer
                 return "Nothing to undo";
 
             List<PendingEdit> undone = pendingEdits.Where(p => !undoStack.Peek().Contains(p)).ToList();
+            redoStack.Push(pendingEdits);
             pendingEdits = undoStack.Pop();
             IniOverlay.Set(pendingEdits.Select(p => p.Edit));
-            RemoveUndefinedAddedControls();
             ReloadWindowsAndSettings();
             return $"Undone, {pendingEdits.Count} unsaved change(s) left" + DescribeRestartNeeded(undone);
+        }
+
+        public string Redo()
+        {
+            if (redoStack.Count == 0)
+                return "Nothing to redo";
+
+            undoStack.Push(pendingEdits);
+            pendingEdits = redoStack.Pop();
+            IniOverlay.Set(pendingEdits.Select(p => p.Edit));
+
+            try
+            {
+                ReloadWindowsAndSettings();
+            }
+            catch (Exception ex)
+            {
+                return RollBack(ex);
+            }
+
+            return $"Redone, {pendingEdits.Count} unsaved change(s)";
         }
 
         public string Discard()
@@ -556,10 +922,11 @@ namespace DTAClient.DXGUI.Designer
             List<PendingEdit> discarded = pendingEdits.ToList();
             pendingEdits.Clear();
             undoStack.Clear();
+            redoStack.Clear();
             IniOverlay.Clear();
-            RemoveUndefinedAddedControls();
             ReloadWindowsAndSettings();
-            rectanglesBeforeEdits.Clear();
+            statesBeforeEdits.Clear();
+            deletedControls.Clear();
             return $"Discarded {discarded.Count} unsaved change(s)" + DescribeRestartNeeded(discarded);
         }
 
@@ -599,10 +966,14 @@ namespace DTAClient.DXGUI.Designer
             int count = pendingEdits.Count;
             pendingEdits.Clear();
             undoStack.Clear();
+            redoStack.Clear();
+            addedControls.Clear();
             IniOverlay.Clear();
             ReloadWindowsAndSettings();
-            rectanglesBeforeEdits.Clear();
-            addedControls.Clear();
+            statesBeforeEdits.Clear();
+
+            // Deleted controls stay hidden; they are gone once the client restarts
+            deletedControls.Clear();
 
             return $"Saved {count} change(s) to {string.Join(", ", files.Select(f => DisplayPath(f.Key)))}";
         }
@@ -612,6 +983,69 @@ namespace DTAClient.DXGUI.Designer
         /// </summary>
         public static string DisplayPath(string path) =>
             path == null ? null : IniEditTargets.GetRelativePath(ProgramConstants.GamePath, path);
+    }
+
+    /// <summary>
+    /// How a control was placed, and shown if its visibility was edited, before the designer edited it.
+    /// </summary>
+    internal sealed class ControlState
+    {
+        private bool? visible;
+        private bool? enabled;
+
+        public ControlState(XNAControl control)
+        {
+            Rectangle = control.ClientRectangle;
+        }
+
+        public Rectangle Rectangle { get; }
+
+        public void RecordVisibility(XNAControl control)
+        {
+            visible ??= control.Visible;
+            enabled ??= control.Enabled;
+        }
+
+        public void Restore(XNAControl control)
+        {
+            control.ClientRectangle = Rectangle;
+
+            if (visible.HasValue)
+                control.Visible = visible.Value;
+
+            if (enabled.HasValue)
+                control.Enabled = enabled.Value;
+        }
+    }
+
+    internal sealed class AddedControl
+    {
+        public AddedControl(IniWindow window, XNAControl control)
+        {
+            Window = window;
+            Control = control;
+        }
+
+        public IniWindow Window { get; }
+        public XNAControl Control { get; }
+    }
+
+    internal sealed class DeletedControl
+    {
+        public DeletedControl(IniWindow window)
+        {
+            Window = window;
+        }
+
+        public IniWindow Window { get; }
+
+        /// <summary>
+        /// Whether the designer hid the control because the INI no longer creates it.
+        /// </summary>
+        public bool Hidden { get; set; }
+
+        public bool Visible { get; set; }
+        public bool Enabled { get; set; }
     }
 
     /// <summary>

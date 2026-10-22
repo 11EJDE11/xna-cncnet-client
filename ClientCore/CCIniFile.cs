@@ -71,12 +71,34 @@ namespace ClientCore
             sectionSources[key] = source;
         }
 
+        // A new position or size key is read before anchors such as FillWidth, where saving the edit puts it too
+        private bool InsertBeforeAnchors(IniOverlayEdit edit)
+        {
+            IniSection section = GetSection(edit.Section);
+            if (section == null || !IniOverlay.GoesBeforeAnchors(edit.Key) || KeyExists(edit.Section, edit.Key))
+                return false;
+
+            int anchor = section.Keys.FindIndex(k => IniOverlay.IsAnchorKey(k.Key));
+            if (anchor < 0)
+                return false;
+
+            section.Keys.Insert(anchor, new KeyValuePair<string, string>(edit.Key, edit.Value));
+            return true;
+        }
+
         protected override void ApplyBaseIni()
         {
             baseIniApplied = true;
 
             foreach (IniOverlayEdit edit in IniOverlay.GetEdits(FilePath))
-                SetStringValue(edit.Section, edit.Key, edit.Value);
+            {
+                if (edit.RemovesSection)
+                    RemoveSection(edit.Section);
+                else if (edit.RemovesKey)
+                    RemoveKey(edit.Section, edit.Key);
+                else if (!InsertBeforeAnchors(edit))
+                    SetStringValue(edit.Section, edit.Key, edit.Value);
+            }
 
             string fullPath = Path.GetFullPath(FilePath);
             foreach (IniSection section in Sections)
