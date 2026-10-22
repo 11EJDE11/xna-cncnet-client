@@ -688,6 +688,25 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             }
         }
 
+        protected override void OnIniReloaded()
+        {
+            base.OnIniReloaded();
+
+            // Re-applying the INI restores the defaults of controls that depend on whether this client hosts
+            btnLaunchGame.Text = IsHost ? BTN_LAUNCH_GAME : BTN_LAUNCH_READY;
+
+            if (IsHost)
+            {
+                ShowMapList();
+                chkAutoReady.Disable();
+            }
+            else
+            {
+                HideMapList();
+                btnLockGame.Disable();
+            }
+        }
+
         private void HideMapList()
         {
             lbChatMessages.Name = "lbChatMessages_Player";

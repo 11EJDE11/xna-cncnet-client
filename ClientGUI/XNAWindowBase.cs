@@ -1,4 +1,6 @@
-﻿using ClientCore;
+﻿using System.Collections.Generic;
+using ClientCore;
+using Microsoft.Xna.Framework;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
@@ -11,6 +13,13 @@ namespace ClientGUI
         {
             PanelBackgroundDrawMode = PanelBackgroundImageDrawMode.TILED;
         }
+
+        /// <summary>
+        /// Designer mode only: the rectangles controls had before their INI section was first applied,
+        /// so a reload can start from the same state and give the same result as loading the client.
+        /// </summary>
+        protected Dictionary<XNAControl, Rectangle> PreIniRectangles { get; } =
+            ProgramConstants.DesignerMode ? new Dictionary<XNAControl, Rectangle>() : null;
 
         /// <summary>
         /// Reads extra control information from a specific section of an INI file.
@@ -59,6 +68,9 @@ namespace ClientGUI
                         foreach (XNAControl subControl in composite.SubControls)
                             subControl.Initialize();
                     }
+
+                    if (PreIniRectangles != null && !PreIniRectangles.ContainsKey(control))
+                        PreIniRectangles.Add(control, control.ClientRectangle);
                 }
                 else if (parts.Length == 3 && control.Parent != container)
                 {

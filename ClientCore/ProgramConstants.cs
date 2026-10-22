@@ -87,6 +87,12 @@ namespace ClientCore
 
         public static bool IsInGame { get; set; }
 
+        /// <summary>
+        /// Whether the in-client designer tools (hot reload, inspector, INI editing) are enabled.
+        /// Set with the -designer startup parameter.
+        /// </summary>
+        public static bool DesignerMode { get; set; }
+
         public static string GetResourcePath()
         {
             return SafePath.CombineDirectoryPath(GamePath, RESOURCES_DIR);
