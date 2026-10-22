@@ -126,6 +126,42 @@ _(inherits [XNAPanel](#XNAPanel))_
 BackgroundTexture= ; string, same as XNAControl's `BackgroundTexture`.
 ```
 
+#### [XNAClientScrollPanel](https://github.com/CnCNet/xna-cncnet-client/blob/develop/ClientGUI/XNAClientScrollPanel.cs)
+
+_(inherits [XNAPanel](#XNAPanel))_
+
+A panel whose content scrolls when its child controls extend past its bounds. Scroll bars appear automatically.
+
+```ini
+[SOMESCROLLPANEL]      ; XNAClientScrollPanel
+AllowScroll=true,true  ; 2 booleans, whether scrolling is allowed on the X and Y axes.
+AllowScrollX=true      ; boolean,    whether scrolling is allowed on the X axis.
+AllowScrollY=true      ; boolean,    whether scrolling is allowed on the Y axis.
+AllowKeyboardInput=yes ; boolean,    whether the arrow keys scroll the panel.
+ScrollStep=            ; integer,    how many pixels one scroll step moves the content.
+OverscrollMargin=0,0   ; 2 integers, extra space after the content on the X and Y axes.
+OverscrollMarginX=0    ; integer,    extra space after the content on the X axis.
+OverscrollMarginY=0    ; integer,    extra space after the content on the Y axis.
+DrawBorders=false      ; boolean,    enables or disables borders drawing.
+```
+
+In `[ExtraControls]` and `[<PanelName>ExtraControls]` sections, controls can be placed inside another control, such as a scroll panel, by adding its name as a third part, in the `name:type:parent` format. Positions of such controls are relative to the parent; for a scroll panel, to the scrolled content. The parent must be listed before its children. If a control with the given name already exists, for example one the client creates in code, it is moved into the parent instead and its type is ignored.
+
+```ini
+[ComponentsPanelExtraControls]
+0=spComponents:XNAClientScrollPanel
+1=lblDescription:XNALabel:spComponents
+2=btnTSMUSIC:XNAClientButton:spComponents ; moves the existing install button
+```
+
+In windows that use the `$CC` format, such as the game lobbies, `$CC` children of a scroll panel are placed in its scrolled content.
+
+```ini
+[spOptions]
+$CC0=chkOption1:GameLobbyCheckBox
+$CC1=ddOption1:GameLobbyDropDown
+```
+
 #### [XNATextBlock](https://github.com/Rampastring/Rampastring.XNAUI/blob/master/XNAControls/XNATextBlock.cs)
 
 _(inherits [XNAPanel](#XNAPanel))_

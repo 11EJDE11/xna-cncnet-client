@@ -2,7 +2,6 @@
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
-using System.Linq;
 
 namespace ClientGUI
 {
@@ -15,6 +14,9 @@ namespace ClientGUI
 
         /// <summary>
         /// Reads extra control information from a specific section of an INI file.
+        /// Entries are in the format <c>name:type</c> or <c>name:type:parent</c>.
+        /// With a parent, the control is placed inside that control instead of this window;
+        /// if a control with the given name already exists, it is moved there.
         /// </summary>
         /// <param name="iniFile">The INI file.</param>
         /// <param name="sectionName">The section.</param>
@@ -28,17 +30,74 @@ namespace ClientGUI
             foreach (var kvp in section.Keys)
             {
                 string[] parts = kvp.Value.Split(':');
-                if (parts.Length != 2)
+                if (parts.Length is not (2 or 3))
                     throw new ClientConfigurationException("Invalid ExtraControl specified in " + Name + ": " + kvp.Value);
 
-                if (!Children.Any(child => child.Name == parts[0]))
+                XNAControl container = this;
+
+                if (parts.Length == 3)
                 {
-                    XNAControl control = ClientGUICreator.GetXnaControl(parts[1]);
-                    control.Name = parts[0];
-                    control.DrawOrder = -Children.Count;
-                    AddChild(control);
+                    XNAControl parent = FindExtraControl(this, parts[2])
+                        ?? throw new ClientConfigurationException("Parent " + parts[2] + " of ExtraControl " + parts[0] +
+                            " not found in " + Name + ". Parents must be listed before their children.");
+
+                    container = parent is XNAClientScrollPanel scrollPanel ? scrollPanel.Content : parent;
                 }
+
+                XNAControl control = FindExtraControl(this, parts[0]);
+
+                if (control == null)
+                {
+                    control = ClientGUICreator.GetXnaControl(parts[1]);
+                    control.Name = parts[0];
+                    control.DrawOrder = -container.Children.Count;
+                    container.AddChild(control);
+                }
+                else if (parts.Length == 3 && control.Parent != container)
+                {
+                    // Moves a control that was created in code, e.g. into a scroll panel
+                    control.Parent.RemoveChild(control);
+                    container.AddChildWithoutInitialize(control);
+                }
+                else
+                {
+                    continue;
+                }
+
+                if (container != this)
+                    OnExtraControlNested(control);
             }
+        }
+
+        /// <summary>
+        /// Called when an extra control has been placed inside a nested container
+        /// rather than directly in this window.
+        /// </summary>
+        /// <param name="control">The control.</param>
+        protected virtual void OnExtraControlNested(XNAControl control)
+        {
+        }
+
+        /// <summary>
+        /// Finds a control by name among the descendants of the given control.
+        /// Does not search inside nested windows, as they parse their own extra controls.
+        /// </summary>
+        private static XNAControl FindExtraControl(XNAControl root, string name)
+        {
+            foreach (XNAControl child in root.Children)
+            {
+                if (child.Name == name)
+                    return child;
+
+                if (child is XNAWindowBase)
+                    continue;
+
+                XNAControl control = FindExtraControl(child, name);
+                if (control != null)
+                    return control;
+            }
+
+            return null;
         }
 
         protected virtual void ReadChildControlAttributes(IniFile iniFile)

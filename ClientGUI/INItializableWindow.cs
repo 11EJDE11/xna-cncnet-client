@@ -150,8 +150,19 @@ namespace ClientGUI
                 if (kvp.Key.StartsWith("$CC"))
                 {
                     var child = CreateChildControl(control, kvp.Value);
-                    ReadINIForControl(child);
-                    child.Initialize();
+
+                    // A scroll panel only attaches its content panel when initialized, and its children
+                    // may look up their ancestors (e.g. the game lobby) in Initialize, so it is initialized first
+                    if (child is XNAClientScrollPanel)
+                    {
+                        child.Initialize();
+                        ReadINIForControl(child);
+                    }
+                    else
+                    {
+                        ReadINIForControl(child);
+                        child.Initialize();
+                    }
 
                     if (child is ICompositeControl composite)
                     {
@@ -263,7 +274,12 @@ namespace ClientGUI
                 throw new INIConfigException("Names of INItializableWindow child controls must consist of letters, digits and underscores only. Offending name: " + parts[0]);
 
             childControl.Name = childName;
-            parent.AddChildWithoutInitialize(childControl);
+
+            if (parent is XNAClientScrollPanel scrollPanel)
+                scrollPanel.Content.AddChildWithoutInitialize(childControl);
+            else
+                parent.AddChildWithoutInitialize(childControl);
+
             return childControl;
         }
     }

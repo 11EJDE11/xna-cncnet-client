@@ -71,6 +71,13 @@ namespace ClientGUI
                 userSettings.Add(setting);
         }
 
+        protected override void OnExtraControlNested(XNAControl control)
+        {
+            // AddChild above only sees direct children, so settings placed in a nested container are registered here
+            if (control is IUserSetting setting && !userSettings.Contains(setting))
+                userSettings.Add(setting);
+        }
+
         protected UserINISettings IniSettings { get; private set; }
 
         /// <summary>
