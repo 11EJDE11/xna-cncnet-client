@@ -12,6 +12,11 @@ public class XNAClientScrollPanel : XNAScrollPanel, ICompositeControl
 
     public XNAClientScrollPanel(WindowManager windowManager) : base(windowManager) { }
 
+    /// <summary>
+    /// The panel that holds the scrolled content.
+    /// </summary>
+    public XNAPanel Content => ContentPanel;
+
     protected override void ComposeControls()
     {
         // this is needed for the control composition to work properly, as otherwise
