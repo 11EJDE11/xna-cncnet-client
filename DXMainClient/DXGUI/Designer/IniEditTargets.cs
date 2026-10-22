@@ -57,6 +57,21 @@ namespace DTAClient.DXGUI.Designer
             return edits;
         }
 
+        /// <summary>
+        /// Returns the file a key of the section can be removed from: the file that defines it, when that is in the
+        /// current theme folder and isn't GenericWindow.ini. Null when the key comes from anywhere else, such as a
+        /// stock file or another section through $BaseSection.
+        /// </summary>
+        public static string ResolveRemoval(IniWindow window, string section, string key)
+        {
+            IniKeySource source = window.Ini?.GetKeySource(section, key);
+            bool removable = source != null && source.Section == section &&
+                IsInDirectory(source.FilePath, NormalizeDirectory(ProgramConstants.GetResourcePath())) &&
+                !IniWindow.IsGenericWindowIni(source.FilePath);
+
+            return removable ? source.FilePath : null;
+        }
+
         private static bool OverlayHasKey(string path, string section, string key) =>
             IniOverlay.GetEdits(path).Any(e => e.Section == section && e.Key == key);
 

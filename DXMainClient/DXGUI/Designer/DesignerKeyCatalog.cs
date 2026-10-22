@@ -71,7 +71,6 @@ namespace DTAClient.DXGUI.Designer
         private static readonly string[] ExpressionKeys = { "$X", "$Y", "$Width", "$Height", "$TextAnchor", "$AnchorPoint", "$LeftClickAction" };
 
         private static readonly string[] ColorKeys = { "Color", "SolidColorBackgroundTexture" };
-        private static readonly string[] TextureKeys = { "Texture" };
         private static readonly string[] BooleanKeys = { "Visible", "Enabled", "DrawBorders", "AdaptiveText", "MatchTextureSize", "OpenUp",
             "ShowEllipsisOnOverflow", "EnableScrollbar", "DrawSelectionUnderScrollbar", "AllowMultiLineItems", "AllowRightClickUnselect",
             "DrawUnderline", "Checked", "AllowChecking", "HasCloseButton" };
@@ -96,6 +95,31 @@ namespace DTAClient.DXGUI.Designer
         }
 
         /// <summary>
+        /// Returns what kind of value a key takes, for the designer's pickers.
+        /// </summary>
+        public static DesignerValueKind GetValueKind(string key)
+        {
+            if (key.StartsWith("$", StringComparison.Ordinal) || key.EndsWith("Width", StringComparison.Ordinal) ||
+                key.EndsWith("Height", StringComparison.Ordinal))
+            {
+                return DesignerValueKind.Other;
+            }
+
+            if (key == "SolidColorBackgroundTexture" || (ColorKeys.Any(c => key.Contains(c)) && !key.Contains("Texture")))
+                return DesignerValueKind.Color;
+
+            if (key.Contains("Texture") || key.EndsWith("Icon", StringComparison.Ordinal) || key.EndsWith("Image", StringComparison.Ordinal))
+                return DesignerValueKind.Image;
+
+            if (key.EndsWith("SoundEffect", StringComparison.Ordinal) || key.EndsWith("Sound", StringComparison.Ordinal))
+                return DesignerValueKind.Sound;
+
+            return DesignerValueKind.Other;
+        }
+
+        public static bool IsBooleanKey(string key) => BooleanKeys.Contains(key);
+
+        /// <summary>
         /// Returns a short description of the value a key expects, or null if there is none.
         /// </summary>
         public static string GetValueHint(string key)
@@ -103,17 +127,21 @@ namespace DTAClient.DXGUI.Designer
             if (key.StartsWith("$", StringComparison.Ordinal))
                 return key == "$TextAnchor" ? "LEFT, RIGHT, HORIZONTAL_CENTER, TOP, BOTTOM, VERTICAL_CENTER" : "expression, e.g. getRight(otherControl) + 10";
 
-            if (BooleanKeys.Contains(key))
+            if (IsBooleanKey(key))
                 return "true / false";
 
             if (key.EndsWith("Width", StringComparison.Ordinal) || key.EndsWith("Height", StringComparison.Ordinal))
                 return "number of pixels";
 
-            if (ColorKeys.Any(c => key.Contains(c)) && (!key.Contains("Texture") || key == "SolidColorBackgroundTexture"))
-                return "color R,G,B or R,G,B,A";
-
-            if (TextureKeys.Any(t => key.Contains(t)))
-                return "image file, e.g. button.png";
+            switch (GetValueKind(key))
+            {
+                case DesignerValueKind.Color:
+                    return "color R,G,B or R,G,B,A";
+                case DesignerValueKind.Image:
+                    return "image file, pick one below or type to filter";
+                case DesignerValueKind.Sound:
+                    return "sound file, pick one below or type to filter";
+            }
 
             switch (key)
             {
@@ -134,10 +162,6 @@ namespace DTAClient.DXGUI.Designer
                 case "ToolTip":
                 case "Suggestion":
                     return "text, @ for a new line";
-                case "HoverSoundEffect":
-                case "ClickSoundEffect":
-                case "ClickSound":
-                    return "sound file, e.g. button.wav";
                 case "URL":
                 case "UnixURL":
                     return "web address";
@@ -145,5 +169,13 @@ namespace DTAClient.DXGUI.Designer
 
             return key.Contains("Font") ? "font number from Fonts.ini" : null;
         }
+    }
+
+    internal enum DesignerValueKind
+    {
+        Other,
+        Color,
+        Image,
+        Sound,
     }
 }
