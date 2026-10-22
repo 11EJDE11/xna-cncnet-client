@@ -111,7 +111,16 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
                 AddChild(indicator);
             }
 
-            ClientRectangleUpdated += (s, e) => UpdateMap();
+            ClientRectangleUpdated += MapPreviewBox_ClientRectangleUpdated;
+        }
+
+        private Point mapLayoutSize;
+
+        // The preview and indicators are placed relative to this control, so moving it needs no update
+        private void MapPreviewBox_ClientRectangleUpdated(object sender, EventArgs e)
+        {
+            if (mapLayoutSize != new Point(Width, Height))
+                UpdateMap();
         }
 
 
@@ -267,8 +276,6 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
             sndDropdownSound = new EnhancedSoundEffect("dropdown.wav");
 
             base.Initialize();
-
-            ClientRectangleUpdated += (s, e) => UpdateMap();
 
             RightClick += MapPreviewBox_RightClick;
 
@@ -474,6 +481,8 @@ namespace DTAClient.DXGUI.Multiplayer.GameLobby
         /// </summary>
         private void UpdateMap()
         {
+            mapLayoutSize = new Point(Width, Height);
+
             if (mapPreviewTextureNeedsDispose && mapPreviewTexture != null && !mapPreviewTexture.IsDisposed)
             {
                 mapPreviewTexture.Dispose();
