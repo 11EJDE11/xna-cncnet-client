@@ -16,7 +16,7 @@ Press **F5** to reload without restarting:
 - the theme colors from `DTACnCNetClient.ini`,
 - the INI layout of every open window.
 
-The client also reloads by itself shortly after an `.ini` or `.png` file in `Resources` or the current theme folder is saved, so you can keep your INI files open in your editor and see the result as you save.
+The client also reloads by itself shortly after an `.ini` or `.png` file in `Resources` or the current theme folder is saved, so you can keep your INI files open in your editor and see the result as you save. If you save a key in your editor that also has an unsaved designer edit, the value you saved wins and the designer edit is dropped, so saving in the designer later can't overwrite it.
 
 Reloading re-applies each window's INI to the controls that already exist. Controls added to `$ExtraControls`, `ExtraControls` or as `$CC` children are created; controls removed from an INI stay until the client restarts. Some changes still need a restart:
 
@@ -25,6 +25,8 @@ Reloading re-applies each window's INI to the controls that already exist. Contr
 - Fonts (`Fonts.ini`).
 - Layout that code calculates from INI values once, such as the player rows of the game lobbies.
 - Values that code sets after a window has loaded may change back to the INI value when reloading, for example a button text that code changes depending on the game state.
+
+Expressions such as `$X=getRight(otherControl) + 10` can only refer to controls that exist at that point when the client loads: controls created in code before the INI is read, and controls whose `$CC` or `$ExtraControls` entry comes earlier. Some controls created in code have their sections read by code afterwards, at a point where only some other controls exist. For example, the game lobbies create and read the player option rows from the last row to the first, so `[ddPlayerSide1]` can refer to `ddPlayerName1` or `ddPlayerSide2` but not `ddPlayerSide0`. Even though every control exists by the time you reload, reloading follows the same rules, so a reference that would crash the client on startup fails in the designer too. An edit that adds such a reference is rejected. Likewise, the section of a control created in code only has an effect if the client's code reads it, so reloading doesn't apply sections that the client would ignore.
 
 ## Inspector and editor
 
