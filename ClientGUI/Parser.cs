@@ -66,6 +66,13 @@ namespace ClientGUI
         private XNAControl primaryControl;
         private XNAControl parsingControl;
 
+        /// <summary>
+        /// If set, a referenced control (the second argument) is treated as not created yet when this
+        /// returns false for it while parsing an expression of the first argument.
+        /// The designer uses it so that reloading an INI file fails where loading the client would.
+        /// </summary>
+        public Func<XNAControl, XNAControl, bool> IsControlCreated { get; set; }
+
         private XNAControl GetControl(string controlName)
         {
             if (controlName == primaryControl.Name)
@@ -74,6 +81,11 @@ namespace ClientGUI
             var control = Find(primaryControl.Children, controlName);
             if (control == null)
                 throw new KeyNotFoundException($"Control '{controlName}' not found while parsing input '{Input}'");
+
+            if (IsControlCreated != null && !IsControlCreated(parsingControl, control))
+                throw new KeyNotFoundException($"Control '{controlName}' not found while parsing input '{Input}'. " +
+                    $"When the client loads, it doesn't exist yet when '{parsingControl.Name}' is read: it is created later " +
+                    "in the INI file, or later by the client's code (e.g. when the window is opened, or in a later player row).");
 
             return control;
         }

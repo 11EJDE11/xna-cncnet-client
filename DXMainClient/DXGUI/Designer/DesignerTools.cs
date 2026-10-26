@@ -119,6 +119,54 @@ namespace DTAClient.DXGUI.Designer
 
         private void OnFilesChanged() => overlay.SetStatus(ReloadAll("Files changed, reloaded"));
 
+        // A key saved in another editor since it was edited here keeps the saved value: the unsaved edit
+        // would hide it from the reload and overwrite it on saving
+        private string DropEditsChangedOnDisk()
+        {
+            var files = new Dictionary<string, IniFile>(StringComparer.OrdinalIgnoreCase);
+
+            string GetValueOnDisk(IniOverlayEdit edit)
+            {
+                string path = Path.GetFullPath(edit.FilePath);
+                if (!files.TryGetValue(path, out IniFile file))
+                {
+                    file = File.Exists(path) ? new IniFile(path, false) : null;
+                    files.Add(path, file);
+                }
+
+                return file?.GetStringValue(edit.Section, edit.Key, null);
+            }
+
+            // Removing a whole section doesn't depend on the value of any one key
+            List<PendingEdit> changed = pendingEdits.Where(p => !p.Edit.RemovesSection && GetValueOnDisk(p.Edit) != p.OldValue).ToList();
+            if (changed.Count == 0)
+                return string.Empty;
+
+            bool IsChanged(PendingEdit pending) => !pending.Edit.RemovesSection && changed.Any(c => c.Edit.Section == pending.Edit.Section &&
+                c.Edit.Key == pending.Edit.Key && IsSamePath(c.Edit.FilePath, pending.Edit.FilePath));
+
+            pendingEdits = pendingEdits.Where(p => !IsChanged(p)).ToList();
+
+            // Undoing or redoing must not bring the dropped edits back either
+            RemoveFromSteps(undoStack, IsChanged);
+            RemoveFromSteps(redoStack, IsChanged);
+
+            IniOverlay.Set(pendingEdits.Select(p => p.Edit));
+
+            List<string> keys = changed.Select(p => $"{Path.GetFileName(p.Edit.FilePath)} [{p.Edit.Section}] {p.Edit.Key}").Distinct().ToList();
+            return $". {keys.Count} unsaved edit(s) dropped, the file was saved with a different value: " +
+                string.Join(", ", keys.Take(3)) + (keys.Count > 3 ? ", ..." : string.Empty);
+        }
+
+        private static void RemoveFromSteps(Stack<List<PendingEdit>> steps, Func<PendingEdit, bool> remove)
+        {
+            List<List<PendingEdit>> kept = steps.Reverse().Select(step => step.Where(p => !remove(p)).ToList()).ToList();
+            steps.Clear();
+
+            foreach (List<PendingEdit> step in kept)
+                steps.Push(step);
+        }
+
         private void Keyboard_OnKeyPressed(object sender, KeyPressEventArgs e)
         {
             if (ProgramConstants.IsInGame)
@@ -146,8 +194,9 @@ namespace DTAClient.DXGUI.Designer
         /// <returns>A status message.</returns>
         public string ReloadAll(string reason)
         {
+            string droppedEdits = DropEditsChangedOnDisk();
             List<string> resizedTextures = AssetLoader.ReloadCachedTextures();
-            string status = reason + ": " + ReloadWindows();
+            string status = reason + ": " + ReloadWindows() + droppedEdits;
 
             try
             {
@@ -158,6 +207,8 @@ namespace DTAClient.DXGUI.Designer
                 Logger.Log("Designer: reloading the theme's client settings failed: " + ex);
                 status += ". Theme colors were not reloaded: " + ex.Message;
             }
+
+            UpdateAddedAndDeletedControls();
 
             if (resizedTextures.Count > 0)
             {

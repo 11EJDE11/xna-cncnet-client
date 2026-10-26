@@ -45,6 +45,21 @@ namespace ClientGUI
         // Expressions such as getY($Self) depend on it, so a reload restores it to give the same result.
         private readonly Dictionary<XNAControl, Rectangle> _preIniRectangles = new Dictionary<XNAControl, Rectangle>();
 
+        // Designer mode only: controls created by $CC or $ExtraControls entries. While ReloadIni runs, those
+        // whose entry hasn't been reached yet are pending, as they wouldn't exist yet when loading the client.
+        private readonly HashSet<XNAControl> _iniCreatedControls = new HashSet<XNAControl>();
+        private readonly HashSet<XNAControl> _pendingIniControls = new HashSet<XNAControl>();
+
+        // Designer mode only: a step that advances whenever a section is read outside a reload, the step each control
+        // (by name) was first seen to exist at, and the step its section was first read at. With them a reload checks
+        // that expressions only refer to controls that existed when loading the client read them, and reads the
+        // sections that code reads, such as the game lobby's player rows, in the same order.
+        private int _readStep;
+        private int _iniFileEndStep;
+        private readonly Dictionary<string, int> _createdSteps = new Dictionary<string, int>();
+        private readonly Dictionary<string, int> _firstReadSteps = new Dictionary<string, int>();
+        private bool _readingCodeReadSections;
+
         /// <summary>
         /// If not null, the client will read an INI file with this name
         /// instead of the window's name.
@@ -100,6 +115,13 @@ namespace ClientGUI
 
             if (string.IsNullOrEmpty(configIniPath))
             {
+                // The designer may create the INI file later
+                if (ProgramConstants.DesignerMode)
+                {
+                    RecordReadStep(null);
+                    _iniFileEndStep = _readStep;
+                }
+
                 base.Initialize();
                 return;
             }
@@ -115,6 +137,9 @@ namespace ClientGUI
             ReadLateAttributesForControl(this);
 
             ParseExtraControls();
+
+            if (ProgramConstants.DesignerMode)
+                _iniFileEndStep = _readStep;
 
             base.Initialize();
 
@@ -141,20 +166,35 @@ namespace ClientGUI
             _reloading = true;
             _reloadedControls.Clear();
 
+            // Expressions must see what they would see when loading the client: controls that haven't been
+            // read yet at their pre-INI rectangles, and controls that haven't been created yet not at all
+            foreach (var entry in _preIniRectangles)
+            {
+                if (entry.Key != this)
+                    entry.Key.ClientRectangle = entry.Value;
+            }
+
+            _pendingIniControls.UnionWith(_iniCreatedControls);
+            Parser.Instance.IsControlCreated = IsControlCreated;
+
             try
             {
                 Parser.Instance.SetPrimaryControl(this);
                 ReadINIForControl(this);
-
-                // Controls created in code read their sections from code during initialization
-                ReadINIForUnreadDescendants(this);
                 ReadLateAttributesForControl(this);
                 ParseExtraControls();
+
+                // Controls created in code read their sections from code after the INI file
+                _readingCodeReadSections = true;
+                ReadCodeReadSections();
             }
             finally
             {
                 _reloading = false;
+                _readingCodeReadSections = false;
                 _reloadedControls.Clear();
+                _pendingIniControls.Clear();
+                Parser.Instance.IsControlCreated = null;
             }
 
             OnIniReloaded();
@@ -201,18 +241,76 @@ namespace ClientGUI
         {
         }
 
-        private void ReadINIForUnreadDescendants(XNAControl control)
+        // Designer mode: records that a section is read now, outside a reload, and which controls exist by then
+        private void RecordReadStep(XNAControl control)
         {
-            foreach (XNAControl child in control.Children.ToList())
+            _readStep++;
+            RecordCreatedSteps(this, _readStep);
+
+            if (control != null && !string.IsNullOrEmpty(control.Name) && !_firstReadSteps.ContainsKey(control.Name))
+                _firstReadSteps.Add(control.Name, _readStep);
+        }
+
+        private void RecordCreatedSteps(XNAControl control, int step)
+        {
+            foreach (XNAControl child in control.Children)
+            {
+                if (!string.IsNullOrEmpty(child.Name) && !_createdSteps.ContainsKey(child.Name))
+                    _createdSteps.Add(child.Name, step);
+
+                RecordCreatedSteps(child, step);
+            }
+        }
+
+        // Whether a control exists yet when loading the client reads the given control's expressions
+        private bool IsControlCreated(XNAControl parsingControl, XNAControl control)
+        {
+            if (!_createdSteps.TryGetValue(control.Name, out int createdStep))
+                return false;
+
+            if (_readingCodeReadSections)
+                return !_firstReadSteps.TryGetValue(parsingControl.Name, out int readStep) || createdStep <= readStep;
+
+            // In the INI file: not created later in code, and neither it nor a container of it
+            // is created by an entry that hasn't been reached yet
+            if (createdStep > _iniFileEndStep)
+                return false;
+
+            for (XNAControl c = control; c != null && c != this; c = c.Parent)
+            {
+                if (_pendingIniControls.Contains(c))
+                    return false;
+            }
+
+            return true;
+        }
+
+        // Re-reads the sections that code reads, in the order loading the client first read them. Sections of
+        // controls that code never reads have no effect when loading the client, so they aren't read either.
+        private void ReadCodeReadSections()
+        {
+            var controls = new List<XNAControl>();
+            FindCodeReadDescendants(this, controls);
+
+            foreach (XNAControl control in controls.OrderBy(c => _firstReadSteps[c.Name]))
+            {
+                if (!_reloadedControls.Contains(control))
+                    ReadINIForControl(control);
+            }
+        }
+
+        private void FindCodeReadDescendants(XNAControl control, List<XNAControl> controls)
+        {
+            foreach (XNAControl child in control.Children)
             {
                 // Nested windows reload their own INI files
                 if (child is INItializableWindow || child is XNAWindowBase)
                     continue;
 
-                if (!_reloadedControls.Contains(child) && !string.IsNullOrEmpty(child.Name))
-                    ReadINIForControl(child);
+                if (!_reloadedControls.Contains(child) && !string.IsNullOrEmpty(child.Name) && _firstReadSteps.ContainsKey(child.Name))
+                    controls.Add(child);
 
-                ReadINIForUnreadDescendants(child);
+                FindCodeReadDescendants(child, controls);
             }
         }
 
@@ -232,12 +330,20 @@ namespace ClientGUI
                 if (parts.Length != 2)
                     throw new ClientConfigurationException("Invalid $ExtraControl specified in " + Name + ": " + kvp.Value);
 
-                if (!Children.Any(child => child.Name == parts[0]))
+                XNAControl existingControl = Children.FirstOrDefault(child => child.Name == parts[0]);
+
+                if (existingControl == null)
                 {
                     var control = CreateChildControl(this, kvp.Value);
                     control.Name = parts[0];
                     control.DrawOrder = -Children.Count;
                     ReadINIForControl(control);
+                }
+                else if (_reloading && _iniCreatedControls.Contains(existingControl))
+                {
+                    // Read where loading the client would create it, so the controls after it can refer to it
+                    _pendingIniControls.Remove(existingControl);
+                    ReadINIForControl(existingControl);
                 }
             }
         }
@@ -252,6 +358,10 @@ namespace ClientGUI
 
         protected void ReadINIForControl(XNAControl control)
         {
+            // Recorded even without a section, as one may be added with the designer
+            if (ProgramConstants.DesignerMode && !_reloading)
+                RecordReadStep(control);
+
             var section = ConfigIni.GetSection(control.Name);
             if (section == null)
                 return;
@@ -286,6 +396,7 @@ namespace ClientGUI
                         XNAControl existingChild = FindChildControl(control, kvp.Value);
                         if (existingChild != null)
                         {
+                            _pendingIniControls.Remove(existingChild);
                             ReadINIForControl(existingChild);
                             continue;
                         }
@@ -314,6 +425,10 @@ namespace ClientGUI
                             sc.Initialize();
                         }
                     }
+
+                    // Controls it created when initialized also exist from here on
+                    if (ProgramConstants.DesignerMode && !_reloading)
+                        RecordCreatedSteps(this, _readStep);
                 }
                 else if (kvp.Key == "$X")
                 {
@@ -423,6 +538,18 @@ namespace ClientGUI
                 throw new INIConfigException("Names of INItializableWindow child controls must consist of letters, digits and underscores only. Offending name: " + parts[0]);
 
             childControl.Name = childName;
+
+            if (ProgramConstants.DesignerMode)
+            {
+                _iniCreatedControls.Add(childControl);
+
+                // A control added with the designer exists from its entry on, like the ones created when loading the client
+                if (_reloading && !_createdSteps.ContainsKey(childName))
+                {
+                    _createdSteps.Add(childName, 0);
+                    RecordCreatedSteps(childControl, 0);
+                }
+            }
 
             if (parent is XNAClientScrollPanel scrollPanel)
                 scrollPanel.Content.AddChildWithoutInitialize(childControl);
