@@ -405,25 +405,19 @@ namespace ClientGUI
                     var child = CreateChildControl(control, kvp.Value);
 
                     // A scroll panel only attaches its content panel when initialized, and its children
-                    // may look up their ancestors (e.g. the game lobby) in Initialize, so it is initialized first
+                    // may look up their ancestors (e.g. the game lobby) in Initialize, so it and its
+                    // sub-controls are initialized before its own $CC children are created
                     if (child is XNAClientScrollPanel)
                     {
                         child.Initialize();
+                        InitializeSubControls(child);
                         ReadINIForControl(child);
                     }
                     else
                     {
                         ReadINIForControl(child);
                         child.Initialize();
-                    }
-
-                    if (child is ICompositeControl composite)
-                    {
-                        foreach (var sc in composite.SubControls)
-                        {
-                            ReadINIForControl(sc);
-                            sc.Initialize();
-                        }
+                        InitializeSubControls(child);
                     }
 
                     // Controls it created when initialized also exist from here on
@@ -533,6 +527,18 @@ namespace ClientGUI
                     if (otherChild != null)
                         ((XNATextBox)child).PreviousControl = otherChild;
                 }
+            }
+        }
+
+        private void InitializeSubControls(XNAControl control)
+        {
+            if (control is not ICompositeControl composite)
+                return;
+
+            foreach (var sc in composite.SubControls)
+            {
+                ReadINIForControl(sc);
+                sc.Initialize();
             }
         }
 
